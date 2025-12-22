@@ -1,0 +1,32 @@
+{
+  "name": "bloom-ai-image-tools",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "//note that e2e tests require that you run build to pick up new code in the app (but not in the e2e tests themselves)": "",
+    "e2e": "npx playwright test",
+    "e2e:verbose": "cross-env E2E_VERBOSE=1 npx playwright test",
+    "// This brings up the inspector and record button oh my...": "",
+    "e2edebug": "echo To debug, right click on the e2e test and choose 'Debug Test'",
+    "// This is the same as as e2edebug because neither actually runs a test": "",
+    "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug"
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "typescript": "~5.8.2",
+    "vite": "^7.3.0"
+  },
+  "volta": {
+    "node": "24.12.0"
+  }
+}

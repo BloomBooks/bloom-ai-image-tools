@@ -1,0 +1,353 @@
+import React, { useState, useEffect } from "react";
+import { AppState, HistoryItem } from "./types";
+import { ToolPanel } from "./components/ToolPanel";
+import { HistoryStrip } from "./components/HistoryStrip";
+import { Workspace } from "./components/Workspace";
+import { editImage } from "./services/openRouterService";
+import { TOOLS } from "./tools/registry";
+import { theme } from "./themes";
+import { OpenRouterConnect } from "./components/OpenRouterConnect";
+import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
+
+// Helper to create UUIDs
+const uuid = () => Math.random().toString(36).substring(2, 9);
+
+// Helper to extract image dimensions from a data URL
+const getImageDimensions = (
+  dataUrl: string
+): Promise<{ width: number; height: number }> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 });
+    };
+    img.src = dataUrl;
+  });
+};
+
+const API_KEY_STORAGE_KEY = "openrouter.apiKey";
+// Only use the E2E test key - this should only be set during Playwright tests
+const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
+
+export default function App() {
+  const [state, setState] = useState<AppState>({
+    leftPanelImageId: null,
+    rightPanelImageId: null,
+    history: [],
+    isProcessing: false,
+    isAuthenticated: false,
+    error: null,
+  });
+
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [activeToolId, setActiveToolId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+    const storedMethod = localStorage.getItem("openrouter.authMethod") as
+      | "oauth"
+      | "manual"
+      | null;
+    if (storedKey) {
+      setApiKey(storedKey);
+      setAuthMethod(storedMethod);
+    } else if (ENV_API_KEY) {
+      setState((prev) => ({ ...prev, isAuthenticated: true }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (apiKey) {
+      localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+      if (authMethod) {
+        localStorage.setItem("openrouter.authMethod", authMethod);
+      }
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+      localStorage.removeItem("openrouter.authMethod");
+    }
+    setState((prev) => ({
+      ...prev,
+      isAuthenticated: !!(apiKey || ENV_API_KEY),
+    }));
+  }, [apiKey, authMethod]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setAuthLoading(true);
+        const key = await handleOAuthCallback();
+        if (!cancelled && key) {
+          setApiKey(key);
+          setAuthMethod("oauth");
+        }
+      } catch (err) {
+        console.error("OpenRouter OAuth failed", err);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleApplyTool = async (
+    toolId: string,
+    params: Record<string, string>
+  ) => {
+    const tool = TOOLS.find((t) => t.id === toolId);
+    if (!tool) return;
+
+    // Check requirements: If tool requires image, we must have one.
+    // If it doesn't (New Image), we can have one (Reference) or not.
+    if (tool.requiresImage !== false && !state.leftPanelImageId) {
+      setState((prev) => ({
+        ...prev,
+        error:
+          "Please select a source image for this tool (drag from history or upload).",
+      }));
+      return;
+    }
+
+    if (state.isProcessing) return;
+
+    setState((prev) => ({ ...prev, isProcessing: true, error: null }));
+
+    try {
+      const leftItem = state.history.find(
+        (h) => h.id === state.leftPanelImageId
+      );
+      const prompt = tool.promptTemplate(params);
+
+      // Always use the left item if it exists, even for "New Image" (acts as reference)
+      const sourceImage = leftItem ? leftItem.imageData : null;
+
+      const effectiveApiKey = apiKey || ENV_API_KEY;
+      if (!effectiveApiKey) {
+        setState((prev) => ({
+          ...prev,
+          isProcessing: false,
+          error: "Connect to OpenRouter before running tools.",
+        }));
+        return;
+      }
+
+      const result = await editImage(sourceImage, prompt, effectiveApiKey);
+
+      const resolution = await getImageDimensions(result.imageData);
+
+      const newItem: HistoryItem = {
+        id: uuid(),
+        parentId: leftItem ? leftItem.id : null,
+        imageData: result.imageData,
+        toolId: tool.id,
+        parameters: params,
+        durationMs: result.duration,
+        cost: 0,
+        timestamp: Date.now(),
+        promptUsed: prompt,
+        resolution,
+      };
+
+      setState((prev) => ({
+        ...prev,
+        history: [...prev.history, newItem],
+        rightPanelImageId: newItem.id, // Result goes to right panel
+        isProcessing: false,
+      }));
+    } catch (error) {
+      console.error("Failed to apply tool:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to process image.";
+      setState((prev) => ({ ...prev, isProcessing: false, error: message }));
+    }
+  };
+
+  const handleUpload = (file: File, targetPanel: "left" | "right") => {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target?.result as string;
+      const resolution = await getImageDimensions(base64);
+      const newItem: HistoryItem = {
+        id: uuid(),
+        parentId: null,
+        imageData: base64,
+        toolId: "original",
+        parameters: {},
+        durationMs: 0,
+        cost: 0,
+        timestamp: Date.now(),
+        promptUsed: "Original Upload",
+        resolution,
+      };
+
+      setState((prev) => ({
+        ...prev,
+        history: [...prev.history, newItem],
+        leftPanelImageId:
+          targetPanel === "left" ? newItem.id : prev.leftPanelImageId,
+        rightPanelImageId:
+          targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Global Paste Listener
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // Check if the paste event contains files (images)
+      if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+        const file = e.clipboardData.files[0];
+        // Only intercept images
+        if (file.type.startsWith("image/")) {
+          e.preventDefault();
+          handleUpload(file, "left");
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []); // handleUpload is stable in this context or we can ignore dep warning for this simplicity
+
+  const handleConnect = async () => {
+    try {
+      setAuthLoading(true);
+      await initiateOAuthFlow();
+    } catch (err) {
+      console.error("Failed to start OpenRouter OAuth", err);
+      setAuthLoading(false);
+      setState((prev) => ({
+        ...prev,
+        error: "Could not start OpenRouter authentication. Please try again.",
+      }));
+    }
+  };
+
+  const handleDisconnect = () => {
+    setApiKey(null);
+    setAuthMethod(null);
+    setState((prev) => ({ ...prev, isAuthenticated: !!ENV_API_KEY }));
+  };
+
+  const handleProvideKey = (key: string) => {
+    setApiKey(key);
+    setAuthMethod("manual");
+  };
+
+  const leftItem =
+    state.history.find((h) => h.id === state.leftPanelImageId) || null;
+  const rightItem =
+    state.history.find((h) => h.id === state.rightPanelImageId) || null;
+
+  return (
+    <div
+      className="flex flex-col h-screen font-sans"
+      style={{
+        backgroundColor: theme.colors.appBackground,
+        color: theme.colors.textPrimary,
+      }}
+    >
+      {/* Header */}
+      <header
+        className="h-16 border-b flex items-center justify-between px-6 z-30 shadow-md"
+        style={{
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          boxShadow: theme.colors.panelShadow,
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-bold bg-clip-text ">
+            Bloom AI Image Tools
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <OpenRouterConnect
+            isAuthenticated={state.isAuthenticated}
+            isLoading={authLoading}
+            usingEnvKey={!!(ENV_API_KEY && !apiKey)}
+            authMethod={authMethod}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onProvideKey={handleProvideKey}
+          />
+        </div>
+      </header>
+
+      {/* Error Banner */}
+      {state.error && (
+        <div
+          data-testid="error-banner"
+          className="px-4 py-3 flex items-center justify-between"
+          style={{
+            backgroundColor: "#dc2626",
+            color: "white",
+          }}
+        >
+          <span>{state.error}</span>
+          <button
+            onClick={() => setState((prev) => ({ ...prev, error: null }))}
+            className="ml-4 px-2 py-1 rounded hover:bg-red-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Main Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar */}
+        <ToolPanel
+          onApplyTool={handleApplyTool}
+          isProcessing={state.isProcessing}
+          onToolSelect={(id) => setActiveToolId(id)}
+          hasSourceImage={!!state.leftPanelImageId}
+          isAuthenticated={state.isAuthenticated}
+        />
+
+        {/* Center Workspace */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <Workspace
+            leftImage={leftItem}
+            rightImage={rightItem}
+            onSetLeft={(id) =>
+              setState((prev) => ({ ...prev, leftPanelImageId: id }))
+            }
+            onSetRight={(id) =>
+              setState((prev) => ({ ...prev, rightPanelImageId: id }))
+            }
+            onClearLeft={() =>
+              setState((prev) => ({ ...prev, leftPanelImageId: null }))
+            }
+            onUploadLeft={(f) => handleUpload(f, "left")}
+            onUploadRight={(f) => handleUpload(f, "right")}
+            isProcessing={state.isProcessing}
+            isGeneratingNew={activeToolId === "generate_image"}
+          />
+
+          {/* Bottom History */}
+          <HistoryStrip
+            items={state.history}
+            currentId={state.rightPanelImageId}
+            onSelect={(id) =>
+              setState((prev) => ({ ...prev, rightPanelImageId: id }))
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

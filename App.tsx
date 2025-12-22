@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AppState, HistoryItem } from "./types";
-import { ToolPanel } from "./components/ToolPanel";
-import { HistoryStrip } from "./components/HistoryStrip";
-import { Workspace } from "./components/Workspace";
+import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
 import { TOOLS } from "./tools/registry";
 import { theme } from "./themes";
@@ -153,7 +151,8 @@ export default function App() {
         toolId: tool.id,
         parameters: params,
         durationMs: result.duration,
-        cost: 0,
+        cost: result.cost,
+        model: result.model,
         timestamp: Date.now(),
         promptUsed: prompt,
         resolution,
@@ -186,6 +185,7 @@ export default function App() {
         parameters: {},
         durationMs: 0,
         cost: 0,
+        model: "",
         timestamp: Date.now(),
         promptUsed: "Original Upload",
         resolution,
@@ -246,6 +246,45 @@ export default function App() {
     setAuthMethod("manual");
   };
 
+  const handleSetLeftPanel = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      leftPanelImageId: id,
+      rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+    }));
+  };
+
+  const handleSetRightPanel = (id: string) => {
+    setState((prev) => ({ ...prev, rightPanelImageId: id }));
+  };
+
+  const handleClearLeftPanel = () => {
+    setState((prev) => ({ ...prev, leftPanelImageId: null }));
+  };
+
+  const handleClearRightPanel = () => {
+    setState((prev) => ({ ...prev, rightPanelImageId: null }));
+  };
+
+  const handleSelectHistoryItem = (id: string) => {
+    setState((prev) => ({ ...prev, rightPanelImageId: id }));
+  };
+
+  const handleRemoveHistoryItem = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      history: prev.history.filter((h) => h.id !== id),
+      leftPanelImageId:
+        prev.leftPanelImageId === id ? null : prev.leftPanelImageId,
+      rightPanelImageId:
+        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+    }));
+  };
+
+  const handleDismissError = () => {
+    setState((prev) => ({ ...prev, error: null }));
+  };
+
   const leftItem =
     state.history.find((h) => h.id === state.leftPanelImageId) || null;
   const rightItem =
@@ -287,67 +326,23 @@ export default function App() {
         </div>
       </header>
 
-      {/* Error Banner */}
-      {state.error && (
-        <div
-          data-testid="error-banner"
-          className="px-4 py-3 flex items-center justify-between"
-          style={{
-            backgroundColor: "#dc2626",
-            color: "white",
-          }}
-        >
-          <span>{state.error}</span>
-          <button
-            onClick={() => setState((prev) => ({ ...prev, error: null }))}
-            className="ml-4 px-2 py-1 rounded hover:bg-red-700"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Main Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <ToolPanel
-          onApplyTool={handleApplyTool}
-          isProcessing={state.isProcessing}
-          onToolSelect={(id) => setActiveToolId(id)}
-          hasSourceImage={!!state.leftPanelImageId}
-          isAuthenticated={state.isAuthenticated}
-        />
-
-        {/* Center Workspace */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <Workspace
-            leftImage={leftItem}
-            rightImage={rightItem}
-            onSetLeft={(id) =>
-              setState((prev) => ({ ...prev, leftPanelImageId: id }))
-            }
-            onSetRight={(id) =>
-              setState((prev) => ({ ...prev, rightPanelImageId: id }))
-            }
-            onClearLeft={() =>
-              setState((prev) => ({ ...prev, leftPanelImageId: null }))
-            }
-            onUploadLeft={(f) => handleUpload(f, "left")}
-            onUploadRight={(f) => handleUpload(f, "right")}
-            isProcessing={state.isProcessing}
-            isGeneratingNew={activeToolId === "generate_image"}
-          />
-
-          {/* Bottom History */}
-          <HistoryStrip
-            items={state.history}
-            currentId={state.rightPanelImageId}
-            onSelect={(id) =>
-              setState((prev) => ({ ...prev, rightPanelImageId: id }))
-            }
-          />
-        </div>
-      </div>
+      <ImageToolsPanel
+        appState={state}
+        leftImage={leftItem}
+        rightImage={rightItem}
+        activeToolId={activeToolId}
+        onApplyTool={handleApplyTool}
+        onToolSelect={(id) => setActiveToolId(id)}
+        onSetLeft={handleSetLeftPanel}
+        onSetRight={handleSetRightPanel}
+        onClearLeft={handleClearLeftPanel}
+        onClearRight={handleClearRightPanel}
+        onUploadLeft={(file) => handleUpload(file, "left")}
+        onUploadRight={(file) => handleUpload(file, "right")}
+        onSelectHistoryItem={handleSelectHistoryItem}
+        onRemoveHistoryItem={handleRemoveHistoryItem}
+        onDismissError={handleDismissError}
+      />
     </div>
   );
 }

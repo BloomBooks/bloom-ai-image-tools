@@ -5,6 +5,7 @@ export interface ToolParameter {
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
+  optional?: boolean;
 }
 
 export interface ToolDefinition {
@@ -25,6 +26,7 @@ export interface HistoryItem {
   parameters: Record<string, string>;
   durationMs: number;
   cost: number;
+  model: string; // Model ID used (e.g., "google/gemini-2.5-flash-image")
   timestamp: number;
   promptUsed: string;
   resolution?: { width: number; height: number };

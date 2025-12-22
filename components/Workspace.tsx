@@ -9,6 +9,7 @@ interface WorkspaceProps {
   onSetLeft: (id: string) => void;
   onSetRight: (id: string) => void;
   onClearLeft: () => void;
+  onClearRight: () => void;
   onUploadLeft: (file: File) => void;
   onUploadRight: (file: File) => void;
   isProcessing: boolean;
@@ -21,6 +22,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onSetLeft,
   onSetRight,
   onClearLeft,
+  onClearRight,
   onUploadLeft,
   onUploadRight,
   isProcessing,
@@ -93,6 +95,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             onUpload={onUploadRight}
             isDropZone={true}
             onDrop={onSetRight}
+            showUploadControls={false}
+            onClear={onClearRight}
+            draggableImageId={rightImage?.id || undefined}
           />
         </div>
       </div>

@@ -20,6 +20,17 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
 }) => {
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
+  const hasUnfilledRequiredParams = (tool?: (typeof TOOLS)[number]) => {
+    if (!tool) return false;
+    return tool.parameters.some((param) => {
+      if (param.optional) return false;
+      const value = params[param.name];
+      if (param.type === "select") {
+        return !value;
+      }
+      return !(value && value.trim().length > 0);
+    });
+  };
 
   useEffect(() => {
     if (onToolSelect) {
@@ -60,6 +71,11 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeToolId) {
+      const tool = TOOLS.find((t) => t.id === activeToolId);
+      if (hasUnfilledRequiredParams(tool)) {
+        return;
+      }
+
       onApplyTool(activeToolId, params);
     }
   };
@@ -79,6 +95,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
           const isActive = activeToolId === tool.id;
           const needsImage = tool.requiresImage !== false && !hasSourceImage;
           const isDisabled = !isAuthenticated || needsImage;
+          const missingRequired = hasUnfilledRequiredParams(tool);
+          const isSubmitDisabled = isProcessing || missingRequired;
 
           return (
             <div
@@ -131,21 +149,23 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   >
                     {tool.title}
                   </h3>
-                  <p
-                    className="text-xs mt-1 leading-relaxed"
-                    style={{ color: theme.colors.textMuted }}
-                  >
-                    {tool.description}
-                  </p>
                 </div>
               </button>
 
               {isActive && (
                 <div
-                  className="p-4 pt-0 border-t mt-2 animate-in slide-in-from-top-2 fade-in duration-200"
+                  className="px-4 pb-4 pt-3 border-t animate-in slide-in-from-top-2 fade-in duration-200"
                   style={{ borderColor: theme.colors.borderMuted }}
                 >
-                  <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                  {tool.description && (
+                    <p
+                      className="text-xs mb-2 leading-relaxed"
+                      style={{ color: theme.colors.textMuted }}
+                    >
+                      {tool.description}
+                    </p>
+                  )}
+                  <form onSubmit={handleSubmit} className="space-y-4 mt-2">
                     {tool.parameters.map((param) => (
                       <div key={param.name}>
                         <label
@@ -175,7 +195,6 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                             onChange={(e) =>
                               handleParamChange(param.name, e.target.value)
                             }
-                            required
                           />
                         ) : param.type === "select" ? (
                           <select
@@ -223,7 +242,6 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                             onChange={(e) =>
                               handleParamChange(param.name, e.target.value)
                             }
-                            required
                           />
                         )}
                       </div>
@@ -231,25 +249,26 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
 
                     <button
                       type="submit"
-                      disabled={isProcessing}
+                      disabled={isSubmitDisabled}
                       className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
                       style={{
-                        backgroundColor: isProcessing
+                        backgroundColor: isSubmitDisabled
                           ? theme.colors.accentSubtle
                           : theme.colors.accent,
                         color: theme.colors.textPrimary,
-                        cursor: isProcessing ? "not-allowed" : "pointer",
-                        boxShadow: !isProcessing
+                        cursor: isSubmitDisabled ? "not-allowed" : "pointer",
+                        boxShadow: !isSubmitDisabled
                           ? theme.colors.accentShadow
                           : "none",
+                        opacity: isSubmitDisabled ? 0.3 : 1,
                       }}
                       onMouseEnter={(e) =>
-                        !isProcessing &&
+                        !isSubmitDisabled &&
                         (e.currentTarget.style.backgroundColor =
                           theme.colors.accentHover)
                       }
                       onMouseLeave={(e) =>
-                        !isProcessing &&
+                        !isSubmitDisabled &&
                         (e.currentTarget.style.backgroundColor =
                           theme.colors.accent)
                       }

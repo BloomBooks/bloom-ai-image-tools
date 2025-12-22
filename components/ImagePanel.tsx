@@ -11,6 +11,8 @@ interface ImagePanelProps {
   onDrop?: (imageId: string) => void;
   disabled?: boolean;
   onClear?: () => void;
+  showUploadControls?: boolean;
+  draggableImageId?: string;
 }
 
 export const ImagePanel: React.FC<ImagePanelProps> = ({
@@ -21,9 +23,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
   onDrop,
   disabled,
   onClear,
+  showUploadControls = true,
+  draggableImageId,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
+  const dragDepthRef = React.useRef(0); // Track nested drag events to prevent flicker
 
   const handlePaste = async () => {
     try {
@@ -56,7 +61,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
-    if (isDropZone && !disabled) {
+    if (!isDropZone || disabled) {
+      return;
+    }
+
+    dragDepthRef.current += 1;
+    if (!isDragOver) {
       setIsDragOver(true);
     }
   };
@@ -68,12 +78,21 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
     }
   };
 
-  const handleDragLeave = () => {
-    setIsDragOver(false);
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!isDropZone || disabled) {
+      return;
+    }
+
+    dragDepthRef.current = Math.max(dragDepthRef.current - 1, 0);
+    if (dragDepthRef.current === 0) {
+      setIsDragOver(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    dragDepthRef.current = 0;
     setIsDragOver(false);
     if (!isDropZone || !onDrop || disabled) return;
 
@@ -81,6 +100,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
     if (imageId) {
       onDrop(imageId);
     }
+  };
+
+  const handleImageDragStart = (e: React.DragEvent<HTMLImageElement>) => {
+    if (!draggableImageId) return;
+    e.dataTransfer.setData("text/plain", draggableImageId);
+    e.dataTransfer.effectAllowed = "copyMove";
   };
 
   return (
@@ -100,9 +125,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
       {/* Toolbar */}
       <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
         <div
-          className="backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide pointer-events-auto border shadow-lg"
+          className="px-3 py-1.5  text-xs font-bold uppercase "
           style={{
-            backgroundColor: theme.colors.overlay,
             color: theme.colors.textPrimary,
             borderColor: theme.colors.border,
           }}
@@ -111,59 +135,69 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
         </div>
 
         <div className="flex gap-2 pointer-events-auto">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
-            style={{
-              backgroundColor: theme.colors.overlay,
-              color: theme.colors.textPrimary,
-              borderColor: theme.colors.border,
-            }}
-            title="Upload"
-          >
-            <Icon path={Icons.Upload} className="w-4 h-4" />
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
-          />
-
-          <button
-            onClick={handlePaste}
-            className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
-            style={{
-              backgroundColor: theme.colors.overlay,
-              color: theme.colors.textPrimary,
-              borderColor: theme.colors.border,
-            }}
-            title="Paste from Clipboard"
-          >
-            <Icon path={Icons.Paste} className="w-4 h-4" />
-          </button>
-
-          {image && (
+          {showUploadControls && (
             <>
               <button
-                onClick={() => {
-                  navigator.clipboard.write([
-                    new ClipboardItem({
-                      "image/png": fetch(image.imageData).then((r) => r.blob()),
-                    }),
-                  ]);
-                }}
+                onClick={() => fileInputRef.current?.click()}
                 className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
                 style={{
                   backgroundColor: theme.colors.overlay,
                   color: theme.colors.textPrimary,
                   borderColor: theme.colors.border,
                 }}
-                title="Copy to Clipboard"
+                title="Upload"
               >
-                <Icon path={Icons.Copy} className="w-4 h-4" />
+                <Icon path={Icons.Upload} className="w-4 h-4" />
               </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={(e) =>
+                  e.target.files?.[0] && onUpload(e.target.files[0])
+                }
+              />
+
+              <button
+                onClick={handlePaste}
+                className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                style={{
+                  backgroundColor: theme.colors.overlay,
+                  color: theme.colors.textPrimary,
+                  borderColor: theme.colors.border,
+                }}
+                title="Paste from Clipboard"
+              >
+                <Icon path={Icons.Paste} className="w-4 h-4" />
+              </button>
+            </>
+          )}
+
+          {image && (
+            <>
+              {showUploadControls && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.write([
+                      new ClipboardItem({
+                        "image/png": fetch(image.imageData).then((r) =>
+                          r.blob()
+                        ),
+                      }),
+                    ]);
+                  }}
+                  className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                  style={{
+                    backgroundColor: theme.colors.overlay,
+                    color: theme.colors.textPrimary,
+                    borderColor: theme.colors.border,
+                  }}
+                  title="Copy to Clipboard"
+                >
+                  <Icon path={Icons.Copy} className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 onClick={handleDownload}
@@ -181,20 +215,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
               {onClear && (
                 <button
                   onClick={onClear}
-                  className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg ml-2"
+                  className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
                   style={{
-                    backgroundColor: theme.colors.danger,
+                    backgroundColor: theme.colors.overlay,
                     color: theme.colors.textPrimary,
                     borderColor: theme.colors.border,
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      theme.colors.dangerHover)
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor =
-                      theme.colors.danger)
-                  }
                   title="Clear Image"
                 >
                   <Icon path={Icons.X} className="w-4 h-4" />
@@ -225,6 +251,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
               alt={label}
               className="max-h-full max-w-full object-contain"
               style={{ backgroundColor: theme.colors.surface }}
+              draggable={!!draggableImageId}
+              onDragStart={handleImageDragStart}
             />
           ) : (
             <div
@@ -233,20 +261,20 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
             >
               {isDropZone && !disabled ? (
                 <>
-                  <Icon
-                    path={Icons.Layout}
-                    className="w-12 h-12 mb-3 opacity-30"
+                  <img
+                    src="/assets/image_placeholder.svg"
+                    alt="Placeholder"
+                    className="w-50  mb-3 mx-auto"
+                    style={{ opacity: 0.3 }}
                   />
-                  <p className="text-sm font-medium">
-                    Drag history here to edit
-                  </p>
-                  <p className="text-xs opacity-50 mt-1">or paste/upload</p>
                 </>
               ) : disabled ? (
                 <div className="text-center p-6">
-                  <Icon
-                    path={Icons.History}
-                    className="w-12 h-12 mb-3 opacity-30 mx-auto"
+                  <img
+                    src="/assets/image_placeholder.svg"
+                    alt="Placeholder"
+                    className="w-12 h-12 mb-3 mx-auto"
+                    style={{ opacity: 0.3 }}
                   />
                   <p className="text-sm font-medium">Panel Disabled</p>
                   <p className="text-xs opacity-50 mt-1">

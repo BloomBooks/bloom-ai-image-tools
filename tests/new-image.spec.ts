@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { inexpensive_model_for_testing } from "./playwright_helpers";
 
 const ROBOT_PROMPT = "A friendly robot";
 
@@ -39,4 +40,21 @@ test("creates a new robot image via OpenRouter", async ({ page }) => {
   }).toPass({ timeout: 60_000, intervals: [500] });
 
   await expect(resultImage).toBeVisible();
+
+  // Verify history item displays correct model and cost
+  // Hover over the first history card to show the tooltip popover
+  const historyCard = page.locator('[draggable="true"]').first();
+  await historyCard.hover();
+
+  // Verify the model matches what we expect from the API
+  const modelDisplay = page.getByTestId("history-model");
+  await expect(modelDisplay).toBeVisible();
+  await expect(modelDisplay).toHaveText(inexpensive_model_for_testing);
+
+  // Verify the cost is non-zero (API always returns a cost > 0)
+  const costDisplay = page.getByTestId("history-cost");
+  await expect(costDisplay).toBeVisible();
+  // Cost should be a dollar amount greater than $0.0000
+  await expect(costDisplay).not.toHaveText("$0.0000");
+  await expect(costDisplay).toHaveText(/^\$\d+\.\d{4}$/);
 });

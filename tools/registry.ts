@@ -146,6 +146,7 @@ export const TOOLS: ToolDefinition[] = [
         label: "Target Character",
         type: "text",
         placeholder: "e.g. the boy, the girl",
+        optional: true,
       },
     ],
     promptTemplate: (params) =>

@@ -15,6 +15,8 @@ const DEFAULT_IMAGE_MODEL = (
 export interface EditImageResult {
   imageData: string; // Data URL for the edited or generated image
   duration: number;
+  model: string; // Model ID used (from API response)
+  cost: number; // Cost in dollars (from API response usage.cost)
 }
 
 function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
@@ -135,8 +137,14 @@ export const editImage = async (
     throw new Error("OpenRouter did not return an image.");
   }
 
+  // Extract model and cost from the API response
+  const responseModel = (data?.model as string) || DEFAULT_IMAGE_MODEL;
+  const responseCost = (data?.usage?.cost as number) ?? 0;
+
   return {
     imageData: b64,
     duration: performance.now() - startTime,
+    model: responseModel,
+    cost: responseCost,
   };
 };

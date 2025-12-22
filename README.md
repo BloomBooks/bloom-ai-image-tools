@@ -2,11 +2,10 @@
 
 ## Run Locally
 
-**Prerequisites:** Node.js (v18+ recommended) and pnpm.
+**Prerequisites:** volta, pnpm.
 
 1. Install dependencies: `pnpm install`
 2. Start the dev server: `pnpm dev`
-3. In the app, click **Connect OpenRouter** to run the OAuth flow.
 
 ## Tests
 

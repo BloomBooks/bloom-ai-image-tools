@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <defs>
+    <linearGradient id="studio" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE5B4" />
+      <stop offset="100%" stop-color="#FFD670" />
+    </linearGradient>
+  </defs>
+  <rect width="320" height="200" fill="url(#studio)" />
+  <ellipse cx="160" cy="170" rx="110" ry="30" fill="#EAB676" opacity="0.5" />
+  <circle cx="120" cy="110" r="45" fill="#FF9B71" />
+  <circle cx="200" cy="115" r="50" fill="#70C1B3" />
+  <circle cx="90" cy="75" r="25" fill="#FF9B71" />
+  <circle cx="230" cy="70" r="20" fill="#70C1B3" />
+  <rect x="70" y="125" width="40" height="40" rx="12" fill="#2E294E" opacity="0.3" />
+  <rect x="210" y="135" width="38" height="38" rx="11" fill="#2E294E" opacity="0.3" />
+</svg>

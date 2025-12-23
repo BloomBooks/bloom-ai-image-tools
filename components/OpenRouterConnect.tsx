@@ -39,35 +39,49 @@ export function OpenRouterConnect({
     setKeyValue("");
   };
 
+  const statusLabel = (() => {
+    if (authMethod === "oauth") return "Connected to OpenRouter";
+    return "Using OpenRouter Key";
+  })();
+
+  const disconnectPrompt = (() => {
+    if (authMethod === "manual") return "Forget OpenRouter key?";
+    return "Disconnect from OpenRouter?";
+  })();
+
+  const handleStatusClick = () => {
+    // Env keys are not stored in the app, so there's nothing to forget.
+    if (usingEnvKey) return;
+
+    if (window.confirm(disconnectPrompt)) {
+      handleDisconnect();
+    }
+  };
+
   // When authenticated, show disconnect link
   if (isAuthenticated) {
     return (
       <div className="flex items-center gap-3">
-        <span
+        <button
+          type="button"
           data-testid="openrouter-status"
-          className="flex items-center gap-2 text-sm"
-          style={{ color: theme.colors.success }}
+          onClick={handleStatusClick}
+          disabled={usingEnvKey}
+          className={
+            "flex items-center gap-2 text-sm transition-all " +
+            (usingEnvKey ? "cursor-default" : "underline hover:no-underline")
+          }
+          style={{ color: theme.colors.textPrimary, background: "transparent" }}
+          title={
+            usingEnvKey
+              ? "Using OpenRouter key from environment"
+              : authMethod === "manual"
+              ? "Forget stored OpenRouter key"
+              : "Disconnect and clear stored OpenRouter key"
+          }
         >
-          <Icon path={Icons.Check} className="w-4 h-4" />
-          {usingEnvKey ? "Using env key" : "Connected"}
-        </span>
-        {!usingEnvKey && (
-          <button
-            data-testid="openrouter-disconnect"
-            onClick={handleDisconnect}
-            className="text-sm underline hover:no-underline transition-all"
-            style={{ color: theme.colors.textMuted }}
-            title={
-              authMethod === "manual"
-                ? "Forget stored API key"
-                : "Disconnect and clear stored OpenRouter key"
-            }
-          >
-            {authMethod === "manual"
-              ? "Forget OpenRouter Key"
-              : "Disconnect from OpenRouter"}
-          </button>
-        )}
+          {statusLabel}
+        </button>
       </div>
     );
   }

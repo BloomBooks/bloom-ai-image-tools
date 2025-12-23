@@ -1,4 +1,9 @@
 import { ToolDefinition } from "../types";
+import {
+  applyArtStyleToPrompt,
+  DEFAULT_ART_STYLE_ID,
+  getArtStyleById,
+} from "../lib/artStyles";
 
 export const TOOLS: ToolDefinition[] = [
   {
@@ -14,9 +19,40 @@ export const TOOLS: ToolDefinition[] = [
         placeholder:
           "A cute robot playing chess in a park, children's book style",
       },
+      {
+        name: "styleId",
+        label: "Art Direction",
+        type: "art-style",
+        defaultValue: DEFAULT_ART_STYLE_ID,
+        optional: true,
+      },
     ],
-    promptTemplate: (params) => params.prompt,
+    promptTemplate: (params) =>
+      applyArtStyleToPrompt(params.prompt || "", params.styleId),
     referenceImages: "0+",
+    editImage: false,
+  },
+  {
+    id: "change_style",
+    title: "Change Style",
+    description: "Restyle the selected image with a curated art direction.",
+    icon: "M12 20l9-16M5 15h7",
+    parameters: [
+      {
+        name: "styleId",
+        label: "New Art Style",
+        type: "art-style",
+        defaultValue: DEFAULT_ART_STYLE_ID,
+      },
+    ],
+    promptTemplate: (params) => {
+      const styleId = params.styleId || DEFAULT_ART_STYLE_ID;
+      const styleName =
+        getArtStyleById(styleId)?.name || "the requested art direction";
+      const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
+      return applyArtStyleToPrompt(base, styleId);
+    },
+    referenceImages: "0",
   },
   {
     id: "change_text",
@@ -39,12 +75,12 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Change the text "${params.match}" to "${params.replace}" in this image. Maintain the font style and background.`,
-    referenceImages: "1",
+    referenceImages: "0",
   },
   {
     id: "stylized_title",
     title: "Add Stylized Title",
-    description: undefined,
+    description: "Add a stylized title overlay that matches the illustration.",
     icon: "M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z M12 2h3.5a3.5 3.5 0 0 1 3.5 3.5v11.5A3.5 3.5 0 0 1 15.5 22H12V2z",
     parameters: [
       {
@@ -63,7 +99,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Add a stylized title "${params.title}" to this image. Use a ${params.style} font style that fits a children's book.`,
-    referenceImages: "1",
+    referenceImages: "0",
   },
   {
     id: "remove_object",
@@ -80,7 +116,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Clean up the image by removing ${params.target}. Infill the area naturally to match the surrounding background.`,
-    referenceImages: "1",
+    referenceImages: "0",
   },
   {
     id: "remove_background",
@@ -90,7 +126,7 @@ export const TOOLS: ToolDefinition[] = [
     parameters: [],
     promptTemplate: () =>
       `Remove the background from the image, leaving the main subject isolated on a transparent background.`,
-    referenceImages: "1",
+    referenceImages: "0",
     capabilities: { "transparent-background": true },
   },
   {
@@ -119,7 +155,7 @@ export const TOOLS: ToolDefinition[] = [
       }
       return `Transform this sketch into a finished, fully colored illustration in the style of ${params.style}. Keep the exact composition and subject matter of the sketch, but render it as a completed high-quality artwork.`;
     },
-    referenceImages: "1",
+    referenceImages: "0",
   },
   {
     id: "ethnicity",
@@ -154,7 +190,7 @@ export const TOOLS: ToolDefinition[] = [
       `Change the ethnicity of ${params.character || "the main character"} to ${
         params.ethnicity
       }. Maintain the pose, clothing, and art style.`,
-    referenceImages: "1",
+    referenceImages: "0",
   },
   {
     id: "custom",
@@ -170,6 +206,6 @@ export const TOOLS: ToolDefinition[] = [
       },
     ],
     promptTemplate: (params) => params.prompt,
-    referenceImages: "1+",
+    referenceImages: "0+",
   },
 ];

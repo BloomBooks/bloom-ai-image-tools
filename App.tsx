@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { AppState, HistoryItem, ModelInfo } from "./types";
 import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
@@ -9,6 +9,7 @@ import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
 import JSON5 from "json5";
 import modelCatalogText from "./data/models-registry.json5?raw";
 import { ModelChooserDialog } from "./components/ModelChooserDialog";
+import bloomLogo from "./assets/bloom.svg";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -46,6 +47,7 @@ const DEFAULT_MODEL =
 
 export default function App() {
   const [state, setState] = useState<AppState>({
+    targetImageId: null,
     referenceImageIds: [],
     rightPanelImageId: null,
     history: [],
@@ -83,7 +85,7 @@ export default function App() {
 
   const getToolReferenceMode = (toolId: string | null) => {
     const tool = toolId ? TOOLS.find((t) => t.id === toolId) : null;
-    return tool?.referenceImages ?? "1";
+    return tool?.referenceImages ?? "0";
   };
 
   useEffect(() => {
@@ -147,6 +149,18 @@ export default function App() {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
 
+    const requiresEditImage = tool.editImage !== false;
+    const targetImage = requiresEditImage && state.targetImageId
+      ? state.history.find((h) => h.id === state.targetImageId) || null
+      : null;
+    if (requiresEditImage && !targetImage) {
+      setState((prev) => ({
+        ...prev,
+        error: "Select an image to edit before applying this tool.",
+      }));
+      return;
+    }
+
     const { min, max } = getReferenceConstraints(tool.referenceImages);
     const referenceItems = state.referenceImageIds
       .map((id) => state.history.find((h) => h.id === id) || null)
@@ -172,10 +186,18 @@ export default function App() {
     }));
 
     try {
-      const prompt = tool.promptTemplate(params);
+      const basePrompt = tool.promptTemplate(params);
 
       const constrainedReferences = referenceItems.slice(0, max);
-      const sourceImages = constrainedReferences.map((h) => h.imageData);
+      const sourceImages = [
+        ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
+        ...constrainedReferences.map((h) => h.imageData),
+      ];
+
+      const prompt =
+        tool.id === "custom"
+          ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
+          : basePrompt;
 
       const effectiveApiKey = apiKey || ENV_API_KEY;
       if (!effectiveApiKey) {
@@ -187,18 +209,26 @@ export default function App() {
         return;
       }
 
+      // In E2E, we authenticate via an env key. In that mode we want the model
+      // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
+      // rather than whatever the UI's default model happens to be.
+      const modelIdForRequest = ENV_API_KEY && !apiKey ? undefined : selectedModel?.id;
+
       const result = await editImage(
         sourceImages,
         prompt,
         effectiveApiKey,
-        selectedModel?.id
+        modelIdForRequest
       );
 
       const resolution = await getImageDimensions(result.imageData);
 
       const newItem: HistoryItem = {
         id: uuid(),
-        parentId: constrainedReferences[0]?.id || null,
+        parentId:
+          requiresEditImage && targetImage
+            ? targetImage.id
+            : constrainedReferences[0]?.id || null,
         imageData: result.imageData,
         toolId: tool.id,
         parameters: params,
@@ -224,7 +254,8 @@ export default function App() {
     }
   };
 
-  const handleUpload = (file: File, targetPanel: "left" | "right") => {
+  const handleUpload = useCallback(
+    (file: File, targetPanel: "target" | "right") => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const base64 = ev.target?.result as string;
@@ -246,16 +277,46 @@ export default function App() {
       setState((prev) => ({
         ...prev,
         history: [...prev.history, newItem],
+        targetImageId:
+          targetPanel === "target" ? newItem.id : prev.targetImageId,
         referenceImageIds:
-          targetPanel === "left" ? [newItem.id] : prev.referenceImageIds,
+          targetPanel === "target"
+            ? prev.referenceImageIds.filter((id) => id !== newItem.id)
+            : prev.referenceImageIds,
         rightPanelImageId:
           targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
       }));
     };
     reader.readAsDataURL(file);
-  };
+    },
+    []
+  );
 
-  const handleUploadReference = (file: File, slotIndex?: number) => {
+  const handleUploadTarget = useCallback(
+    (file: File) => handleUpload(file, "target"),
+    [handleUpload]
+  );
+  const handleUploadRight = useCallback(
+    (file: File) => handleUpload(file, "right"),
+    [handleUpload]
+  );
+
+  const handleSetTargetImage = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      targetImageId: id,
+      referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
+      rightPanelImageId:
+        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+    }));
+  }, []);
+
+  const handleClearTargetImage = useCallback(() => {
+    setState((prev) => ({ ...prev, targetImageId: null }));
+  }, []);
+
+  const handleUploadReference = useCallback(
+    (file: File, slotIndex?: number) => {
     const mode = getToolReferenceMode(activeToolId);
     const { max } = getReferenceConstraints(mode);
 
@@ -303,25 +364,54 @@ export default function App() {
       });
     };
     reader.readAsDataURL(file);
-  };
+    },
+    [activeToolId]
+    );
 
   // Global Paste Listener
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      // Check if the paste event contains files (images)
-      if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
-        const file = e.clipboardData.files[0];
-        // Only intercept images
-        if (file.type.startsWith("image/")) {
-          e.preventDefault();
-          handleUploadReference(file);
-        }
+      const file = e.clipboardData?.files?.[0];
+      if (!file || !file.type.startsWith("image/")) {
+        return;
+      }
+
+      const tool = activeToolId
+        ? TOOLS.find((t) => t.id === activeToolId)
+        : null;
+      const requiresEditImage = tool?.editImage !== false;
+      const referenceMode = getToolReferenceMode(activeToolId);
+      const { max } = getReferenceConstraints(referenceMode);
+      const hasReferenceCapacity = max > 0;
+
+      e.preventDefault();
+
+      if (requiresEditImage && !state.targetImageId) {
+        handleUploadTarget(file);
+        return;
+      }
+
+      if (hasReferenceCapacity) {
+        handleUploadReference(file);
+        return;
+      }
+
+      if (requiresEditImage) {
+        handleUploadTarget(file);
+      } else {
+        handleUploadRight(file);
       }
     };
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, []); // handleUpload is stable in this context or we can ignore dep warning for this simplicity
+  }, [
+    activeToolId,
+    state.targetImageId,
+    handleUploadReference,
+    handleUploadTarget,
+    handleUploadRight,
+  ]);
 
   const handleConnect = async () => {
     try {
@@ -395,6 +485,7 @@ export default function App() {
       ...prev,
       history: prev.history.filter((h) => h.id !== id),
       referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
+      targetImageId: prev.targetImageId === id ? null : prev.targetImageId,
       rightPanelImageId:
         prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
     }));
@@ -407,6 +498,11 @@ export default function App() {
   const handleSelectModel = (modelId: string) => {
     setSelectedModelId(modelId);
   };
+
+  const targetImage =
+    state.targetImageId
+      ? state.history.find((h) => h.id === state.targetImageId) || null
+      : null;
 
   const referenceItems = state.referenceImageIds
     .map((id) => state.history.find((h) => h.id === id) || null)
@@ -452,6 +548,11 @@ export default function App() {
         }}
       >
         <div className="flex items-center gap-3">
+          <img
+            src={bloomLogo}
+            alt="Bloom"
+            className="h-7 w-7"
+          />
           <h1 className="text-lg font-bold bg-clip-text ">
             Bloom AI Image Tools
           </h1>
@@ -488,17 +589,21 @@ export default function App() {
       <ImageToolsPanel
         appState={state}
         selectedModel={selectedModel || null}
+        targetImage={targetImage}
         referenceImages={referenceItems}
         rightImage={rightItem}
         activeToolId={activeToolId}
         onApplyTool={handleApplyTool}
         onToolSelect={handleToolSelectWithConstraints}
+        onSetTarget={handleSetTargetImage}
         onSetReferenceAt={handleSetReferenceAt}
         onSetRight={handleSetRightPanel}
+        onUploadTarget={handleUploadTarget}
         onRemoveReferenceAt={handleRemoveReferenceAt}
         onUploadReference={handleUploadReference}
+        onClearTarget={handleClearTargetImage}
         onClearRight={handleClearRightPanel}
-        onUploadRight={(file) => handleUpload(file, "right")}
+        onUploadRight={handleUploadRight}
         onSelectHistoryItem={handleSelectHistoryItem}
         onRemoveHistoryItem={handleRemoveHistoryItem}
         onDismissError={handleDismissError}

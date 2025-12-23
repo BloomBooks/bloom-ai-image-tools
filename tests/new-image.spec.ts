@@ -10,7 +10,9 @@ test("creates a new robot image via OpenRouter", async ({ page }) => {
   // Use text locator as a fallback since the component may take a moment to render
   const statusIndicator = page.getByTestId("openrouter-status");
   await expect(statusIndicator).toBeVisible({ timeout: 10_000 });
-  await expect(statusIndicator).toContainText(/using env key|connected/i);
+  await expect(statusIndicator).toContainText(
+    /using openrouter key|connected to openrouter/i
+  );
 
   await page.getByRole("button", { name: /New Image/i }).click();
 

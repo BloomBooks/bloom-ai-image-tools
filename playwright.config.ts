@@ -23,6 +23,8 @@ export default defineConfig({
     env: {
       E2E_OPENROUTER_API_KEY:
         process.env.BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS,
+      // Ensure E2E runs against an inexpensive model, regardless of the UI default.
+      VITE_OPENROUTER_IMAGE_MODEL: inexpensive_model_for_testing,
     },
   },
   projects: [

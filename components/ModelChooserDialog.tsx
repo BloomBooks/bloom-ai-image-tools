@@ -117,7 +117,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
           <header className="p-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 id="model-chooser-title" className="text-2xl font-semibold">
-                Choose the AI Engine
+                Choose an AI Engine
               </h2>
             </div>
           </header>

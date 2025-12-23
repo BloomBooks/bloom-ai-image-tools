@@ -1,7 +1,7 @@
 export interface ToolParameter {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea";
+  type: "text" | "select" | "textarea" | "art-style";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
@@ -29,6 +29,19 @@ export interface ModelInfo {
   capabilities?: ModelCapabilities;
 }
 
+export interface ArtStyleDefinition {
+  id: string;
+  name: string;
+  promptDetail: string;
+  description: string;
+  samplePageUrl?: string;
+  sampleImageUrl?: string;
+}
+
+export interface ArtStyle extends ArtStyleDefinition {
+  previewUrl?: string | null;
+}
+
 export interface ToolDefinition {
   id: string;
   title: string;
@@ -37,6 +50,7 @@ export interface ToolDefinition {
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
   referenceImages: "0" | "0+" | "1" | "1+";
+  editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
   capabilities?: ToolCapabilities;
 }
 
@@ -57,7 +71,8 @@ export interface HistoryItem {
 export type ViewMode = "single" | "compare";
 
 export interface AppState {
-  referenceImageIds: string[]; // Reference images for the active tool
+  targetImageId: string | null; // Image chosen in the "Image to Edit" panel
+  referenceImageIds: string[]; // Additional reference images ("like this")
   rightPanelImageId: string | null; // The "Result" or preview
   history: HistoryItem[];
   isProcessing: boolean;

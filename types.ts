@@ -8,6 +8,9 @@ export interface ToolParameter {
   optional?: boolean;
 }
 
+export type ToolParams = Record<string, string>;
+export type ToolParamsById = Record<string, ToolParams>;
+
 export type CapabilityName = string;
 
 // Model capability scores are on a 0-5 scale.
@@ -78,4 +81,31 @@ export interface AppState {
   isProcessing: boolean;
   isAuthenticated: boolean; // True when an OpenRouter API key is available
   error: string | null; // Error message to display to user
+}
+
+export interface AuthState {
+  apiKey: string | null;
+  authMethod: "oauth" | "manual" | null;
+}
+
+export interface PersistedAppState {
+  targetImageId: string | null;
+  referenceImageIds: string[];
+  rightPanelImageId: string | null;
+  history: HistoryItem[];
+}
+
+export interface PersistedImageToolsState {
+  version: number;
+  appState: PersistedAppState;
+  paramsByTool: ToolParamsById;
+  activeToolId: string | null;
+  selectedModelId: string | null;
+  auth: AuthState;
+}
+
+export interface ImageToolsStatePersistence {
+  load: () => Promise<PersistedImageToolsState | null>;
+  save: (state: PersistedImageToolsState) => Promise<void>;
+  clear: () => Promise<void>;
 }

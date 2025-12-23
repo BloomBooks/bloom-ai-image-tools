@@ -1,5 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { AppState, HistoryItem, ModelInfo } from "./types";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  AppState,
+  HistoryItem,
+  ModelInfo,
+  PersistedAppState,
+  ToolParamsById,
+} from "./types";
 import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
 import { TOOLS } from "./tools/tools-registry";
@@ -10,6 +16,17 @@ import JSON5 from "json5";
 import modelCatalogText from "./data/models-registry.json5?raw";
 import { ModelChooserDialog } from "./components/ModelChooserDialog";
 import bloomLogo from "./assets/bloom.svg";
+import {
+  createToolParamDefaults,
+  mergeParamsWithDefaults,
+} from "./lib/toolParams";
+import { ENV_KEY_SKIP_FLAG } from "./lib/authFlags";
+import {
+  API_KEY_STORAGE_KEY,
+  AUTH_METHOD_STORAGE_KEY,
+} from "./lib/authStorage";
+import { createBrowserImageToolsPersistence } from "./services/persistence/browserPersistence";
+import { IMAGE_TOOLS_STATE_VERSION } from "./services/persistence/constants";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -30,7 +47,6 @@ const getImageDimensions = (
   });
 };
 
-const API_KEY_STORAGE_KEY = "openrouter.apiKey";
 // Only use the E2E test key - this should only be set during Playwright tests
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
 const MODEL_CATALOG: ModelInfo[] = (() => {
@@ -45,6 +61,35 @@ const MODEL_CATALOG: ModelInfo[] = (() => {
 const DEFAULT_MODEL =
   MODEL_CATALOG.find((model) => model.default) || MODEL_CATALOG[0] || null;
 
+const getEnvApiKey = (): string => {
+  if (!ENV_API_KEY) return "";
+  if (typeof window === "undefined") return ENV_API_KEY;
+  return window.sessionStorage?.getItem(ENV_KEY_SKIP_FLAG) === "1"
+    ? ""
+    : ENV_API_KEY;
+};
+
+const sanitizePersistedAppState = (
+  persisted: PersistedAppState | null | undefined
+): PersistedAppState => {
+  const history = Array.isArray(persisted?.history)
+    ? (persisted?.history as HistoryItem[])
+    : [];
+  const idSet = new Set(history.map((item) => item.id));
+
+  const normalizeId = (id: string | null) => (id && idSet.has(id) ? id : null);
+  const referenceImageIds = Array.isArray(persisted?.referenceImageIds)
+    ? (persisted?.referenceImageIds as string[]).filter((id) => idSet.has(id))
+    : [];
+
+  return {
+    targetImageId: normalizeId(persisted?.targetImageId ?? null),
+    referenceImageIds,
+    rightPanelImageId: normalizeId(persisted?.rightPanelImageId ?? null),
+    history,
+  };
+};
+
 export default function App() {
   const [state, setState] = useState<AppState>({
     targetImageId: null,
@@ -56,6 +101,9 @@ export default function App() {
     error: null,
   });
 
+  const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(
+    () => createToolParamDefaults()
+  );
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -64,9 +112,15 @@ export default function App() {
     DEFAULT_MODEL?.id || ""
   );
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const persistence = useMemo(
+    () => createBrowserImageToolsPersistence(),
+    []
+  );
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
+  const envApiKey = getEnvApiKey();
 
   const getReferenceConstraints = (
     mode: "0" | "0+" | "1" | "1+"
@@ -89,36 +143,107 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    setState((prev) => ({
+      ...prev,
+      isAuthenticated: !!(apiKey || envApiKey),
+    }));
+  }, [apiKey, envApiKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const persisted = await persistence.load();
+        if (cancelled) {
+          return;
+        }
+
+        if (persisted) {
+          const sanitized = sanitizePersistedAppState(persisted.appState);
+          setState((prev) => ({
+            ...prev,
+            ...sanitized,
+            isProcessing: false,
+            error: null,
+          }));
+          setParamsByTool(mergeParamsWithDefaults(persisted.paramsByTool));
+          setActiveToolId(persisted.activeToolId ?? null);
+          if (
+            persisted.selectedModelId &&
+            MODEL_CATALOG.some((model) => model.id === persisted.selectedModelId)
+          ) {
+            setSelectedModelId(persisted.selectedModelId);
+          }
+          if (persisted.auth?.apiKey) {
+            setApiKey(persisted.auth.apiKey);
+            setAuthMethod(persisted.auth.authMethod ?? null);
+          }
+        } else if (envApiKey) {
+          setState((prev) => ({ ...prev, isAuthenticated: true }));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [persistence, envApiKey]);
+
+  useEffect(() => {
+    if (!isHydrated || apiKey || typeof window === "undefined") {
+      return;
+    }
     const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    const storedMethod = localStorage.getItem("openrouter.authMethod") as
+    if (!storedKey) return;
+
+    const storedMethod = localStorage.getItem(AUTH_METHOD_STORAGE_KEY) as
       | "oauth"
       | "manual"
       | null;
-    if (storedKey) {
-      setApiKey(storedKey);
-      setAuthMethod(storedMethod);
-    } else if (ENV_API_KEY) {
-      setState((prev) => ({ ...prev, isAuthenticated: true }));
-    }
-  }, []);
+    setApiKey(storedKey);
+    setAuthMethod(storedMethod ?? "manual");
+    localStorage.removeItem(API_KEY_STORAGE_KEY);
+    localStorage.removeItem(AUTH_METHOD_STORAGE_KEY);
+  }, [isHydrated, apiKey]);
+
+  const persistableState = useMemo(
+    () => ({
+      version: IMAGE_TOOLS_STATE_VERSION,
+      appState: {
+        targetImageId: state.targetImageId,
+        referenceImageIds: state.referenceImageIds,
+        rightPanelImageId: state.rightPanelImageId,
+        history: state.history,
+      },
+      paramsByTool,
+      activeToolId,
+      selectedModelId: selectedModelId || null,
+      auth: {
+        apiKey,
+        authMethod,
+      },
+    }),
+    [
+      state.targetImageId,
+      state.referenceImageIds,
+      state.rightPanelImageId,
+      state.history,
+      paramsByTool,
+      activeToolId,
+      selectedModelId,
+      apiKey,
+      authMethod,
+    ]
+  );
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (apiKey) {
-      localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-      if (authMethod) {
-        localStorage.setItem("openrouter.authMethod", authMethod);
-      }
-    } else {
-      localStorage.removeItem(API_KEY_STORAGE_KEY);
-      localStorage.removeItem("openrouter.authMethod");
-    }
-    setState((prev) => ({
-      ...prev,
-      isAuthenticated: !!(apiKey || ENV_API_KEY),
-    }));
-  }, [apiKey, authMethod]);
+    if (!isHydrated) return;
+    void persistence.save(persistableState);
+  }, [persistence, persistableState, isHydrated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,7 +324,7 @@ export default function App() {
           ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
           : basePrompt;
 
-      const effectiveApiKey = apiKey || ENV_API_KEY;
+      const effectiveApiKey = apiKey || envApiKey;
       if (!effectiveApiKey) {
         setState((prev) => ({
           ...prev,
@@ -212,7 +337,7 @@ export default function App() {
       // In E2E, we authenticate via an env key. In that mode we want the model
       // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
       // rather than whatever the UI's default model happens to be.
-      const modelIdForRequest = ENV_API_KEY && !apiKey ? undefined : selectedModel?.id;
+      const modelIdForRequest = envApiKey && !apiKey ? undefined : selectedModel?.id;
 
       const result = await editImage(
         sourceImages,
@@ -253,6 +378,19 @@ export default function App() {
       setState((prev) => ({ ...prev, isProcessing: false, error: message }));
     }
   };
+
+  const handleParamChange = useCallback(
+    (toolId: string, paramName: string, value: string) => {
+      setParamsByTool((prev) => ({
+        ...prev,
+        [toolId]: {
+          ...(prev[toolId] || {}),
+          [paramName]: value,
+        },
+      }));
+    },
+    []
+  );
 
   const handleUpload = useCallback(
     (file: File, targetPanel: "target" | "right") => {
@@ -430,7 +568,7 @@ export default function App() {
   const handleDisconnect = () => {
     setApiKey(null);
     setAuthMethod(null);
-    setState((prev) => ({ ...prev, isAuthenticated: !!ENV_API_KEY }));
+    setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
   };
 
   const handleProvideKey = (key: string) => {
@@ -562,7 +700,7 @@ export default function App() {
           <OpenRouterConnect
             isAuthenticated={state.isAuthenticated}
             isLoading={authLoading}
-            usingEnvKey={!!(ENV_API_KEY && !apiKey)}
+            usingEnvKey={!!(envApiKey && !apiKey)}
             authMethod={authMethod}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
@@ -593,8 +731,10 @@ export default function App() {
         referenceImages={referenceItems}
         rightImage={rightItem}
         activeToolId={activeToolId}
+        toolParams={paramsByTool}
         onApplyTool={handleApplyTool}
         onToolSelect={handleToolSelectWithConstraints}
+        onParamChange={handleParamChange}
         onSetTarget={handleSetTargetImage}
         onSetReferenceAt={handleSetReferenceAt}
         onSetRight={handleSetRightPanel}

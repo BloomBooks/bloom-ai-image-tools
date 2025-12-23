@@ -121,7 +121,9 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
 
         const blob = await item.getType(imageType);
         const extension = imageType.split("/")[1] || "png";
-        const file = new File([blob], `pasted.${extension}`, { type: imageType });
+        const file = new File([blob], `pasted.${extension}`, {
+          type: imageType,
+        });
         handleUpload(file);
         return;
       }
@@ -136,7 +138,9 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
     navigator.clipboard
       .write([
         new ClipboardItem({
-          "image/png": fetch(image.imageData).then((response) => response.blob()),
+          "image/png": fetch(image.imageData).then((response) =>
+            response.blob()
+          ),
         }),
       ])
       .catch((err) => console.error("Failed to copy image:", err));
@@ -307,9 +311,16 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
       className="w-full h-full flex flex-col items-center justify-center gap-2"
       style={{
         color: theme.colors.textMuted,
-        cursor: mergedControls.upload && onUpload && !disabled ? "pointer" : "default",
+        cursor:
+          mergedControls.upload && onUpload && !disabled
+            ? "pointer"
+            : "default",
       }}
-      onClick={mergedControls.upload && onUpload && !disabled ? openFilePicker : undefined}
+      onClick={
+        mergedControls.upload && onUpload && !disabled
+          ? openFilePicker
+          : undefined
+      }
     >
       <img
         src="/assets/image_placeholder.svg"

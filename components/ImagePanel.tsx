@@ -72,7 +72,9 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
             style={{ opacity: 0.3 }}
           />
           <p className="text-sm font-medium">Panel Disabled</p>
-          <p className="text-xs opacity-50 mt-1">Creating new image from scratch</p>
+          <p className="text-xs opacity-50 mt-1">
+            Creating new image from scratch
+          </p>
         </div>
       );
     }

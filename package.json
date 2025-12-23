@@ -16,6 +16,7 @@
     "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug"
   },
   "dependencies": {
+    "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

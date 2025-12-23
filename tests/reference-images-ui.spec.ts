@@ -42,7 +42,9 @@ test("multi-reference tools keep one extra empty slot", async ({ page }) => {
   await expect(slotLocator).toHaveCount(2);
 });
 
-test("custom edit separates target image from additional references", async ({ page }) => {
+test("custom edit separates target image from additional references", async ({
+  page,
+}) => {
   await page.goto("/");
 
   // Enable tools without requiring a real OpenRouter key.

@@ -41,35 +41,33 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
   const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
-  const showTargetPanel = tool ? tool.editImage !== false : true;
+  const showTargetPanel = (tool ? tool.editImage !== false : true) || !targetImage;
   const showCustomEditRoles = tool?.id === "custom";
 
   const slots = !showReferencePanel
     ? []
-    : (
-        [
-          ...referenceImages.map((image, i) => ({
-            image,
-            slotIndex: i,
-            canRemove: true,
-            roleLabel: showCustomEditRoles ? "like this" : undefined,
-            roleKind: showCustomEditRoles ? "reference" : undefined,
-          })),
-          {
-            image: null,
-            slotIndex: referenceImages.length,
-            canRemove: false,
-            roleLabel: undefined,
-            roleKind: undefined,
-          },
-        ] as {
-          image: HistoryItem | null;
-          slotIndex: number;
-          canRemove: boolean;
-          roleLabel?: string;
-          roleKind?: "target" | "reference";
-        }[]
-      );
+    : ([
+        ...referenceImages.map((image, i) => ({
+          image,
+          slotIndex: i,
+          canRemove: true,
+          roleLabel: showCustomEditRoles ? "like this" : undefined,
+          roleKind: showCustomEditRoles ? "reference" : undefined,
+        })),
+        {
+          image: null,
+          slotIndex: referenceImages.length,
+          canRemove: false,
+          roleLabel: undefined,
+          roleKind: undefined,
+        },
+      ] as {
+        image: HistoryItem | null;
+        slotIndex: number;
+        canRemove: boolean;
+        roleLabel?: string;
+        roleKind?: "target" | "reference";
+      }[]);
 
   const referenceLabel = "Reference Images";
 

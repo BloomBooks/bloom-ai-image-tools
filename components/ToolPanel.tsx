@@ -1,5 +1,10 @@
-import React, { useState } from "react";
-import type { ModelInfo, ToolDefinition, ToolParameter } from "../types";
+import React from "react";
+import type {
+  ModelInfo,
+  ToolDefinition,
+  ToolParameter,
+  ToolParamsById,
+} from "../types";
 import { TOOLS } from "../tools/tools-registry";
 import { Icon, Icons } from "./Icons";
 import { CapabilityPanel } from "./CapabilityPanel";
@@ -15,32 +20,15 @@ interface ToolPanelProps {
   hasTargetImage: boolean;
   isAuthenticated: boolean;
   selectedModel: ModelInfo | null;
+  activeToolId: string | null;
+  paramsByTool: ToolParamsById;
+  onParamChange: (toolId: string, paramName: string, value: string) => void;
 }
-
-type ParamsByTool = Record<string, Record<string, string>>;
 
 const requiresAtLeastOneReference = (tool: ToolDefinition) =>
   tool.referenceImages === "1" || tool.referenceImages === "1+";
 
 const requiresEditImage = (tool: ToolDefinition) => tool.editImage !== false;
-
-const createParamDefaults = (): ParamsByTool => {
-  const defaults: ParamsByTool = {};
-  TOOLS.forEach((tool) => {
-    const toolDefaults: Record<string, string> = {};
-    tool.parameters.forEach((param) => {
-      if (typeof param.defaultValue === "string") {
-        toolDefaults[param.name] = param.defaultValue;
-      } else if (param.type === "select" && param.options?.length) {
-        toolDefaults[param.name] = param.options[0];
-      } else {
-        toolDefaults[param.name] = "";
-      }
-    });
-    defaults[tool.id] = toolDefaults;
-  });
-  return defaults;
-};
 
 export const ToolPanel: React.FC<ToolPanelProps> = ({
   onApplyTool,
@@ -50,27 +38,19 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   hasTargetImage,
   isAuthenticated,
   selectedModel,
+  activeToolId,
+  paramsByTool,
+  onParamChange,
 }) => {
-  const [activeToolId, setActiveToolId] = useState<string | null>(
-    TOOLS[0]?.id ?? null
-  );
-  const [paramsByTool, setParamsByTool] =
-    useState<ParamsByTool>(createParamDefaults);
+  const resolvedActiveToolId = activeToolId ?? TOOLS[0]?.id ?? null;
 
   const handleToolSelect = (toolId: string, isDisabled: boolean) => {
     if (isDisabled) return;
-    setActiveToolId(toolId);
     onToolSelect(toolId);
   };
 
   const handleParamChange = (toolId: string, name: string, value: string) => {
-    setParamsByTool((prev) => ({
-      ...prev,
-      [toolId]: {
-        ...(prev[toolId] || {}),
-        [name]: value,
-      },
-    }));
+    onParamChange(toolId, name, value);
   };
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
@@ -202,7 +182,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     >
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
         {TOOLS.map((tool) => {
-          const isActive = activeToolId === tool.id;
+          const isActive = resolvedActiveToolId === tool.id;
           const needsReference =
             requiresAtLeastOneReference(tool) && referenceImageCount === 0;
           const needsTarget = requiresEditImage(tool) && !hasTargetImage;

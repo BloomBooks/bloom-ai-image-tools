@@ -76,7 +76,9 @@ export const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
               isDropZone={!disabled}
               onDrop={(imageId) => onDrop(imageId, slot.slotIndex)}
               onUpload={(file) => onUpload(file, slot.slotIndex)}
-              onRemove={slot.canRemove ? () => onRemove(slot.slotIndex) : undefined}
+              onRemove={
+                slot.canRemove ? () => onRemove(slot.slotIndex) : undefined
+              }
               controls={{
                 upload: true,
                 paste: true,

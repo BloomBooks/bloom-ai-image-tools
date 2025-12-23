@@ -1,5 +1,10 @@
 import React from "react";
-import { AppState, HistoryItem, ModelInfo } from "../types";
+import {
+  AppState,
+  HistoryItem,
+  ModelInfo,
+  ToolParamsById,
+} from "../types";
 import { ToolPanel } from "./ToolPanel";
 import { Workspace } from "./Workspace";
 import { HistoryStrip } from "./HistoryStrip";
@@ -11,8 +16,10 @@ interface ImageToolsPanelProps {
   referenceImages: HistoryItem[];
   rightImage: HistoryItem | null;
   activeToolId: string | null;
+  toolParams: ToolParamsById;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   onToolSelect: (toolId: string | null) => void;
+  onParamChange: (toolId: string, paramName: string, value: string) => void;
   onSetTarget: (id: string) => void;
   onSetReferenceAt: (index: number, id: string) => void;
   onSetRight: (id: string) => void;
@@ -34,8 +41,10 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
   referenceImages,
   rightImage,
   activeToolId,
+  toolParams,
   onApplyTool,
   onToolSelect,
+  onParamChange,
   onSetTarget,
   onSetReferenceAt,
   onSetRight,
@@ -81,6 +90,9 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
           hasTargetImage={hasTargetImage}
           isAuthenticated={appState.isAuthenticated}
           selectedModel={selectedModel}
+          activeToolId={activeToolId}
+          paramsByTool={toolParams}
+          onParamChange={onParamChange}
         />
 
         <div className="flex-1 flex flex-col min-w-0">

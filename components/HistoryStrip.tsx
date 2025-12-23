@@ -47,6 +47,7 @@ const HistoryCard: React.FC<{
         onDragStart={onDragStart}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        data-testid="history-card"
         className={`
           relative group flex-shrink-0 w-32 cursor-pointer transition-all duration-200
           ${

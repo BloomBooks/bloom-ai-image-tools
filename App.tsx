@@ -6,6 +6,8 @@ import { TOOLS } from "./tools/registry";
 import { theme } from "./themes";
 import { OpenRouterConnect } from "./components/OpenRouterConnect";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
+import modelCatalog from "./data/models.json";
+import { ModelChooserDialog, ModelInfo } from "./components/ModelChooserDialog";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -29,6 +31,9 @@ const getImageDimensions = (
 const API_KEY_STORAGE_KEY = "openrouter.apiKey";
 // Only use the E2E test key - this should only be set during Playwright tests
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
+const MODEL_CATALOG: ModelInfo[] = (modelCatalog as ModelInfo[]) || [];
+const DEFAULT_MODEL =
+  MODEL_CATALOG.find((model) => model.default) || MODEL_CATALOG[0] || null;
 
 export default function App() {
   const [state, setState] = useState<AppState>({
@@ -44,6 +49,13 @@ export default function App() {
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string>(
+    DEFAULT_MODEL?.id || ""
+  );
+  const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
+  const selectedModel =
+    MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
+    DEFAULT_MODEL;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -119,7 +131,12 @@ export default function App() {
 
     if (state.isProcessing) return;
 
-    setState((prev) => ({ ...prev, isProcessing: true, error: null }));
+    setState((prev) => ({
+      ...prev,
+      isProcessing: true,
+      error: null,
+      rightPanelImageId: null,
+    }));
 
     try {
       const leftItem = state.history.find(
@@ -140,7 +157,12 @@ export default function App() {
         return;
       }
 
-      const result = await editImage(sourceImage, prompt, effectiveApiKey);
+      const result = await editImage(
+        sourceImage,
+        prompt,
+        effectiveApiKey,
+        selectedModel?.id
+      );
 
       const resolution = await getImageDimensions(result.imageData);
 
@@ -250,7 +272,8 @@ export default function App() {
     setState((prev) => ({
       ...prev,
       leftPanelImageId: id,
-      rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+      rightPanelImageId:
+        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
     }));
   };
 
@@ -283,6 +306,10 @@ export default function App() {
 
   const handleDismissError = () => {
     setState((prev) => ({ ...prev, error: null }));
+  };
+
+  const handleSelectModel = (modelId: string) => {
+    setSelectedModelId(modelId);
   };
 
   const leftItem =
@@ -323,6 +350,21 @@ export default function App() {
             onDisconnect={handleDisconnect}
             onProvideKey={handleProvideKey}
           />
+          {selectedModel && (
+            <button
+              type="button"
+              onClick={() => setIsModelDialogOpen(true)}
+              className="px-5 py-2 rounded-2xl border font-semibold text-sm tracking-wide"
+              style={{
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceAlt,
+                boxShadow: theme.colors.panelShadow,
+                color: theme.colors.textPrimary,
+              }}
+            >
+              Model: {selectedModel.name}
+            </button>
+          )}
         </div>
       </header>
 
@@ -342,6 +384,14 @@ export default function App() {
         onSelectHistoryItem={handleSelectHistoryItem}
         onRemoveHistoryItem={handleRemoveHistoryItem}
         onDismissError={handleDismissError}
+      />
+
+      <ModelChooserDialog
+        isOpen={isModelDialogOpen}
+        models={MODEL_CATALOG}
+        selectedModelId={selectedModel?.id || ""}
+        onSelect={handleSelectModel}
+        onClose={() => setIsModelDialogOpen(false)}
       />
     </div>
   );

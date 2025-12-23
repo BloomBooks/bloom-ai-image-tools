@@ -4,11 +4,12 @@ export const kBloomBlueTextBackground = "#19818f"; // darker for better contrast
 export const theme = {
   colors: {
     appBackground: "#0b1220",
-    surface: "#0f172a",
+    surface: "transparent",
     surfaceAlt: "#111827",
     surfaceRaised: "#1e293b",
     border: "#24344d",
     borderMuted: "#1a2434",
+    panelBorder: "rgba(226, 232, 240, 0.45)",
     textPrimary: "#e2e8f0",
     textSecondary: "#cbd5e1",
     textMuted: "#94a3b8",
@@ -31,6 +32,6 @@ export const theme = {
     insetShadow: "0 10px 20px rgba(0, 0, 0, 0.35)",
   },
   gradients: {
-    canvas: "radial-gradient(circle at center, #1e293b, #0f172a)",
+    canvas: "radial-gradient(circle at center, #1e293b, transparent)",
   },
 };

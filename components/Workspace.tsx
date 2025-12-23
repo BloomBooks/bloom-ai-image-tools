@@ -38,12 +38,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         style={{ background: theme.gradients.canvas }}
       ></div>
 
-      <div
-        className="flex w-full h-full"
-        style={{ borderRight: `1px solid ${theme.colors.border}` }}
-      >
+      <div className="flex w-full h-full gap-[10px]">
         {/* Left Panel - Reference */}
-        <div className="w-1/2 relative">
+        <div className="flex-1 relative">
           <ImagePanel
             image={leftImage}
             label={"Reference Image"}
@@ -54,41 +51,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             disabled={false}
           />
         </div>
-
-        {/* Center Action Indicator (Optional visual flair) */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-          {isProcessing ? (
-            <div
-              className="backdrop-blur p-3 rounded-full shadow-xl border"
-              style={{
-                backgroundColor: theme.colors.overlay,
-                color: theme.colors.accent,
-                borderColor: theme.colors.border,
-              }}
-            >
-              <div
-                className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
-                style={{
-                  borderColor: theme.colors.accent,
-                  borderTopColor: "transparent",
-                }}
-              ></div>
-            </div>
-          ) : (
-            <div
-              className="p-2 rounded-full"
-              style={{
-                backgroundColor: theme.colors.overlaySoft,
-                color: theme.colors.textMuted,
-              }}
-            >
-              {/* Just a divider marker */}
-            </div>
-          )}
-        </div>
-
         {/* Right Panel - Result */}
-        <div className="w-1/2 relative">
+        <div className="flex-1 relative">
           <ImagePanel
             image={rightImage}
             label="Result"
@@ -98,6 +62,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             showUploadControls={false}
             onClear={onClearRight}
             draggableImageId={rightImage?.id || undefined}
+            isLoading={isProcessing}
           />
         </div>
       </div>

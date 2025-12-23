@@ -13,6 +13,7 @@ interface ImagePanelProps {
   onClear?: () => void;
   showUploadControls?: boolean;
   draggableImageId?: string;
+  isLoading?: boolean;
 }
 
 export const ImagePanel: React.FC<ImagePanelProps> = ({
@@ -25,6 +26,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
   onClear,
   showUploadControls = true,
   draggableImageId,
+  isLoading = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
@@ -34,15 +36,18 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
-        if (
-          item.types.includes("image/png") ||
-          item.types.includes("image/jpeg")
-        ) {
-          const blob = await item.getType(item.types[0]);
-          const file = new File([blob], "pasted.png", { type: blob.type });
-          onUpload(file);
-          break;
+        const imageType = item.types.find((type) => type.startsWith("image/"));
+        if (!imageType) {
+          continue;
         }
+
+        // Some clipboards advertise text/html before the binary image, so
+        // explicitly request the image MIME type to avoid broken placeholders.
+        const blob = await item.getType(imageType);
+        const extension = imageType.split("/")[1] || "png";
+        const file = new File([blob], `pasted.${extension}`, { type: imageType });
+        onUpload(file);
+        return;
       }
     } catch (err) {
       console.error("Failed to paste:", err);
@@ -110,12 +115,14 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
 
   return (
     <div
-      className="flex flex-col h-full relative group transition-colors duration-200"
+      className="flex flex-col h-full relative group transition-colors duration-200 rounded-3xl border p-4 gap-4"
       style={{
-        backgroundColor: isDragOver ? theme.colors.dropZone : "transparent",
+        backgroundColor: isDragOver ? theme.colors.dropZone : theme.colors.surfaceAlt,
         opacity: disabled ? 0.4 : 1,
         pointerEvents: disabled ? "none" : "auto",
         filter: disabled ? "grayscale(1)" : "none",
+        borderColor: theme.colors.panelBorder,
+        boxShadow: theme.colors.panelShadow,
       }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -123,27 +130,29 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
       onDrop={handleDrop}
     >
       {/* Toolbar */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
+      <div
+        className="flex justify-between items-center rounded-2xl shadow-lg px-4 py-2 backdrop-blur-md"
+        style={{ backgroundColor: "transparent" }}
+      >
         <div
-          className="px-3 py-1.5  text-xs font-bold uppercase "
+          className="px-3 py-1.5 text-xs font-bold uppercase rounded-full"
           style={{
             color: theme.colors.textPrimary,
-            borderColor: theme.colors.border,
+            backgroundColor: "transparent",
           }}
         >
           {label}
         </div>
 
-        <div className="flex gap-2 pointer-events-auto">
+        <div className="flex gap-2">
           {showUploadControls && (
             <>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
                 style={{
                   backgroundColor: theme.colors.overlay,
                   color: theme.colors.textPrimary,
-                  borderColor: theme.colors.border,
                 }}
                 title="Upload"
               >
@@ -161,11 +170,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
 
               <button
                 onClick={handlePaste}
-                className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
                 style={{
                   backgroundColor: theme.colors.overlay,
                   color: theme.colors.textPrimary,
-                  borderColor: theme.colors.border,
                 }}
                 title="Paste from Clipboard"
               >
@@ -181,17 +189,14 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
                   onClick={() => {
                     navigator.clipboard.write([
                       new ClipboardItem({
-                        "image/png": fetch(image.imageData).then((r) =>
-                          r.blob()
-                        ),
+                        "image/png": fetch(image.imageData).then((r) => r.blob()),
                       }),
                     ]);
                   }}
-                  className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                  className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
                   style={{
                     backgroundColor: theme.colors.overlay,
                     color: theme.colors.textPrimary,
-                    borderColor: theme.colors.border,
                   }}
                   title="Copy to Clipboard"
                 >
@@ -201,11 +206,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
 
               <button
                 onClick={handleDownload}
-                className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
                 style={{
                   backgroundColor: theme.colors.overlay,
                   color: theme.colors.textPrimary,
-                  borderColor: theme.colors.border,
                 }}
                 title="Download"
               >
@@ -215,11 +219,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
               {onClear && (
                 <button
                   onClick={onClear}
-                  className="backdrop-blur-md p-2 rounded-full transition-colors border shadow-lg"
+                  className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
                   style={{
                     backgroundColor: theme.colors.overlay,
                     color: theme.colors.textPrimary,
-                    borderColor: theme.colors.border,
                   }}
                   title="Clear Image"
                 >
@@ -232,16 +235,11 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
       </div>
 
       {/* Image Area */}
-      <div className="flex-1 p-4 flex items-center justify-center min-h-0">
+      <div className="flex-1 flex items-center justify-center min-h-0">
         <div
-          className="relative rounded-lg overflow-hidden shadow-2xl w-full h-full flex items-center justify-center"
+          className="relative rounded-2xl overflow-hidden w-full h-full flex items-center justify-center"
           style={{
-            border: isDragOver
-              ? `2px dashed ${theme.colors.dropZoneBorder}`
-              : `1px solid ${theme.colors.border}`,
-            backgroundColor: isDragOver
-              ? theme.colors.dropZone
-              : theme.colors.surfaceAlt,
+            backgroundColor: isDragOver ? theme.colors.dropZone : "transparent",
             boxShadow: theme.colors.panelShadow,
           }}
         >
@@ -250,7 +248,6 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
               src={image.imageData}
               alt={label}
               className="max-h-full max-w-full object-contain"
-              style={{ backgroundColor: theme.colors.surface }}
               draggable={!!draggableImageId}
               onDragStart={handleImageDragStart}
             />
@@ -260,14 +257,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
               style={{ color: theme.colors.textMuted }}
             >
               {isDropZone && !disabled ? (
-                <>
-                  <img
-                    src="/assets/image_placeholder.svg"
-                    alt="Placeholder"
-                    className="w-50  mb-3 mx-auto"
-                    style={{ opacity: 0.3 }}
-                  />
-                </>
+                <img
+                  src="/assets/image_placeholder.svg"
+                  alt="Placeholder"
+                  className="w-50 mb-3 mx-auto"
+                  style={{ opacity: 0.3 }}
+                />
               ) : disabled ? (
                 <div className="text-center p-6">
                   <img
@@ -292,14 +287,41 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
           {/* Drag Over Overlay */}
           {isDragOver && (
             <div
-              className="absolute inset-0 backdrop-blur-[1px] flex items-center justify-center z-20"
-              style={{ backgroundColor: theme.colors.dropZone }}
+              className="absolute inset-0 backdrop-blur-[1px] flex items-center justify-center z-20 rounded-2xl"
+              style={{
+                backgroundColor: theme.colors.dropZone,
+                border: `2px dashed ${theme.colors.dropZoneBorder}`,
+              }}
             >
               <span
                 className="font-bold text-lg drop-shadow-md"
                 style={{ color: theme.colors.textPrimary }}
               >
                 Drop to set as Source
+              </span>
+            </div>
+          )}
+
+          {isLoading && (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center z-30 gap-4 rounded-2xl"
+              style={{
+                backgroundColor: theme.colors.overlayStrong,
+                backdropFilter: "blur(4px)",
+              }}
+            >
+              <div
+                className="w-12 h-12 rounded-full border-4 border-solid animate-spin"
+                style={{
+                  borderColor: theme.colors.overlay,
+                  borderTopColor: theme.colors.accent,
+                }}
+              ></div>
+              <span
+                className="text-sm font-semibold tracking-wide"
+                style={{ color: theme.colors.textPrimary }}
+              >
+                Generating...
               </span>
             </div>
           )}

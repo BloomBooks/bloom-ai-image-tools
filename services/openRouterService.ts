@@ -43,7 +43,8 @@ function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
 export const editImage = async (
   base64Image: string | null,
   prompt: string,
-  apiKey: string
+  apiKey: string,
+  modelId?: string
 ): Promise<EditImageResult> => {
   const key = apiKey?.trim();
   if (!key) {
@@ -54,6 +55,7 @@ export const editImage = async (
 
   const startTime = performance.now();
   const hasImage = !!base64Image;
+  const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   const content: any[] = [{ type: "text", text: prompt }];
   if (hasImage && base64Image) {
@@ -65,7 +67,7 @@ export const editImage = async (
   }
 
   const body = {
-    model: DEFAULT_IMAGE_MODEL,
+    model: modelToUse,
     messages: [
       {
         role: "user",
@@ -138,7 +140,7 @@ export const editImage = async (
   }
 
   // Extract model and cost from the API response
-  const responseModel = (data?.model as string) || DEFAULT_IMAGE_MODEL;
+  const responseModel = (data?.model as string) || modelToUse;
   const responseCost = (data?.usage?.cost as number) ?? 0;
 
   return {

@@ -85,7 +85,6 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
 
           <HistoryStrip
             items={appState.history}
-            currentId={appState.rightPanelImageId}
             onSelect={onSelectHistoryItem}
             onRemove={onRemoveHistoryItem}
           />

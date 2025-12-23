@@ -160,7 +160,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   {tool.description && (
                     <p
                       className="text-xs mb-2 leading-relaxed"
-                      style={{ color: theme.colors.textMuted }}
+                      style={{ color: theme.colors.textSecondary }}
                     >
                       {tool.description}
                     </p>
@@ -170,7 +170,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                       <div key={param.name}>
                         <label
                           className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
-                          style={{ color: theme.colors.textMuted }}
+                          style={{ color: theme.colors.textSecondary }}
                         >
                           {param.label}
                         </label>

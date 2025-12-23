@@ -1,28 +1,31 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { HistoryItem } from "../types";
-import { Icon, Icons } from "./Icons";
 import { TOOLS } from "../tools/registry";
 import { theme } from "../themes";
+import { Icon, Icons } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 
-interface HistoryStripProps {
-  items: HistoryItem[];
-  currentId: string | null;
-  onSelect: (id: string) => void;
-  onRemove: (id: string) => void;
-}
-
-// Individual history card with its own popover
-const HistoryCard: React.FC<{
+interface HistoryCardProps {
   item: HistoryItem;
-  isSelected: boolean;
   onSelect: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onRemove: () => void;
-}> = ({ item, isSelected, onSelect, onDragStart, onRemove }) => {
+}
+
+// Individual history card with its own popover
+export const HistoryCard: React.FC<HistoryCardProps> = ({
+  item,
+  onSelect,
+  onDragStart,
+  onRemove,
+}) => {
   const tool = TOOLS.find((t) => t.id === item.toolId);
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    popoverRef.current?.hidePopover();
+  }, []);
 
   const handleMouseEnter = () => {
     if (popoverRef.current && cardRef.current) {
@@ -47,24 +50,18 @@ const HistoryCard: React.FC<{
         onDragStart={onDragStart}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`
+        className="
           relative group flex-shrink-0 w-32 cursor-pointer transition-all duration-200
-          ${
-            isSelected
-              ? "scale-105"
-              : "hover:scale-105 opacity-70 hover:opacity-100"
-          }
-        `}
+          hover:scale-105 opacity-70 hover:opacity-100
+        "
       >
         {/* Thumbnail Container */}
         <div className="relative w-full aspect-square">
           <div
             className="relative rounded-lg border-2 w-full h-full"
             style={{
-              borderColor: isSelected
-                ? theme.colors.accent
-                : theme.colors.border,
-              boxShadow: isSelected ? theme.colors.accentShadow : "none",
+              borderColor: theme.colors.border,
+              boxShadow: "none",
             }}
           >
             <div className="w-full h-full rounded-[inherit] overflow-hidden">
@@ -105,29 +102,22 @@ const HistoryCard: React.FC<{
             </div>
           )}
         </div>
-
-        {/* Metadata */}
-        <div className="mt-2 text-center">
-          <div
-            className="text-xs font-medium truncate"
-            style={{ color: theme.colors.textSecondary }}
-          >
-            {tool?.title || "Original"}
-          </div>
-        </div>
       </div>
 
       {/* Native Popover - renders in top layer */}
       <div
         ref={popoverRef}
         popover="manual"
-        className="w-56 border text-xs rounded-lg shadow-2xl p-4 m-0"
+        className="border text-xs rounded-lg shadow-2xl p-4 m-0"
         style={{
           position: "fixed",
           transform: "translate(-50%, -100%)",
           backgroundColor: theme.colors.surfaceRaised,
           borderColor: theme.colors.border,
           color: theme.colors.textPrimary,
+          width: "max-content",
+          maxWidth: "calc(100vw - 32px)",
+          overflow: "visible",
         }}
       >
         <ImageInfoPanel item={item} />
@@ -138,55 +128,5 @@ const HistoryCard: React.FC<{
         />
       </div>
     </>
-  );
-};
-
-export const HistoryStrip: React.FC<HistoryStripProps> = ({
-  items,
-  currentId,
-  onSelect,
-  onRemove,
-}) => {
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    e.dataTransfer.setData("text/plain", id);
-    e.dataTransfer.effectAllowed = "copy";
-  };
-
-  return (
-    <div
-      className="h-44 border-t flex flex-col flex-shrink-0 z-10 relative"
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.border,
-      }}
-    >
-      <div className="px-4 py-2 flex items-center justify-end relative z-0">
-        <button
-          type="button"
-          className="p-1 rounded-full border text-xs hover:opacity-80 transition-opacity"
-          style={{
-            color: theme.colors.textMuted,
-            borderColor: theme.colors.border,
-            backgroundColor: "transparent",
-          }}
-          title="You can drag these items to the above panels."
-          aria-label="History strip drag instructions"
-        >
-          <Icon path={Icons.Info} className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="flex-1 overflow-x-auto overflow-y-clip flex items-center py-4 px-6 gap-4 custom-scrollbar relative pt-6">
-        {items.map((item) => (
-          <HistoryCard
-            key={item.id}
-            item={item}
-            isSelected={item.id === currentId}
-            onSelect={() => onSelect(item.id)}
-            onDragStart={(e) => handleDragStart(e, item.id)}
-            onRemove={() => onRemove(item.id)}
-          />
-        ))}
-      </div>
-    </div>
   );
 };

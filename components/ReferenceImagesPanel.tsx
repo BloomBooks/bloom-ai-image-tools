@@ -1,7 +1,7 @@
 import React from "react";
 import { HistoryItem } from "../types";
 import { theme } from "../themes";
-import { ImageHolder } from "./ImageHolder";
+import { ImageSlot } from "./ImageSlot";
 
 type ReferenceImageSlot = {
   image: HistoryItem | null;
@@ -58,18 +58,19 @@ export const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
       </div>
 
       {/* Slots */}
-      <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <div
-          className="grid gap-3"
+          className="grid gap-3 h-full"
           style={{
             gridTemplateColumns:
               slots.length <= 1
                 ? "1fr"
                 : "repeat(auto-fit, minmax(180px, 1fr))",
+            gridAutoRows: "minmax(0, 1fr)",
           }}
         >
           {slots.map((slot) => (
-            <ImageHolder
+            <ImageSlot
               key={slot.slotIndex}
               image={slot.image}
               disabled={disabled}

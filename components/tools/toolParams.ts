@@ -1,5 +1,5 @@
-import { ToolParamsById } from "../types";
-import { TOOLS } from "../tools/tools-registry";
+import { ToolParamsById } from "../../types";
+import { TOOLS } from "./tools-registry";
 
 const buildDefaults = (): ToolParamsById => {
   const defaults: ToolParamsById = {};

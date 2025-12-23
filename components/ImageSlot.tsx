@@ -1,9 +1,11 @@
 import React from "react";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
+import { MagnifiableImage } from "./MagnifiableImage";
 import { theme } from "../themes";
+import { PanelToolbar } from "./PanelToolbar";
 
-export type ImageHolderControls = {
+export type ImageSlotControls = {
   upload?: boolean;
   paste?: boolean;
   copy?: boolean;
@@ -19,7 +21,7 @@ type RenderEmptyStateArgs = {
   disabled: boolean;
 };
 
-export interface ImageHolderProps {
+export interface ImageSlotProps {
   label?: string;
   image: HistoryItem | null;
   disabled?: boolean;
@@ -30,37 +32,34 @@ export interface ImageHolderProps {
   draggableImageId?: string;
   isLoading?: boolean;
   uploadInputTestId?: string;
-  controls?: ImageHolderControls;
+  controls?: ImageSlotControls;
   variant?: "panel" | "tile";
   className?: string;
   rolePill?: { label: string; kind?: RoleKind; testId?: string };
   renderEmptyState?: (args: RenderEmptyStateArgs) => React.ReactNode;
   dropLabel?: string;
   dataTestId?: string;
-  actionLabels?: Partial<Record<keyof ImageHolderControls, string>>;
+  actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
 }
 
 const VARIANT_CLASSES = {
   panel: {
     container:
       "flex flex-col h-full relative group transition-colors duration-200 rounded-3xl border p-4 gap-4",
-    toolbar:
-      "flex justify-between items-center rounded-2xl shadow-lg px-4 py-2 backdrop-blur-md",
     contentWrapper: "flex-1 flex items-center justify-center min-h-0",
     innerWrapper:
       "relative rounded-2xl overflow-hidden w-full h-full flex items-center justify-center",
   },
   tile: {
     container:
-      "relative flex flex-col rounded-2xl border transition-colors duration-200 overflow-hidden",
-    toolbar: "hidden", // toolbar is not rendered for tile variant
-    contentWrapper: "flex-1 flex items-center justify-center min-h-[140px]",
+      "relative flex flex-col rounded-2xl border transition-colors duration-200 overflow-hidden min-h-0",
+    contentWrapper: "flex-1 flex items-center justify-center min-h-0",
     innerWrapper:
-      "relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden",
+      "relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden min-h-0",
   },
 } as const;
 
-export const ImageHolder: React.FC<ImageHolderProps> = ({
+export const ImageSlot: React.FC<ImageSlotProps> = ({
   label,
   image,
   disabled = false,
@@ -83,8 +82,9 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
+  const [isHovered, setIsHovered] = React.useState(false);
 
-  const mergedControls: Required<ImageHolderControls> = {
+  const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
     paste: controls?.paste ?? true,
     copy: controls?.copy ?? true,
@@ -203,12 +203,20 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
     event.dataTransfer.effectAllowed = "copyMove";
   };
 
+  const handleMouseEnter = () => {
+    if (!disabled) setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
   const variantClasses = VARIANT_CLASSES[variant];
   const containerClasses = [variantClasses.container, className]
     .filter(Boolean)
     .join(" ");
 
-  const defaultActionLabels: Record<keyof ImageHolderControls, string> = {
+  const defaultActionLabels: Record<keyof ImageSlotControls, string> = {
     upload: "Upload",
     paste: "Paste from Clipboard",
     copy: "Copy to Clipboard",
@@ -254,11 +262,31 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
     },
   ].filter((action) => action.isVisible && !disabled);
 
+  const orderedActionButtons =
+    variant === "panel"
+      ? actionButtons
+      : (() => {
+          const removeIndex = actionButtons.findIndex(
+            (action) => action.key === "remove"
+          );
+          if (removeIndex > 0) {
+            const reordered = [...actionButtons];
+            const [removeAction] = reordered.splice(removeIndex, 1);
+            reordered.unshift(removeAction);
+            return reordered;
+          }
+          return actionButtons;
+        })();
+
+  const shouldShowActions = isHovered && orderedActionButtons.length > 0;
+
   const renderActions = () => {
+    if (!shouldShowActions) return null;
+
     if (variant === "panel") {
       return (
         <div className="flex gap-2">
-          {actionButtons.map((action) => (
+          {orderedActionButtons.map((action) => (
             <button
               key={action.key}
               type="button"
@@ -278,14 +306,12 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
       );
     }
 
-    if (!actionButtons.length) return null;
-
     return (
       <div
         className="absolute top-2 right-2 flex flex-col gap-1 z-20"
         style={{ pointerEvents: disabled ? "none" : "auto" }}
       >
-        {actionButtons.map((action) => (
+        {orderedActionButtons.map((action) => (
           <button
             key={action.key}
             type="button"
@@ -328,13 +354,15 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
         className="w-12 h-12"
         style={{ opacity: 0.3 }}
       />
-      <span className="text-xs font-medium opacity-70">Drop or upload</span>
+      {/* <span className="text-xs font-medium opacity-70">Drop or upload</span> */}
     </button>
   );
 
   const emptyStateContent = renderEmptyState
     ? renderEmptyState({ openFilePicker, isDropZone, disabled })
     : defaultEmptyState;
+
+  const actionsNode = renderActions();
 
   return (
     <div
@@ -353,35 +381,23 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
           ? theme.colors.dropZoneBorder
           : theme.colors.panelBorder,
         boxShadow: theme.colors.panelShadow,
-        minHeight: variant === "tile" ? 180 : undefined,
+        minHeight: variant === "tile" ? 0 : undefined,
       }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      {variant === "panel" && (label || actionButtons.length) && (
-        <div
-          className={VARIANT_CLASSES.panel.toolbar}
-          style={{ backgroundColor: "transparent" }}
-        >
-          <div
-            className="px-3 py-1.5 text-xs font-bold uppercase rounded-full"
-            style={{
-              color: theme.colors.textPrimary,
-              backgroundColor: "transparent",
-            }}
-          >
-            {label}
-          </div>
-          {renderActions()}
-        </div>
+      {variant === "panel" && (label || actionsNode) && (
+        <PanelToolbar label={label || ""} actions={actionsNode} />
       )}
 
       <div className={variantClasses.contentWrapper}>
         <div className={variantClasses.innerWrapper}>
           {image ? (
-            <img
+            <MagnifiableImage
               src={image.imageData}
               alt={label || "Reference"}
               className="max-h-full max-w-full object-contain"
@@ -392,7 +408,7 @@ export const ImageHolder: React.FC<ImageHolderProps> = ({
             emptyStateContent
           )}
 
-          {variant === "tile" && renderActions()}
+          {variant === "tile" && actionsNode}
 
           {rolePill && (
             <div

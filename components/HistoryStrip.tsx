@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
-import { TOOLS } from "../tools/tools-registry";
+import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 

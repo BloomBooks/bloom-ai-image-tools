@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { HistoryItem } from "../types";
-import { TOOLS } from "../tools/tools-registry";
+import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";

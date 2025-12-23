@@ -5,7 +5,7 @@ import {
   ModelInfo,
   ToolParamsById,
 } from "../types";
-import { ToolPanel } from "./ToolPanel";
+import { ToolPanel } from "./tools/ToolPanel";
 import { Workspace } from "./Workspace";
 import { HistoryStrip } from "./HistoryStrip";
 

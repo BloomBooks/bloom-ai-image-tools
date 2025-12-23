@@ -8,7 +8,7 @@ import {
 } from "./types";
 import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
-import { TOOLS } from "./tools/tools-registry";
+import { TOOLS } from "./components/tools/tools-registry";
 import { theme } from "./themes";
 import { OpenRouterConnect } from "./components/OpenRouterConnect";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
@@ -19,7 +19,7 @@ import bloomLogo from "./assets/bloom.svg";
 import {
   createToolParamDefaults,
   mergeParamsWithDefaults,
-} from "./lib/toolParams";
+} from "./components/tools/toolParams";
 import { ENV_KEY_SKIP_FLAG } from "./lib/authFlags";
 import {
   API_KEY_STORAGE_KEY,

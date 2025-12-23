@@ -1,11 +1,26 @@
 import React from "react";
 import { HistoryItem } from "../types";
 import { theme } from "../themes";
-import { ImageHolder } from "./ImageHolder";
+import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
+import { PanelToolbar } from "./PanelToolbar";
 
-interface ImagePanelProps {
+export type ImagePanelSlot = {
+  slotIndex: number;
   image: HistoryItem | null;
+  canRemove: boolean;
+  rolePill?: ImageSlotProps["rolePill"];
+  dataTestId?: string;
+  uploadInputTestId?: string;
+  dropLabel?: string;
+  actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
+  controls?: ImageSlotControls;
+};
+
+type SingleImagePanelProps = {
   label: string;
+  layout?: "single";
+  panelTestId?: string;
+  image: HistoryItem | null;
   onUpload: (file: File) => void;
   isDropZone?: boolean;
   onDrop?: (imageId: string) => void;
@@ -15,21 +30,125 @@ interface ImagePanelProps {
   draggableImageId?: string;
   isLoading?: boolean;
   uploadInputTestId?: string;
-}
+};
 
-export const ImagePanel: React.FC<ImagePanelProps> = ({
-  image,
-  label,
-  onUpload,
-  isDropZone = false,
-  onDrop,
-  disabled = false,
-  onClear,
-  showUploadControls = true,
-  draggableImageId,
-  isLoading = false,
-  uploadInputTestId,
-}) => {
+type GridImagePanelProps = {
+  label: string;
+  layout: "grid";
+  panelTestId?: string;
+  slots: ImagePanelSlot[];
+  disabled?: boolean;
+  onSlotUpload: (file: File, slotIndex: number) => void;
+  onSlotDrop: (imageId: string, slotIndex: number) => void;
+  onSlotRemove: (slotIndex: number) => void;
+};
+
+export type ImagePanelProps = SingleImagePanelProps | GridImagePanelProps;
+
+const isGridPanel = (props: ImagePanelProps): props is GridImagePanelProps => {
+  return props.layout === "grid";
+};
+
+export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
+  if (isGridPanel(props)) {
+    const {
+      label,
+      slots,
+      disabled = false,
+      onSlotDrop,
+      onSlotUpload,
+      onSlotRemove,
+      panelTestId,
+    } = props;
+
+    const containerStyle: React.CSSProperties = {
+      backgroundColor: theme.colors.surfaceAlt,
+      opacity: disabled ? 0.25 : 1,
+      pointerEvents: disabled ? "none" : "auto",
+      filter: disabled ? "grayscale(1)" : "none",
+      borderColor: theme.colors.panelBorder,
+      boxShadow: theme.colors.panelShadow,
+    };
+
+    const gridTemplateColumns =
+      slots.length <= 1 ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
+
+    return (
+      <div
+        data-testid={panelTestId}
+        className="flex flex-col h-full relative group transition-colors duration-200 rounded-3xl border p-4 gap-3"
+        style={containerStyle}
+      >
+        <PanelToolbar label={label} />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div
+            className="grid gap-3 h-full"
+            style={{
+              gridTemplateColumns: gridTemplateColumns,
+              gridAutoRows: "minmax(0, 1fr)",
+            }}
+          >
+            {slots.map((slot) => {
+              const slotControls: ImageSlotControls = slot.controls ?? {
+                upload: true,
+                paste: true,
+                copy: true,
+                download: true,
+                remove: slot.canRemove,
+              };
+
+              return (
+                <ImageSlot
+                  key={slot.slotIndex}
+                  image={slot.image}
+                  disabled={disabled}
+                  isDropZone={!disabled}
+                  onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
+                  onUpload={
+                    disabled
+                      ? undefined
+                      : (file) => onSlotUpload(file, slot.slotIndex)
+                  }
+                  onRemove={
+                    slot.canRemove && !disabled
+                      ? () => onSlotRemove(slot.slotIndex)
+                      : undefined
+                  }
+                  controls={slotControls}
+                  variant="tile"
+                  rolePill={slot.rolePill}
+                  dropLabel={slot.dropLabel ?? "Drop to add"}
+                  dataTestId={slot.dataTestId}
+                  uploadInputTestId={slot.uploadInputTestId}
+                  actionLabels={
+                    slot.actionLabels ?? {
+                      remove: "Remove reference",
+                    }
+                  }
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const {
+    image,
+    label,
+    onUpload,
+    isDropZone = false,
+    onDrop,
+    disabled = false,
+    onClear,
+    showUploadControls = true,
+    draggableImageId,
+    isLoading = false,
+    uploadInputTestId,
+    panelTestId,
+  } = props;
+
   const renderEmptyState = ({
     openFilePicker,
     isDropZone: dropZone,
@@ -43,21 +162,21 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
       return (
         <button
           type="button"
-          className="flex flex-col items-center justify-center"
+          className="flex flex-col items-center justify-center h-full w-full min-h-0"
           style={{ color: theme.colors.textMuted }}
           onClick={showUploadControls ? openFilePicker : undefined}
         >
           <img
             src="/assets/image_placeholder.svg"
             alt="Placeholder"
-            className="w-50 mb-3 mx-auto"
+            className="max-h-[60%] max-w-[220px] w-full h-auto mb-3 mx-auto object-contain"
             style={{ opacity: 0.3 }}
           />
-          {showUploadControls && (
+          {/* {showUploadControls && (
             <span className="text-xs font-medium opacity-70">
               Drop, paste, or upload
             </span>
-          )}
+          )} */}
         </button>
       );
     }
@@ -87,7 +206,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = ({
   };
 
   return (
-    <ImageHolder
+    <ImageSlot
+      dataTestId={panelTestId}
       label={label}
       image={image}
       disabled={disabled}

@@ -6,6 +6,7 @@ export interface ToolParameter {
   placeholder?: string;
   defaultValue?: string;
   optional?: boolean;
+  artStyleCategories?: string[];
 }
 
 export type ToolParams = Record<string, string>;
@@ -39,6 +40,7 @@ export interface ArtStyleDefinition {
   description: string;
   samplePageUrl?: string;
   sampleImageUrl?: string;
+  categories?: string[];
 }
 
 export interface ArtStyle extends ArtStyleDefinition {

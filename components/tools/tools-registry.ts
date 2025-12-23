@@ -1,9 +1,11 @@
-import { ToolDefinition } from "../types";
+import { ToolDefinition } from "../../types";
 import {
   applyArtStyleToPrompt,
+  CLEAR_ART_STYLE_ID,
   DEFAULT_ART_STYLE_ID,
   getArtStyleById,
-} from "../lib/artStyles";
+  isClearArtStyleId,
+} from "../../lib/artStyles";
 
 export const TOOLS: ToolDefinition[] = [
   {
@@ -21,7 +23,7 @@ export const TOOLS: ToolDefinition[] = [
       },
       {
         name: "styleId",
-        label: "Art Direction",
+        label: "Style",
         type: "art-style",
         defaultValue: DEFAULT_ART_STYLE_ID,
         optional: true,
@@ -33,24 +35,26 @@ export const TOOLS: ToolDefinition[] = [
     editImage: false,
   },
   {
-    id: "change_style",
-    title: "Change Style",
-    description: "Restyle the selected image with a curated art direction.",
-    icon: "M12 20l9-16M5 15h7",
+    id: "enhance_drawing",
+    title: "Enhance Line Drawing",
+    description: "Improve old, low-res line drawings",
+    icon: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z",
     parameters: [
       {
         name: "styleId",
-        label: "New Art Style",
+        label: "New Style",
         type: "art-style",
-        defaultValue: DEFAULT_ART_STYLE_ID,
+        defaultValue: CLEAR_ART_STYLE_ID,
+        artStyleCategories: ["Line Art"],
       },
     ],
     promptTemplate: (params) => {
-      const styleId = params.styleId || DEFAULT_ART_STYLE_ID;
-      const styleName =
-        getArtStyleById(styleId)?.name || "the requested art direction";
-      const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
-      return applyArtStyleToPrompt(base, styleId);
+      const styleId = params.styleId || CLEAR_ART_STYLE_ID;
+      const cleared = isClearArtStyleId(styleId);
+      const basePrompt = cleared
+        ? "Transform this rough sketch into a high-quality, professional black and white line drawing. Make the lines crisp, smooth, and confident. Remove any sketchiness, eraser marks, or noise so the result is press-ready ink art."
+        : "Transform this sketch into a polished illustration while keeping the exact composition, characters, and perspective. Clean up stray pencil marks, preserve the line work, and render it using the selected art direction.";
+      return applyArtStyleToPrompt(basePrompt, styleId);
     },
     referenceImages: "0",
   },
@@ -78,6 +82,35 @@ export const TOOLS: ToolDefinition[] = [
     referenceImages: "0",
   },
   {
+    id: "change_style",
+    title: "Change Style",
+    description: "Restyle the selected image with a curated art direction.",
+    icon: "M12 20l9-16M5 15h7",
+    parameters: [
+      {
+        name: "styleId",
+        label: "New Style",
+        type: "art-style",
+        defaultValue: DEFAULT_ART_STYLE_ID,
+      },
+    ],
+    promptTemplate: (params) => {
+      const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
+      const cleared = isClearArtStyleId(selectedStyleId);
+      const effectiveStyleId = cleared ? CLEAR_ART_STYLE_ID : selectedStyleId;
+      const styleName = cleared
+        ? "no additional art style"
+        : getArtStyleById(effectiveStyleId)?.name ||
+          "the requested art direction";
+      const base = cleared
+        ? "Re-render this image without applying any new art style. Preserve the exact composition, characters, lighting cues, and rendering approach."
+        : `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
+      return applyArtStyleToPrompt(base, effectiveStyleId);
+    },
+    referenceImages: "0",
+  },
+
+  {
     id: "stylized_title",
     title: "Add Stylized Title",
     description: "Add a stylized title overlay that matches the illustration.",
@@ -101,62 +134,7 @@ export const TOOLS: ToolDefinition[] = [
       `Add a stylized title "${params.title}" to this image. Use a ${params.style} font style that fits a children's book.`,
     referenceImages: "0",
   },
-  {
-    id: "remove_object",
-    title: "Remove Object",
-    description: "Remove unwanted objects or artifacts.",
-    icon: "M20 20.5l-3.2-3.2 M15.5 10l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M5 16l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M9.5 4l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z",
-    parameters: [
-      {
-        name: "target",
-        label: "Object to Remove",
-        type: "text",
-        placeholder: "e.g. the red ball, background clutter",
-      },
-    ],
-    promptTemplate: (params) =>
-      `Clean up the image by removing ${params.target}. Infill the area naturally to match the surrounding background.`,
-    referenceImages: "0",
-  },
-  {
-    id: "remove_background",
-    title: "Remove Background",
-    description: "Isolate the subject on a transparent background.",
-    icon: "M15 4V2m0 18v2M4 15H2m18 0h2 M6.3 7.7L3.5 4.9m15.6 15.6l-2.8-2.8 M6.3 17.7L3.5 20.5m15.6-15.6l-2.8 2.8 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", // Dashed circleish
-    parameters: [],
-    promptTemplate: () =>
-      `Remove the background from the image, leaving the main subject isolated on a transparent background.`,
-    referenceImages: "0",
-    capabilities: { "transparent-background": true },
-  },
-  {
-    id: "enhance_drawing",
-    title: "Enhance Line Drawing",
-    description: "Improve old, low-res line drawings",
-    icon: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z",
-    parameters: [
-      {
-        name: "style",
-        label: "Art Style",
-        type: "select",
-        options: [
-          "Clean Line Art",
-          "Watercolor",
-          "Crayon",
-          "Colored Pencil",
-          "Vector Illustration",
-        ],
-        defaultValue: "Clean Line Art",
-      },
-    ],
-    promptTemplate: (params) => {
-      if (params.style === "Clean Line Art") {
-        return "Transform this rough sketch into a high-quality, professional black and white line drawing. Make the lines crisp, smooth, and confident. Remove any sketchiness, eraser marks, or noise. Final output should be clean ink art suitable for printing.";
-      }
-      return `Transform this sketch into a finished, fully colored illustration in the style of ${params.style}. Keep the exact composition and subject matter of the sketch, but render it as a completed high-quality artwork.`;
-    },
-    referenceImages: "0",
-  },
+
   {
     id: "ethnicity",
     title: "Change Ethnicity",
@@ -207,5 +185,33 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) => params.prompt,
     referenceImages: "0+",
+  },
+  {
+    id: "remove_object",
+    title: "Remove Object",
+    description: "Remove unwanted objects or artifacts.",
+    icon: "M20 20.5l-3.2-3.2 M15.5 10l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M5 16l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M9.5 4l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z",
+    parameters: [
+      {
+        name: "target",
+        label: "Object to Remove",
+        type: "text",
+        placeholder: "e.g. the red ball, background clutter",
+      },
+    ],
+    promptTemplate: (params) =>
+      `Clean up the image by removing ${params.target}. Infill the area naturally to match the surrounding background.`,
+    referenceImages: "0",
+  },
+  {
+    id: "remove_background",
+    title: "Remove Background",
+    description: "Isolate the subject on a transparent background.",
+    icon: "M15 4V2m0 18v2M4 15H2m18 0h2 M6.3 7.7L3.5 4.9m15.6 15.6l-2.8-2.8 M6.3 17.7L3.5 20.5m15.6-15.6l-2.8 2.8 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", // Dashed circleish
+    parameters: [],
+    promptTemplate: () =>
+      `Remove the background from the image, leaving the main subject isolated on a transparent background.`,
+    referenceImages: "0",
+    capabilities: { "transparent-background": true },
   },
 ];

@@ -2,6 +2,12 @@
 // Each style maps to a preview image stored under assets/art-styles/
 [
   {
+    id: "none",
+    name: "None",
+    promptDetail: "",
+    description: "Use the base prompt without applying a curated art direction.",
+  },
+  {
     id: "storybook-warm",
     name: "Storybook Warmth",
     promptDetail: "Render the scene like a mid-century children's book using loose gouache brushstrokes, pencil outlines, and warm textured paper.",
@@ -112,6 +118,42 @@
     description: "Minimal, line-led drawings or sketches (often with limited color) that emphasize clarity, expression, and simplicity.",
     samplePageUrl: "https://graphicmama.com/blog/children-book-illustration-styles/",
     sampleImageUrl: "https://i.graphicmama.com/blog/wp-content/uploads/2023/10/10094238/Line-Drawing-and-Sketch-Illustration-Style-Chidlrens-Books-Ryaba-The-Hen-by-Masha-BGD.png",
+    categories: ["Line Art"],
+  },
+  {
+    id: "clean-line-art",
+    name: "Clean Line Art Finish",
+    promptDetail: "Ink the sketch with confident, steady line weight, leaving crisp monochrome outlines, erased guidelines, and no tonal fills. Keep the original composition intact while polishing every contour and joint.",
+    description: "High-contrast black ink pass that removes all smudges and produces press-ready outlines for coloring pages.",
+    categories: ["Line Art"],
+  },
+  {
+    id: "line-art-watercolor",
+    name: "Watercolor Line Wash",
+    promptDetail: "Preserve the inked outlines but add translucent watercolor washes, gentle gradients, and subtle paper texture while keeping the line drawing legible and dominant.",
+    description: "Soft watercolor fills layered beneath expressive ink lines for a storybook wash effect.",
+    categories: ["Line Art"],
+  },
+  {
+    id: "line-art-crayon",
+    name: "Crayon Line Overlay",
+    promptDetail: "Redraw the subject with waxy crayon outlines, slight wobble, and layered color hatching while maintaining the original pose and proportions.",
+    description: "Playful crayon strokes with visible texture and stacked colors hugging the ink sketch.",
+    categories: ["Line Art"],
+  },
+  {
+    id: "line-art-colored-pencil",
+    name: "Colored Pencil Detail",
+    promptDetail: "Finish the drawing with sharpened colored pencil lines, delicate cross-hatching, subtle shading, and paper tooth while echoing the original layout.",
+    description: "Fine colored-pencil outlines with gentle shading that keep the sketchy energy intact.",
+    categories: ["Line Art"],
+  },
+  {
+    id: "line-art-vector",
+    name: "Vector Illustration Outlines",
+    promptDetail: "Rebuild the artwork as clean vector paths with uniform strokes, smooth bezier curves, and flat spot colors aligned to the sketch’s composition.",
+    description: "Crisp vector lines and fills with print-ready precision inspired by modern clip art.",
+    categories: ["Line Art"],
   },
   {
     id: "vintage-illustrations",

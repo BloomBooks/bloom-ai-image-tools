@@ -1,8 +1,7 @@
 import React from "react";
 import { HistoryItem } from "../types";
-import { ImagePanel } from "./ImagePanel";
-import { ReferenceImagesPanel } from "./ReferenceImagesPanel";
-import { TOOLS } from "../tools/tools-registry";
+import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
+import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 
 interface WorkspaceProps {
@@ -41,33 +40,40 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
   const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
-  const showTargetPanel = (tool ? tool.editImage !== false : true) || !targetImage;
+  const showTargetPanel =
+    (tool ? tool.editImage !== false : true) || !targetImage;
   const showCustomEditRoles = tool?.id === "custom";
 
-  const slots = !showReferencePanel
+  const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
-    : ([
+    : [
         ...referenceImages.map((image, i) => ({
           image,
           slotIndex: i,
           canRemove: true,
-          roleLabel: showCustomEditRoles ? "like this" : undefined,
-          roleKind: showCustomEditRoles ? "reference" : undefined,
+          rolePill: showCustomEditRoles
+            ? {
+                label: "like this",
+                kind: "reference",
+                testId: `reference-role-pill-${i}`,
+              }
+            : undefined,
+          dataTestId: `reference-slot-${i}`,
+          uploadInputTestId: `reference-upload-input-${i}`,
+          dropLabel: "Drop to add",
+          actionLabels: { remove: "Remove reference" },
         })),
         {
           image: null,
           slotIndex: referenceImages.length,
           canRemove: false,
-          roleLabel: undefined,
-          roleKind: undefined,
+          rolePill: undefined,
+          dataTestId: `reference-slot-${referenceImages.length}`,
+          uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
+          dropLabel: "Drop to add",
+          actionLabels: { remove: "Remove reference" },
         },
-      ] as {
-        image: HistoryItem | null;
-        slotIndex: number;
-        canRemove: boolean;
-        roleLabel?: string;
-        roleKind?: "target" | "reference";
-      }[]);
+      ];
 
   const referenceLabel = "Reference Images";
 
@@ -86,10 +92,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {showTargetPanel && (
             <div
-              className="relative"
+              className="relative flex-1 min-h-0"
               style={{
-                flex: showReferencePanel ? "0 0 58%" : "1 1 0%",
-                minHeight: 280,
+                flex: showReferencePanel ? "1 1 0%" : "1 1 auto",
               }}
             >
               <ImagePanel
@@ -106,25 +111,27 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           )}
 
           {showReferencePanel && (
-            <div className="flex-1 relative min-h-[220px]">
-              <ReferenceImagesPanel
+            <div className="flex-1 relative min-h-0">
+              <ImagePanel
                 label={referenceLabel}
+                layout="grid"
+                panelTestId="reference-panel"
                 slots={slots}
                 disabled={false}
-                onUpload={(file, slotIndex) =>
+                onSlotUpload={(file, slotIndex) =>
                   onUploadReference(file, slotIndex)
                 }
-                onDrop={(imageId, slotIndex) =>
+                onSlotDrop={(imageId, slotIndex) =>
                   onSetReferenceAt(slotIndex, imageId)
                 }
-                onRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
+                onSlotRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
               />
             </div>
           )}
         </div>
 
         {/* Right Panel - Result */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-h-0">
           <ImagePanel
             image={rightImage}
             label="Result"

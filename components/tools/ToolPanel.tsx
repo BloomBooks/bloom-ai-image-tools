@@ -4,13 +4,13 @@ import type {
   ToolDefinition,
   ToolParameter,
   ToolParamsById,
-} from "../types";
-import { TOOLS } from "../tools/tools-registry";
-import { Icon, Icons } from "./Icons";
-import { CapabilityPanel } from "./CapabilityPanel";
-import { theme } from "../themes";
-import { ART_STYLES } from "../lib/artStyles";
-import { ArtStylePicker } from "./ArtStylePicker";
+} from "../../types";
+import { TOOLS } from "./tools-registry";
+import { Icon, Icons } from "../Icons";
+import { CapabilityPanel } from "../CapabilityPanel";
+import { theme } from "../../themes";
+import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
+import { ArtStylePicker } from "../artStyle/ArtStylePicker";
 
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
@@ -134,15 +134,21 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     }
 
     if (param.type === "art-style") {
+      const stylesForPicker = param.artStyleCategories?.length
+        ? getArtStylesByCategories(param.artStyleCategories)
+        : ART_STYLES;
       return (
         <div key={param.name}>
           {label}
           <ArtStylePicker
-            styles={ART_STYLES}
+            styles={stylesForPicker}
             value={value}
             onChange={(next) => handleParamChange(tool.id, param.name, next)}
-            disabled={isProcessing || ART_STYLES.length === 0}
-            allowClear={param.optional}
+            disabled={
+              isProcessing ||
+              stylesForPicker.length === 0 ||
+              ART_STYLES.length === 0
+            }
             data-testid={`input-${param.name}`}
           />
         </div>
@@ -259,7 +265,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   >
                     {tool.title}
                   </h3>
-                  {tool.description && (
+                  {isActive && tool.description && (
                     <p
                       className="text-xs mt-1 leading-relaxed"
                       style={{ color: theme.colors.textSecondary }}

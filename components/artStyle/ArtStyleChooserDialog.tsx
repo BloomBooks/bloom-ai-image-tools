@@ -1,6 +1,8 @@
-import React from "react";
-import type { ArtStyle } from "../types";
-import { theme } from "../themes";
+import React, { useMemo } from "react";
+import { createPortal } from "react-dom";
+import type { ArtStyle } from "../../types";
+import { theme } from "../../themes";
+import { CLEAR_ART_STYLE_ID } from "../../lib/artStyles";
 
 interface ArtStyleChooserDialogProps {
   isOpen: boolean;
@@ -17,6 +19,23 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   onSelect,
   onClose,
 }) => {
+  const displayStyles = useMemo(() => {
+    if (!styles.length) return styles;
+    const noneStyle = styles.find((style) => style.id === CLEAR_ART_STYLE_ID);
+    if (!noneStyle) return styles;
+    const rest = styles.filter((style) => style.id !== CLEAR_ART_STYLE_ID);
+    return [noneStyle, ...rest];
+  }, [styles]);
+
+  const hasNoneOption = displayStyles.some(
+    (style) => style.id === CLEAR_ART_STYLE_ID
+  );
+  const normalizedSelectedId = selectedId?.length
+    ? selectedId
+    : hasNoneOption
+    ? CLEAR_ART_STYLE_ID
+    : undefined;
+
   if (!isOpen) return null;
 
   const handleSelect = (styleId: string) => {
@@ -24,8 +43,8 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
+  const dialogContent = (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
       <div
         className="absolute inset-0"
         style={{ backgroundColor: theme.colors.overlayStrong }}
@@ -50,13 +69,22 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
             boxShadow: theme.colors.panelShadow,
           }}
         >
-          <header className="p-6 border-b" style={{ borderColor: theme.colors.border }}>
+          <header
+            className="p-6 border-b"
+            style={{ borderColor: theme.colors.border }}
+          >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em]" style={{ color: theme.colors.textMuted }}>
-                  Art Direction
+                <p
+                  className="text-sm uppercase tracking-[0.3em]"
+                  style={{ color: theme.colors.textMuted }}
+                >
+                  Style
                 </p>
-                <h2 id="art-style-dialog-title" className="text-2xl font-semibold mt-2">
+                <h2
+                  id="art-style-dialog-title"
+                  className="text-2xl font-semibold mt-2"
+                >
                   Choose an Art Style
                 </h2>
               </div>
@@ -76,8 +104,10 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
           </header>
           <div className="flex-1 overflow-y-auto p-6">
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {styles.map((style) => {
-                const isSelected = style.id === selectedId;
+              {displayStyles.map((style) => {
+                const isSelected = normalizedSelectedId
+                  ? style.id === normalizedSelectedId
+                  : false;
                 return (
                   <button
                     key={style.id}
@@ -90,10 +120,15 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                       backgroundColor: isSelected
                         ? "rgba(29, 148, 164, 0.16)"
                         : theme.colors.surfaceAlt,
-                      boxShadow: isSelected ? theme.colors.accentShadow : "none",
+                      boxShadow: isSelected
+                        ? theme.colors.accentShadow
+                        : "none",
                     }}
                   >
-                    <div className="relative w-full" style={{ paddingBottom: "65%" }}>
+                    <div
+                      className="relative w-full"
+                      style={{ paddingBottom: "65%" }}
+                    >
                       {style.previewUrl ? (
                         <img
                           src={style.previewUrl}
@@ -151,4 +186,10 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return dialogContent;
+  }
+
+  return createPortal(dialogContent, document.body);
 };

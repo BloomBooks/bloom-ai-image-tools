@@ -1,6 +1,11 @@
 import JSON5 from "json5";
 import type { ArtStyle, ArtStyleDefinition } from "../types";
-import artStyleCatalog from "../data/art-styles.json5?raw";
+import artStyleCatalog from "../components/artStyle/art-styles.json5?raw";
+
+export const CLEAR_ART_STYLE_ID = "none";
+
+const isClearingStyleId = (id?: string | null): boolean =>
+  !id?.length || id === CLEAR_ART_STYLE_ID;
 
 const parseCatalog = (): ArtStyleDefinition[] => {
   try {
@@ -74,12 +79,61 @@ const resolvePreviewUrl = (style: ArtStyleDefinition): string | null => {
   return assetIndex.byId[style.id] || null;
 };
 
+const normalizeCategoryList = (values?: string[]): string[] =>
+  (values ?? [])
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value?.length));
+
 export const ART_STYLES: ArtStyle[] = styleDefinitions.map((style) => ({
   ...style,
+  categories: normalizeCategoryList(style.categories),
   previewUrl: resolvePreviewUrl(style),
 }));
 
-export const DEFAULT_ART_STYLE_ID = ART_STYLES[0]?.id ?? "";
+const includeClearStyle = (styles: ArtStyle[]): ArtStyle[] => {
+  const hasClear = styles.some((style) => style.id === CLEAR_ART_STYLE_ID);
+  if (hasClear) return styles;
+  const clearStyle = ART_STYLES.find(
+    (style) => style.id === CLEAR_ART_STYLE_ID
+  );
+  return clearStyle ? [clearStyle, ...styles] : styles;
+};
+
+const DEFAULT_CANDIDATES = ART_STYLES.filter(
+  (style) => style.id !== CLEAR_ART_STYLE_ID
+);
+
+export const DEFAULT_ART_STYLE_ID =
+  DEFAULT_CANDIDATES[0]?.id ?? ART_STYLES[0]?.id ?? "";
+
+export const isClearArtStyleId = (id?: string | null): boolean =>
+  isClearingStyleId(id);
+
+const normalizeCategoryFilter = (categories?: string | string[]): string[] => {
+  if (!categories) return [];
+  const values = Array.isArray(categories) ? categories : [categories];
+  return values
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value?.length));
+};
+
+export const getArtStylesByCategories = (
+  categories?: string | string[]
+): ArtStyle[] => {
+  const normalized = normalizeCategoryFilter(categories);
+  if (!normalized.length) {
+    return includeClearStyle(ART_STYLES.slice());
+  }
+
+  const filtered = ART_STYLES.filter((style) => {
+    const styleCategories = style.categories ?? [];
+    return styleCategories.some((category) =>
+      normalized.includes(category.toLowerCase())
+    );
+  });
+
+  return includeClearStyle(filtered.slice());
+};
 
 export const getArtStyleById = (
   id: string | undefined | null
@@ -92,6 +146,9 @@ export const getArtStylePrompt = (
   id: string | undefined,
   mode: "short" | "full" = "short"
 ): string | null => {
+  if (isClearingStyleId(id)) {
+    return null;
+  }
   const style = getArtStyleById(id);
   if (!style) return null;
 
@@ -109,6 +166,10 @@ export const applyArtStyleToPrompt = (
 ): string => {
   const trimmed = basePrompt?.trim();
   const core = trimmed?.length ? trimmed : "Create an illustration.";
+  if (isClearingStyleId(styleId)) {
+    return core;
+  }
+
   const styleSnippet = getArtStylePrompt(styleId ?? undefined, mode);
 
   if (!styleSnippet) return core;

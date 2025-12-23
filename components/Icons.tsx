@@ -1,18 +1,18 @@
-import React from 'react';
+import React from "react";
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
   path: string;
 }
 
 export const Icon: React.FC<IconProps> = ({ path, className, ...props }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
     {...props}
   >
@@ -32,8 +32,11 @@ export const Icons = {
   Layout: "M3 3h18v18H3z M9 3v18 M15 3v18",
   ArrowRight: "M5 12h14 M12 5l7 7-7 7",
   Pin: "M21.4 13.5L12 21.9 2.6 13.5a7 7 0 0 1 9.9-9.9 7 7 0 0 1 8.9 9.9z",
-  Paste: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6",
+  Paste:
+    "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6",
   Refresh: "M23 4v6h-6 M1 20v-6h6 M20.49 15a9 9 0 1 1 2.12-9.36L23 10",
   MoveRight: "M13 5l7 7-7 7 M5 12h15",
-  Info: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 16v-4 M12 8h.01"
+  Info: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 16v-4 M12 8h.01",
+  AlertTriangle:
+    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01",
 };

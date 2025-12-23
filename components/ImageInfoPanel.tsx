@@ -1,6 +1,6 @@
 import React from "react";
 import { HistoryItem } from "../types";
-import { TOOLS } from "../tools/registry";
+import { TOOLS } from "../tools/tools-registry";
 import { theme } from "../themes";
 
 const rowStyle: React.CSSProperties = {

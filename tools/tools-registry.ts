@@ -16,7 +16,7 @@ export const TOOLS: ToolDefinition[] = [
       },
     ],
     promptTemplate: (params) => params.prompt,
-    requiresImage: false,
+    referenceImages: "0+",
   },
   {
     id: "change_text",
@@ -39,7 +39,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Change the text "${params.match}" to "${params.replace}" in this image. Maintain the font style and background.`,
-    requiresImage: true,
+    referenceImages: "1",
   },
   {
     id: "stylized_title",
@@ -63,7 +63,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Add a stylized title "${params.title}" to this image. Use a ${params.style} font style that fits a children's book.`,
-    requiresImage: true,
+    referenceImages: "1",
   },
   {
     id: "remove_object",
@@ -80,7 +80,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) =>
       `Clean up the image by removing ${params.target}. Infill the area naturally to match the surrounding background.`,
-    requiresImage: true,
+    referenceImages: "1",
   },
   {
     id: "remove_background",
@@ -90,7 +90,8 @@ export const TOOLS: ToolDefinition[] = [
     parameters: [],
     promptTemplate: () =>
       `Remove the background from the image, leaving the main subject isolated on a transparent background.`,
-    requiresImage: true,
+    referenceImages: "1",
+    capabilities: { "transparent-background": true },
   },
   {
     id: "enhance_drawing",
@@ -118,7 +119,7 @@ export const TOOLS: ToolDefinition[] = [
       }
       return `Transform this sketch into a finished, fully colored illustration in the style of ${params.style}. Keep the exact composition and subject matter of the sketch, but render it as a completed high-quality artwork.`;
     },
-    requiresImage: true,
+    referenceImages: "1",
   },
   {
     id: "ethnicity",
@@ -153,12 +154,12 @@ export const TOOLS: ToolDefinition[] = [
       `Change the ethnicity of ${params.character || "the main character"} to ${
         params.ethnicity
       }. Maintain the pose, clothing, and art style.`,
-    requiresImage: true,
+    referenceImages: "1",
   },
   {
     id: "custom",
     title: "Custom Edit",
-    description: "Freeform prompt editing.",
+    description: "Edit the image, optionally with additional reference images.",
     icon: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z M12 6v6l4 2",
     parameters: [
       {
@@ -169,6 +170,6 @@ export const TOOLS: ToolDefinition[] = [
       },
     ],
     promptTemplate: (params) => params.prompt,
-    requiresImage: true,
+    referenceImages: "1+",
   },
 ];

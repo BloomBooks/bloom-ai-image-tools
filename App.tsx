@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { AppState, HistoryItem } from "./types";
+import { AppState, HistoryItem, ModelInfo } from "./types";
 import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
-import { TOOLS } from "./tools/registry";
+import { TOOLS } from "./tools/tools-registry";
 import { theme } from "./themes";
 import { OpenRouterConnect } from "./components/OpenRouterConnect";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
-import modelCatalog from "./data/models.json";
-import { ModelChooserDialog, ModelInfo } from "./components/ModelChooserDialog";
+import JSON5 from "json5";
+import modelCatalogText from "./data/models-registry.json5?raw";
+import { ModelChooserDialog } from "./components/ModelChooserDialog";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -31,13 +32,21 @@ const getImageDimensions = (
 const API_KEY_STORAGE_KEY = "openrouter.apiKey";
 // Only use the E2E test key - this should only be set during Playwright tests
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
-const MODEL_CATALOG: ModelInfo[] = (modelCatalog as ModelInfo[]) || [];
+const MODEL_CATALOG: ModelInfo[] = (() => {
+  try {
+    const parsed = JSON5.parse(modelCatalogText);
+    return Array.isArray(parsed) ? (parsed as ModelInfo[]) : [];
+  } catch (err) {
+    console.error("Failed to parse model registry (JSON5)", err);
+    return [];
+  }
+})();
 const DEFAULT_MODEL =
   MODEL_CATALOG.find((model) => model.default) || MODEL_CATALOG[0] || null;
 
 export default function App() {
   const [state, setState] = useState<AppState>({
-    leftPanelImageId: null,
+    referenceImageIds: [],
     rightPanelImageId: null,
     history: [],
     isProcessing: false,
@@ -56,6 +65,26 @@ export default function App() {
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
+
+  const getReferenceConstraints = (
+    mode: "0" | "0+" | "1" | "1+"
+  ): { min: number; max: number } => {
+    switch (mode) {
+      case "0":
+        return { min: 0, max: 0 };
+      case "0+":
+        return { min: 0, max: Number.POSITIVE_INFINITY };
+      case "1":
+        return { min: 1, max: 1 };
+      case "1+":
+        return { min: 1, max: Number.POSITIVE_INFINITY };
+    }
+  };
+
+  const getToolReferenceMode = (toolId: string | null) => {
+    const tool = toolId ? TOOLS.find((t) => t.id === toolId) : null;
+    return tool?.referenceImages ?? "1";
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -118,13 +147,17 @@ export default function App() {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
 
-    // Check requirements: If tool requires image, we must have one.
-    // If it doesn't (New Image), we can have one (Reference) or not.
-    if (tool.requiresImage !== false && !state.leftPanelImageId) {
+    const { min, max } = getReferenceConstraints(tool.referenceImages);
+    const referenceItems = state.referenceImageIds
+      .map((id) => state.history.find((h) => h.id === id) || null)
+      .filter((h): h is HistoryItem => !!h);
+
+    // Requirements: tools may require 0, 1, or 1+ reference images.
+    if (referenceItems.length < min) {
       setState((prev) => ({
         ...prev,
         error:
-          "Please select a source image for this tool (drag from history or upload).",
+          "Please add a reference image for this tool (drag from history or upload).",
       }));
       return;
     }
@@ -139,13 +172,10 @@ export default function App() {
     }));
 
     try {
-      const leftItem = state.history.find(
-        (h) => h.id === state.leftPanelImageId
-      );
       const prompt = tool.promptTemplate(params);
 
-      // Always use the left item if it exists, even for "New Image" (acts as reference)
-      const sourceImage = leftItem ? leftItem.imageData : null;
+      const constrainedReferences = referenceItems.slice(0, max);
+      const sourceImages = constrainedReferences.map((h) => h.imageData);
 
       const effectiveApiKey = apiKey || ENV_API_KEY;
       if (!effectiveApiKey) {
@@ -158,7 +188,7 @@ export default function App() {
       }
 
       const result = await editImage(
-        sourceImage,
+        sourceImages,
         prompt,
         effectiveApiKey,
         selectedModel?.id
@@ -168,7 +198,7 @@ export default function App() {
 
       const newItem: HistoryItem = {
         id: uuid(),
-        parentId: leftItem ? leftItem.id : null,
+        parentId: constrainedReferences[0]?.id || null,
         imageData: result.imageData,
         toolId: tool.id,
         parameters: params,
@@ -216,11 +246,61 @@ export default function App() {
       setState((prev) => ({
         ...prev,
         history: [...prev.history, newItem],
-        leftPanelImageId:
-          targetPanel === "left" ? newItem.id : prev.leftPanelImageId,
+        referenceImageIds:
+          targetPanel === "left" ? [newItem.id] : prev.referenceImageIds,
         rightPanelImageId:
           targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
       }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadReference = (file: File, slotIndex?: number) => {
+    const mode = getToolReferenceMode(activeToolId);
+    const { max } = getReferenceConstraints(mode);
+
+    // If the active tool doesn't accept references, ignore.
+    if (max === 0) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target?.result as string;
+      const resolution = await getImageDimensions(base64);
+
+      const newItem: HistoryItem = {
+        id: uuid(),
+        parentId: null,
+        imageData: base64,
+        toolId: "original",
+        parameters: {},
+        durationMs: 0,
+        cost: 0,
+        model: "",
+        timestamp: Date.now(),
+        promptUsed: "Original Upload",
+        resolution,
+      };
+
+      setState((prev) => {
+        const nextHistory = [...prev.history, newItem];
+        const nextIds = [...prev.referenceImageIds];
+        const idx =
+          typeof slotIndex === "number" && slotIndex >= 0
+            ? slotIndex
+            : nextIds.length;
+
+        if (idx < nextIds.length) {
+          nextIds[idx] = newItem.id;
+        } else {
+          nextIds.push(newItem.id);
+        }
+
+        return {
+          ...prev,
+          history: nextHistory,
+          referenceImageIds: nextIds.slice(0, max),
+        };
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -234,7 +314,7 @@ export default function App() {
         // Only intercept images
         if (file.type.startsWith("image/")) {
           e.preventDefault();
-          handleUpload(file, "left");
+          handleUploadReference(file);
         }
       }
     };
@@ -268,21 +348,38 @@ export default function App() {
     setAuthMethod("manual");
   };
 
-  const handleSetLeftPanel = (id: string) => {
-    setState((prev) => ({
-      ...prev,
-      leftPanelImageId: id,
-      rightPanelImageId:
-        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
-    }));
+  const handleSetReferenceAt = (index: number, id: string) => {
+    const mode = getToolReferenceMode(activeToolId);
+    const { max } = getReferenceConstraints(mode);
+
+    if (max === 0) return;
+
+    setState((prev) => {
+      const next = [...prev.referenceImageIds];
+      if (index < next.length) {
+        next[index] = id;
+      } else {
+        next.push(id);
+      }
+
+      return {
+        ...prev,
+        referenceImageIds: next.slice(0, max),
+        rightPanelImageId:
+          prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+      };
+    });
   };
 
   const handleSetRightPanel = (id: string) => {
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
-  const handleClearLeftPanel = () => {
-    setState((prev) => ({ ...prev, leftPanelImageId: null }));
+  const handleRemoveReferenceAt = (index: number) => {
+    setState((prev) => ({
+      ...prev,
+      referenceImageIds: prev.referenceImageIds.filter((_, i) => i !== index),
+    }));
   };
 
   const handleClearRightPanel = () => {
@@ -297,8 +394,7 @@ export default function App() {
     setState((prev) => ({
       ...prev,
       history: prev.history.filter((h) => h.id !== id),
-      leftPanelImageId:
-        prev.leftPanelImageId === id ? null : prev.leftPanelImageId,
+      referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
       rightPanelImageId:
         prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
     }));
@@ -312,10 +408,31 @@ export default function App() {
     setSelectedModelId(modelId);
   };
 
-  const leftItem =
-    state.history.find((h) => h.id === state.leftPanelImageId) || null;
+  const referenceItems = state.referenceImageIds
+    .map((id) => state.history.find((h) => h.id === id) || null)
+    .filter((h): h is HistoryItem => !!h);
   const rightItem =
     state.history.find((h) => h.id === state.rightPanelImageId) || null;
+
+  const handleToolSelectWithConstraints = (toolId: string | null) => {
+    setActiveToolId(toolId);
+
+    const mode = getToolReferenceMode(toolId);
+    const { max } = getReferenceConstraints(mode);
+
+    setState((prev) => {
+      if (max === 0) {
+        return { ...prev, referenceImageIds: [] };
+      }
+      if (max === 1) {
+        return {
+          ...prev,
+          referenceImageIds: prev.referenceImageIds.slice(0, 1),
+        };
+      }
+      return prev;
+    });
+  };
 
   return (
     <div
@@ -370,16 +487,17 @@ export default function App() {
 
       <ImageToolsPanel
         appState={state}
-        leftImage={leftItem}
+        selectedModel={selectedModel || null}
+        referenceImages={referenceItems}
         rightImage={rightItem}
         activeToolId={activeToolId}
         onApplyTool={handleApplyTool}
-        onToolSelect={(id) => setActiveToolId(id)}
-        onSetLeft={handleSetLeftPanel}
+        onToolSelect={handleToolSelectWithConstraints}
+        onSetReferenceAt={handleSetReferenceAt}
         onSetRight={handleSetRightPanel}
-        onClearLeft={handleClearLeftPanel}
+        onRemoveReferenceAt={handleRemoveReferenceAt}
+        onUploadReference={handleUploadReference}
         onClearRight={handleClearRightPanel}
-        onUploadLeft={(file) => handleUpload(file, "left")}
         onUploadRight={(file) => handleUpload(file, "right")}
         onSelectHistoryItem={handleSelectHistoryItem}
         onRemoveHistoryItem={handleRemoveHistoryItem}

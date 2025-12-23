@@ -1,21 +1,22 @@
 import React from "react";
-import { AppState, HistoryItem } from "../types";
+import { AppState, HistoryItem, ModelInfo } from "../types";
 import { ToolPanel } from "./ToolPanel";
 import { Workspace } from "./Workspace";
 import { HistoryStrip } from "./HistoryStrip";
 
 interface ImageToolsPanelProps {
   appState: AppState;
-  leftImage: HistoryItem | null;
+  selectedModel: ModelInfo | null;
+  referenceImages: HistoryItem[];
   rightImage: HistoryItem | null;
   activeToolId: string | null;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   onToolSelect: (toolId: string | null) => void;
-  onSetLeft: (id: string) => void;
+  onSetReferenceAt: (index: number, id: string) => void;
   onSetRight: (id: string) => void;
-  onClearLeft: () => void;
+  onRemoveReferenceAt: (index: number) => void;
+  onUploadReference: (file: File, slotIndex?: number) => void;
   onClearRight: () => void;
-  onUploadLeft: (file: File) => void;
   onUploadRight: (file: File) => void;
   onSelectHistoryItem: (id: string) => void;
   onRemoveHistoryItem: (id: string) => void;
@@ -24,16 +25,17 @@ interface ImageToolsPanelProps {
 
 export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
   appState,
-  leftImage,
+  selectedModel,
+  referenceImages,
   rightImage,
   activeToolId,
   onApplyTool,
   onToolSelect,
-  onSetLeft,
+  onSetReferenceAt,
   onSetRight,
-  onClearLeft,
+  onRemoveReferenceAt,
+  onUploadReference,
   onClearRight,
-  onUploadLeft,
   onUploadRight,
   onSelectHistoryItem,
   onRemoveHistoryItem,
@@ -65,22 +67,24 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
           onApplyTool={onApplyTool}
           isProcessing={appState.isProcessing}
           onToolSelect={onToolSelect}
-          hasSourceImage={!!appState.leftPanelImageId}
+          referenceImageCount={appState.referenceImageIds.length}
           isAuthenticated={appState.isAuthenticated}
+          selectedModel={selectedModel}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
           <Workspace
-            leftImage={leftImage}
+            referenceImages={referenceImages}
             rightImage={rightImage}
-            onSetLeft={onSetLeft}
+            onSetReferenceAt={onSetReferenceAt}
             onSetRight={onSetRight}
-            onClearLeft={onClearLeft}
+            onRemoveReferenceAt={onRemoveReferenceAt}
+            onUploadReference={onUploadReference}
             onClearRight={onClearRight}
-            onUploadLeft={onUploadLeft}
             onUploadRight={onUploadRight}
             isProcessing={appState.isProcessing}
             isGeneratingNew={activeToolId === "generate_image"}
+            activeToolId={activeToolId}
           />
 
           <HistoryStrip

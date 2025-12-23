@@ -1,11 +1,32 @@
 export interface ToolParameter {
   name: string;
   label: string;
-  type: 'text' | 'select' | 'textarea';
+  type: "text" | "select" | "textarea";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
   optional?: boolean;
+}
+
+export type CapabilityName = string;
+
+// Model capability scores are on a 0-5 scale.
+export type CapabilityScore = 0 | 1 | 2 | 3 | 4 | 5;
+export type ModelCapabilities = Partial<
+  Record<CapabilityName, CapabilityScore>
+>;
+
+// Tool capability flags are boolean: true means the tool uses that capability.
+export type ToolCapabilities = Partial<Record<CapabilityName, boolean>>;
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  description: string;
+  pricing: string;
+  default?: boolean;
+  badge?: string;
+  capabilities?: ModelCapabilities;
 }
 
 export interface ToolDefinition {
@@ -15,7 +36,8 @@ export interface ToolDefinition {
   icon: string; // SVG path d
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
-  requiresImage?: boolean; // Defaults to true
+  referenceImages: "0" | "0+" | "1" | "1+";
+  capabilities?: ToolCapabilities;
 }
 
 export interface HistoryItem {
@@ -32,10 +54,10 @@ export interface HistoryItem {
   resolution?: { width: number; height: number };
 }
 
-export type ViewMode = 'single' | 'compare';
+export type ViewMode = "single" | "compare";
 
 export interface AppState {
-  leftPanelImageId: string | null; // The "Edit This" source
+  referenceImageIds: string[]; // Reference images for the active tool
   rightPanelImageId: string | null; // The "Result" or preview
   history: HistoryItem[];
   isProcessing: boolean;

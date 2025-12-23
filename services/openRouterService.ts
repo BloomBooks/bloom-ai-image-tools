@@ -33,7 +33,7 @@ function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
 
 /**
  * Uses OpenRouter image endpoints to generate or edit an image.
- * @param base64Image - Source image for editing (data URL) or null for generation.
+ * @param base64Images - Source images for editing/reference (data URLs). Empty array for generation.
  * @param prompt - Instruction sent to the model.
  * @param apiKey - OpenRouter API key. Sources (handled by caller):
  *   1. Playwright tests: injected via Vite's define from BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS
@@ -41,7 +41,7 @@ function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
  *   3. App manual entry (future): user-provided key
  */
 export const editImage = async (
-  base64Image: string | null,
+  base64Images: string[],
   prompt: string,
   apiKey: string,
   modelId?: string
@@ -54,16 +54,19 @@ export const editImage = async (
   }
 
   const startTime = performance.now();
-  const hasImage = !!base64Image;
+  const images = (base64Images || []).filter((x) => !!x);
+  const hasImage = images.length > 0;
   const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   const content: any[] = [{ type: "text", text: prompt }];
-  if (hasImage && base64Image) {
-    const { base64, mimeType } = dataUrlToParts(base64Image);
-    content.push({
-      type: "image_url",
-      image_url: { url: `data:${mimeType};base64,${base64}` },
-    });
+  if (hasImage) {
+    for (const dataUrl of images) {
+      const { base64, mimeType } = dataUrlToParts(dataUrl);
+      content.push({
+        type: "image_url",
+        image_url: { url: `data:${mimeType};base64,${base64}` },
+      });
+    }
   }
 
   const body = {

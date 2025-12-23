@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { TOOLS } from "../tools/registry";
+import { TOOLS } from "../tools/tools-registry";
 import { Icon, Icons } from "./Icons";
+import { CapabilityPanel } from "./CapabilityPanel";
 import { theme } from "../themes";
+import type { ModelInfo } from "../types";
 
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
   onToolSelect?: (toolId: string | null) => void;
-  hasSourceImage: boolean;
+  referenceImageCount: number;
   isAuthenticated: boolean;
+  selectedModel: ModelInfo | null;
 }
 
 export const ToolPanel: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
   onToolSelect,
-  hasSourceImage,
+  referenceImageCount,
   isAuthenticated,
+  selectedModel,
 }) => {
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, string>>({});
@@ -38,15 +42,18 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     }
   }, [activeToolId, onToolSelect]);
 
-  // If source image disappears and active tool requires it, deselect
+  const requiresAtLeastOneReference = (tool: (typeof TOOLS)[number]) =>
+    tool.referenceImages === "1" || tool.referenceImages === "1+";
+
+  // If references disappear and active tool requires them, deselect
   useEffect(() => {
-    if (activeToolId && !hasSourceImage) {
+    if (activeToolId && referenceImageCount === 0) {
       const tool = TOOLS.find((t) => t.id === activeToolId);
-      if (tool && tool.requiresImage !== false) {
+      if (tool && requiresAtLeastOneReference(tool)) {
         setActiveToolId(null);
       }
     }
-  }, [hasSourceImage, activeToolId]);
+  }, [referenceImageCount, activeToolId]);
 
   const handleToolSelect = (id: string, isDisabled: boolean) => {
     if (isDisabled) return;
@@ -93,7 +100,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
         {TOOLS.map((tool) => {
           const isActive = activeToolId === tool.id;
-          const needsImage = tool.requiresImage !== false && !hasSourceImage;
+          const needsImage =
+            requiresAtLeastOneReference(tool) && referenceImageCount === 0;
           const isDisabled = !isAuthenticated || needsImage;
           const missingRequired = hasUnfilledRequiredParams(tool);
           const isSubmitDisabled = isProcessing || missingRequired;
@@ -157,139 +165,174 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   className="px-4 pb-4 pt-3 border-t animate-in slide-in-from-top-2 fade-in duration-200"
                   style={{ borderColor: theme.colors.borderMuted }}
                 >
-                  {tool.description && (
-                    <p
-                      className="text-xs mb-2 leading-relaxed"
-                      style={{ color: theme.colors.textSecondary }}
-                    >
-                      {tool.description}
-                    </p>
-                  )}
-                  <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-                    {tool.parameters.map((param) => (
-                      <div key={param.name}>
-                        <label
-                          className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
-                          style={{ color: theme.colors.textSecondary }}
+                  {(() => {
+                    const effectiveCapabilities =
+                      tool.referenceImages === "1+" && referenceImageCount > 1
+                        ? {
+                            ...(tool.capabilities ?? {}),
+                            "edit-with-reference-image": true,
+                          }
+                        : tool.capabilities;
+
+                    return (
+                      <>
+                        {tool.description && (
+                          <p
+                            className="text-xs mb-2 leading-relaxed"
+                            style={{ color: theme.colors.textSecondary }}
+                          >
+                            {tool.description}
+                          </p>
+                        )}
+
+                        <form
+                          onSubmit={handleSubmit}
+                          className="space-y-4 mt-2"
                         >
-                          {param.label}
-                        </label>
-                        {param.type === "textarea" ? (
-                          <textarea
-                            data-testid={`input-${param.name}`}
-                            className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
-                            style={{
-                              backgroundColor: theme.colors.surfaceAlt,
-                              border: `1px solid ${theme.colors.border}`,
-                              color: theme.colors.textPrimary,
-                            }}
-                            onFocus={(e) =>
-                              (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
-                            }
-                            onBlur={(e) =>
-                              (e.currentTarget.style.boxShadow = "none")
-                            }
-                            rows={3}
-                            placeholder={param.placeholder}
-                            value={params[param.name] || ""}
-                            onChange={(e) =>
-                              handleParamChange(param.name, e.target.value)
-                            }
+                          {tool.parameters.map((param) => (
+                            <div key={param.name}>
+                              <label
+                                className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
+                                style={{ color: theme.colors.textSecondary }}
+                              >
+                                {param.label}
+                              </label>
+                              {param.type === "textarea" ? (
+                                <textarea
+                                  data-testid={`input-${param.name}`}
+                                  className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
+                                  style={{
+                                    backgroundColor: theme.colors.surfaceAlt,
+                                    border: `1px solid ${theme.colors.border}`,
+                                    color: theme.colors.textPrimary,
+                                  }}
+                                  onFocus={(e) =>
+                                    (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
+                                  }
+                                  onBlur={(e) =>
+                                    (e.currentTarget.style.boxShadow = "none")
+                                  }
+                                  rows={3}
+                                  placeholder={param.placeholder}
+                                  value={params[param.name] || ""}
+                                  onChange={(e) =>
+                                    handleParamChange(
+                                      param.name,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              ) : param.type === "select" ? (
+                                <select
+                                  data-testid={`input-${param.name}`}
+                                  className="w-full rounded-md p-2.5 text-sm outline-none"
+                                  style={{
+                                    backgroundColor: theme.colors.surfaceAlt,
+                                    border: `1px solid ${theme.colors.border}`,
+                                    color: theme.colors.textPrimary,
+                                  }}
+                                  onFocus={(e) =>
+                                    (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
+                                  }
+                                  onBlur={(e) =>
+                                    (e.currentTarget.style.boxShadow = "none")
+                                  }
+                                  value={params[param.name] || ""}
+                                  onChange={(e) =>
+                                    handleParamChange(
+                                      param.name,
+                                      e.target.value
+                                    )
+                                  }
+                                >
+                                  {param.options?.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
+                                  style={{
+                                    backgroundColor: theme.colors.surfaceAlt,
+                                    border: `1px solid ${theme.colors.border}`,
+                                    color: theme.colors.textPrimary,
+                                  }}
+                                  onFocus={(e) =>
+                                    (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
+                                  }
+                                  onBlur={(e) =>
+                                    (e.currentTarget.style.boxShadow = "none")
+                                  }
+                                  placeholder={param.placeholder}
+                                  value={params[param.name] || ""}
+                                  onChange={(e) =>
+                                    handleParamChange(
+                                      param.name,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                              )}
+                            </div>
+                          ))}{" "}
+                          <CapabilityPanel
+                            capabilities={effectiveCapabilities}
+                            selectedModel={selectedModel}
                           />
-                        ) : param.type === "select" ? (
-                          <select
-                            data-testid={`input-${param.name}`}
-                            className="w-full rounded-md p-2.5 text-sm outline-none"
+                          <button
+                            type="submit"
+                            disabled={isSubmitDisabled}
+                            className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
                             style={{
-                              backgroundColor: theme.colors.surfaceAlt,
-                              border: `1px solid ${theme.colors.border}`,
+                              backgroundColor: isSubmitDisabled
+                                ? theme.colors.accentSubtle
+                                : theme.colors.accent,
                               color: theme.colors.textPrimary,
+                              cursor: isSubmitDisabled
+                                ? "not-allowed"
+                                : "pointer",
+                              boxShadow: !isSubmitDisabled
+                                ? theme.colors.accentShadow
+                                : "none",
+                              opacity: isSubmitDisabled ? 0.3 : 1,
                             }}
-                            onFocus={(e) =>
-                              (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
+                            onMouseEnter={(e) =>
+                              !isSubmitDisabled &&
+                              (e.currentTarget.style.backgroundColor =
+                                theme.colors.accentHover)
                             }
-                            onBlur={(e) =>
-                              (e.currentTarget.style.boxShadow = "none")
-                            }
-                            value={params[param.name] || ""}
-                            onChange={(e) =>
-                              handleParamChange(param.name, e.target.value)
+                            onMouseLeave={(e) =>
+                              !isSubmitDisabled &&
+                              (e.currentTarget.style.backgroundColor =
+                                theme.colors.accent)
                             }
                           >
-                            {param.options?.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
-                            style={{
-                              backgroundColor: theme.colors.surfaceAlt,
-                              border: `1px solid ${theme.colors.border}`,
-                              color: theme.colors.textPrimary,
-                            }}
-                            onFocus={(e) =>
-                              (e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.focus}`)
-                            }
-                            onBlur={(e) =>
-                              (e.currentTarget.style.boxShadow = "none")
-                            }
-                            placeholder={param.placeholder}
-                            value={params[param.name] || ""}
-                            onChange={(e) =>
-                              handleParamChange(param.name, e.target.value)
-                            }
-                          />
-                        )}
-                      </div>
-                    ))}
-
-                    <button
-                      type="submit"
-                      disabled={isSubmitDisabled}
-                      className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
-                      style={{
-                        backgroundColor: isSubmitDisabled
-                          ? theme.colors.accentSubtle
-                          : theme.colors.accent,
-                        color: theme.colors.textPrimary,
-                        cursor: isSubmitDisabled ? "not-allowed" : "pointer",
-                        boxShadow: !isSubmitDisabled
-                          ? theme.colors.accentShadow
-                          : "none",
-                        opacity: isSubmitDisabled ? 0.3 : 1,
-                      }}
-                      onMouseEnter={(e) =>
-                        !isSubmitDisabled &&
-                        (e.currentTarget.style.backgroundColor =
-                          theme.colors.accentHover)
-                      }
-                      onMouseLeave={(e) =>
-                        !isSubmitDisabled &&
-                        (e.currentTarget.style.backgroundColor =
-                          theme.colors.accent)
-                      }
-                    >
-                      {isProcessing ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <span>
-                            {tool.id === "generate_image"
-                              ? "Generate Image"
-                              : "Apply Changes"}
-                          </span>
-                          <Icon path={Icons.ArrowRight} className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
-                  </form>
+                            {isProcessing ? (
+                              <>
+                                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <span>
+                                  {tool.id === "generate_image"
+                                    ? "Generate Image"
+                                    : "Apply Changes"}
+                                </span>
+                                <Icon
+                                  path={Icons.ArrowRight}
+                                  className="w-4 h-4"
+                                />
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>

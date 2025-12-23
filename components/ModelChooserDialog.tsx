@@ -1,14 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { theme } from "../themes";
-
-export interface ModelInfo {
-  id: string;
-  name: string;
-  description: string;
-  pricing: string;
-  default?: boolean;
-  badge?: string;
-}
+import type { ModelInfo } from "../types";
 
 interface ModelChooserDialogProps {
   isOpen: boolean;
@@ -173,7 +165,9 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                           </span>
                         )}
                       </div>
-                      <h3 className="text-xl font-semibold mb-2">{model.name}</h3>
+                      <h3 className="text-xl font-semibold mb-2">
+                        {model.name}
+                      </h3>
                       <p
                         className="text-sm leading-relaxed mb-4"
                         style={{ color: theme.colors.textSecondary }}

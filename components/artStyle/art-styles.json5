@@ -123,6 +123,7 @@
     promptDetail: "Preserve the inked outlines but add translucent watercolor washes, gentle gradients, and subtle paper texture while keeping the line drawing legible and dominant.",
     description: "Soft watercolor fills layered beneath expressive ink lines for a storybook wash effect.",
     categories: ["Line Art"],
+    sampleImageUrl: "art-styles/line-art-watercolor.png",
   },
   {
     id: "line-art-crayon",
@@ -146,6 +147,7 @@
     promptDetail: "Rebuild the artwork as clean vector paths with uniform strokes, smooth bezier curves, and flat spot colors aligned to the sketch’s composition.",
     description: "Crisp vector lines and fills with print-ready precision inspired by modern clip art.",
     categories: ["Line Art"],
+    sampleImageUrl: "art-styles/line-art-vector.png",
   },
   {
     id: "vintage-illustrations",

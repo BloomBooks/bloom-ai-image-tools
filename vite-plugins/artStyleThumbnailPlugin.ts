@@ -82,36 +82,43 @@ export function artStyleThumbnailPlugin(): Plugin {
           if (fs.existsSync(json5Path)) {
             let json5Content = fs.readFileSync(json5Path, "utf-8");
 
-            // Find the art style entry and update/add sampleImageUrl
-            // We need to find the block for this artStyleId and update/add sampleImageUrl
-            const idPattern = new RegExp(
-              `(\\{[^{}]*id:\\s*["']${artStyleId}["'][^{}]*)(sampleImageUrl:\\s*["'][^"']*["'],?\\s*)?([^{}]*\\})`,
+            const blockPattern = new RegExp(
+              `\\{[^{}]*id:\\s*["']${artStyleId}["'][^{}]*\\}`,
               "s"
             );
 
-            const match = json5Content.match(idPattern);
-            if (match) {
-              // Check if sampleImageUrl already exists in this block
-              const blockStart = match[1];
-              const existingSampleImageUrl = match[2];
-              const blockEnd = match[3];
-
-              if (existingSampleImageUrl) {
-                // Replace existing sampleImageUrl
-                const updatedBlock = `${blockStart}sampleImageUrl: "${newSampleImageUrl}",\n    ${blockEnd}`;
-                json5Content = json5Content.replace(idPattern, updatedBlock);
-              } else {
-                // Add sampleImageUrl before the closing brace
-                // Find where to insert - after the last property
-                const insertPoint = blockStart + blockEnd;
-                const updatedBlock = `${blockStart}sampleImageUrl: "${newSampleImageUrl}",\n    ${blockEnd}`;
-                json5Content = json5Content.replace(idPattern, updatedBlock);
-              }
-
-              fs.writeFileSync(json5Path, json5Content, "utf-8");
-              console.log(
-                `[art-style-thumbnail] Updated art-styles.json5 for ${artStyleId}`
+            const blockMatch = json5Content.match(blockPattern);
+            if (blockMatch) {
+              const block = blockMatch[0];
+              const blockLines = block.split(/\r?\n/);
+              const filteredLines = blockLines.filter(
+                (line) => !line.trim().startsWith("sampleImageUrl:")
               );
+
+              const closingIndex = filteredLines.findIndex((line) =>
+                line.trim().startsWith("}")
+              );
+
+              if (closingIndex === -1) {
+                console.warn(
+                  `[art-style-thumbnail] Could not locate closing brace for ${artStyleId}`
+                );
+              } else {
+                const closingLine = filteredLines[closingIndex];
+                const closingIndent = closingLine.match(/^\s*/)?.[0] ?? "";
+                const propertyIndent = `${closingIndent}  `;
+                const newLine = `${propertyIndent}sampleImageUrl: "${newSampleImageUrl}",`;
+
+                filteredLines.splice(closingIndex, 0, newLine);
+
+                const updatedBlock = filteredLines.join("\n");
+                json5Content = json5Content.replace(block, updatedBlock);
+
+                fs.writeFileSync(json5Path, json5Content, "utf-8");
+                console.log(
+                  `[art-style-thumbnail] Updated art-styles.json5 for ${artStyleId}`
+                );
+              }
             } else {
               console.warn(
                 `[art-style-thumbnail] Could not find art style ${artStyleId} in json5`

@@ -45,13 +45,21 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     item.promptUsed && item.promptUsed.length
       ? item.promptUsed
       : "Prompt unavailable.";
+  // Only show parameters that are recognized by the current tool definition.
+  // This filters out legacy/stale parameters from older versions.
+  const toolParamNames = new Set(
+    tool?.parameters.map((p) => p.name) ?? Object.keys(item.parameters)
+  );
   const redundantParameterKeys = new Set(["prompt"]);
   const displayedParameters = Object.entries(item.parameters).filter(
     ([key, value]) => {
+      if (!toolParamNames.has(key)) {
+        return false; // Filter out unknown/legacy parameters
+      }
       if (redundantParameterKeys.has(key)) {
         return false;
       }
-      return value?.trim().length;
+      return typeof value === "string" && value.trim().length > 0;
     }
   );
 

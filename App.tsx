@@ -20,6 +20,7 @@ import {
   OpenRouterApiError,
   OPENROUTER_KEYS_URL,
   OpenRouterCredits,
+  ImageConfig,
 } from "./services/openRouterService";
 import { TOOLS } from "./components/tools/tools-registry";
 import { theme } from "./themes";
@@ -903,12 +904,18 @@ export default function App() {
       const modelIdForRequest =
         envApiKey && !apiKey ? undefined : selectedModel?.id;
 
+      // Build image configuration from tool parameters (shape/size)
+      const imageConfig: ImageConfig = {
+        shape: params.shape,
+        size: params.size,
+      };
+
       const result = await editImage(
         sourceImages,
         prompt,
         resolvedApiKey,
         modelIdForRequest,
-        { signal: abortController.signal }
+        { signal: abortController.signal, imageConfig }
       );
 
       const resolution = await getImageDimensions(result.imageData);

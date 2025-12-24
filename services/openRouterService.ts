@@ -47,8 +47,16 @@ export interface EditImageResult {
   cost: number; // Cost in dollars (from API response usage.cost)
 }
 
+export interface ImageConfig {
+  /** Shape: "Square", "Portrait Rectangle", "Landscape Rectangle" */
+  shape?: string;
+  /** Size: "1k", "2k", "4k" */
+  size?: string;
+}
+
 export interface EditImageOptions {
   signal?: AbortSignal;
+  imageConfig?: ImageConfig;
 }
 
 export interface OpenRouterCredits {
@@ -74,6 +82,55 @@ function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
 }
 
 /**
+ * Maps shape parameter to Gemini aspect_ratio format.
+ * Gemini supports: "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
+ */
+function mapShapeToGeminiAspectRatio(shape?: string): string {
+  switch (shape) {
+    case "Portrait Rectangle":
+      return "3:4";
+    case "Landscape Rectangle":
+      return "4:3";
+    case "Square":
+    default:
+      return "1:1";
+  }
+}
+
+/**
+ * Maps shape parameter to OpenAI size format.
+ * GPT image models support: "1024x1024", "1536x1024" (landscape), "1024x1536" (portrait)
+ */
+function mapShapeToOpenAISize(shape?: string): string {
+  switch (shape) {
+    case "Portrait Rectangle":
+      return "1024x1536";
+    case "Landscape Rectangle":
+      return "1536x1024";
+    case "Square":
+    default:
+      return "1024x1024";
+  }
+}
+
+/**
+ * Maps size parameter to Gemini image_size format.
+ * Gemini supports: "1K", "2K", "4K" (note: uppercase K required)
+ * Note: Gemini 2.5 Flash only supports 1K; Gemini 3 Pro supports 1K, 2K, 4K
+ */
+function mapSizeToGeminiImageSize(size?: string): string {
+  switch (size?.toLowerCase()) {
+    case "2k":
+      return "2K";
+    case "4k":
+      return "4K";
+    case "1k":
+    default:
+      return "1K";
+  }
+}
+
+/**
  * Uses OpenRouter image endpoints to generate or edit an image.
  * @param base64Images - Source images for editing/reference (data URLs). Empty array for generation.
  * @param prompt - Instruction sent to the model.
@@ -96,7 +153,7 @@ export const editImage = async (
     );
   }
 
-  const { signal } = options ?? {};
+  const { signal, imageConfig } = options ?? {};
   const startTime = performance.now();
   const images = (base64Images || []).filter((x) => !!x);
   const hasImage = images.length > 0;
@@ -113,7 +170,14 @@ export const editImage = async (
     }
   }
 
-  const body = {
+  // Build image generation parameters for different providers
+  // Gemini-style: aspect_ratio and image_size in image_config
+  const geminiAspectRatio = mapShapeToGeminiAspectRatio(imageConfig?.shape);
+  const geminiImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
+  // OpenAI-style: size as a direct parameter
+  const openAISize = mapShapeToOpenAISize(imageConfig?.shape);
+
+  const body: Record<string, any> = {
     model: modelToUse,
     messages: [
       {
@@ -123,6 +187,13 @@ export const editImage = async (
     ],
     modalities: ["text", "image"],
     stream: false,
+    // OpenAI-style size parameter (for DALL-E, gpt-image models)
+    size: openAISize,
+    // Gemini-style image configuration
+    image_config: {
+      aspect_ratio: geminiAspectRatio,
+      image_size: geminiImageSize,
+    },
   };
 
   const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {

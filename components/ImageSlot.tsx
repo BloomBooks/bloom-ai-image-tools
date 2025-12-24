@@ -2,7 +2,7 @@ import React from "react";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { MagnifiableImage } from "./MagnifiableImage";
-import { theme } from "../themes";
+import { kBloomBlue, theme } from "../themes";
 import { PanelToolbar } from "./PanelToolbar";
 import {
   processImageForThumbnail,
@@ -79,6 +79,19 @@ const VARIANT_CLASSES = {
       "relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden min-h-0",
   },
 } as const;
+
+const TRANSPARENCY_TILE_SIZE = 16;
+const TRANSPARENCY_TILE_HALF = TRANSPARENCY_TILE_SIZE / 2;
+const TRANSPARENCY_BLOOM_BLUE = "#8ecad2"; // 50% blend of Bloom blue + white
+const TRANSPARENCY_BACKGROUND_STYLE: React.CSSProperties = {
+  // Classic checkerboard of Bloom blue and white for transparent regions
+  backgroundColor: "#ffffff",
+  backgroundImage:
+    `linear-gradient(45deg, ${TRANSPARENCY_BLOOM_BLUE} 25%, transparent 25%, transparent 75%, ${TRANSPARENCY_BLOOM_BLUE} 75%, ${TRANSPARENCY_BLOOM_BLUE}),` +
+    `linear-gradient(45deg, ${TRANSPARENCY_BLOOM_BLUE} 25%, transparent 25%, transparent 75%, ${TRANSPARENCY_BLOOM_BLUE} 75%, ${TRANSPARENCY_BLOOM_BLUE})`,
+  backgroundSize: `${TRANSPARENCY_TILE_SIZE}px ${TRANSPARENCY_TILE_SIZE}px`,
+  backgroundPosition: `0 0, ${TRANSPARENCY_TILE_HALF}px ${TRANSPARENCY_TILE_HALF}px`,
+};
 
 const getArtStyleIdForImage = (item?: HistoryItem | null): string | null => {
   if (!item) return null;
@@ -522,6 +535,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         mime: activeMetadata.mime || "Unknown type",
       }
     : null;
+  const innerWrapperStyle = image ? TRANSPARENCY_BACKGROUND_STYLE : undefined;
 
   return (
     <div
@@ -555,7 +569,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       )}
 
       <div className={variantClasses.contentWrapper}>
-        <div className={variantClasses.innerWrapper}>
+        <div
+          className={variantClasses.innerWrapper}
+          style={innerWrapperStyle}
+        >
           {image ? (
             <MagnifiableImage
               src={image.imageData}

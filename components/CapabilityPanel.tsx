@@ -1,6 +1,7 @@
 import React from "react";
+import { Paper, Stack, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Icon, Icons } from "./Icons";
-import { theme } from "../themes";
 import type { CapabilityName, ModelInfo, ToolCapabilities } from "../types";
 import { formatCapabilityLabel } from "../lib/formatters";
 
@@ -14,6 +15,7 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
   selectedModel,
 }) => {
   if (!capabilities || !Object.values(capabilities).some(Boolean)) return null;
+  const muiTheme = useTheme();
 
   const getModelCapabilityScore = (capability: CapabilityName) => {
     const raw = selectedModel?.capabilities?.[capability];
@@ -31,58 +33,82 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
   );
 
   return (
-    <div
-      className="mb-3 rounded-lg border p-3"
-      style={{
-        backgroundColor: theme.colors.surfaceAlt,
+    <Paper
+      variant="outlined"
+      sx={{
+        mb: 3,
+        p: 2,
+        borderRadius: 2,
         borderColor: anyWarning
-          ? theme.colors.danger
-          : theme.colors.borderMuted,
+          ? muiTheme.palette.error.main
+          : muiTheme.palette.divider,
+        backgroundColor: muiTheme.palette.background.default,
       }}
     >
-      <div
-        className="text-xs font-semibold mb-2 tracking-wider"
-        style={{ color: theme.colors.textSecondary }}
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          color: muiTheme.palette.text.secondary,
+          mb: 1,
+          textTransform: "uppercase",
+        }}
       >
         {selectedModel?.name?.trim() ? selectedModel.name : "No model selected"}
-      </div>
+      </Typography>
 
-      <div className="flex flex-wrap gap-2">
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         {shownCapabilities.map(([capability]) => {
           const score = getModelCapabilityScore(capability as CapabilityName);
           const showWarning = score < 3;
-
           return (
-            <div
+            <Stack
               key={capability}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs"
-              style={{
-                backgroundColor: theme.colors.surface,
+              direction="row"
+              spacing={0.5}
+              alignItems="center"
+              sx={{
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 999,
+                border: "1px solid",
                 borderColor: showWarning
-                  ? theme.colors.danger
-                  : theme.colors.borderMuted,
-                color: theme.colors.textPrimary,
+                  ? muiTheme.palette.error.main
+                  : muiTheme.palette.divider,
+                bgcolor: muiTheme.palette.background.paper,
+                fontSize: 12,
               }}
               title={
-                showWarning ? "This model may struggle with this tool" : ""
+                showWarning ? "This model may struggle with this tool" : undefined
               }
             >
               {showWarning && (
                 <Icon
                   path={Icons.AlertTriangle}
-                  className="w-3.5 h-3.5"
-                  style={{ color: theme.colors.danger }}
+                  style={{
+                    color: muiTheme.palette.error.main,
+                    width: 14,
+                    height: 14,
+                  }}
                 />
               )}
-
-              <span style={{ color: theme.colors.textMuted }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontSize: 12,
+                  color: muiTheme.palette.text.secondary,
+                }}
+              >
                 {formatCapabilityLabel(capability as CapabilityName)}
-              </span>
-              <span className="font-semibold">{score}/5</span>
-            </div>
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 12 }}>
+                {score}/5
+              </Typography>
+            </Stack>
           );
         })}
-      </div>
-    </div>
+      </Stack>
+    </Paper>
   );
 };

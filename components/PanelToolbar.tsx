@@ -1,5 +1,6 @@
 import React from "react";
-import { theme } from "../themes";
+import { Paper, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 
 interface PanelToolbarProps {
   label: string;
@@ -12,36 +13,51 @@ export const PanelToolbar: React.FC<PanelToolbarProps> = ({
   actions,
   className,
 }) => {
-  const classes = [
-    "flex items-center justify-between rounded-2xl shadow-lg backdrop-blur-md w-full",
-    className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const muiTheme = useTheme();
+  const background = alpha(muiTheme.palette.background.paper, 0.9);
 
   return (
-    <div
-      className={classes}
-      style={{
-        backgroundColor: theme.colors.overlay,
-        color: theme.colors.textPrimary,
-        padding: "6px 12px",
-        minHeight: "48px",
-        gap: 8,
-        boxShadow: theme.colors.panelShadow,
+    <Paper
+      elevation={6}
+      className={className}
+      square={false}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        borderRadius: 3,
+        px: 1.5,
+        py: 1,
+        minHeight: 48,
+        gap: 1,
+        bgcolor: background,
+        color: muiTheme.palette.text.primary,
+        backdropFilter: "blur(12px)",
       }}
     >
-      <div
-        className="text-[11px] font-semibold uppercase tracking-[0.12em]"
-        style={{ opacity: 0.85 }}
+      <Typography
+        variant="overline"
+        sx={{
+          fontWeight: 600,
+          letterSpacing: "0.12em",
+          opacity: 0.85,
+          fontSize: 11,
+        }}
       >
         {label}
-      </div>
+      </Typography>
       {actions ? (
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="flex-end"
+          flexWrap="wrap"
+        >
           {actions}
-        </div>
+        </Stack>
       ) : null}
-    </div>
+    </Paper>
   );
 };

@@ -1,7 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { theme } from "../themes";
+import {
+  Box,
+  Button,
+  Card,
+  CardActionArea,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
 import type { ModelInfo } from "../types";
 import { isMacPlatform } from "../lib/platformUtils";
+import { lightTheme } from "./materialUITheme";
 
 interface ModelChooserDialogProps {
   isOpen: boolean;
@@ -45,35 +61,21 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
 
   const actionButtons = (() => {
     const confirmButton = (
-      <button
+      <Button
         key="ok"
         onClick={handleConfirm}
         disabled={!pendingModelId}
-        className="px-5 py-2 rounded-full text-sm font-semibold transition border"
-        style={{
-          backgroundColor: theme.colors.accent,
-          color: theme.colors.textPrimary,
-          borderColor: theme.colors.accent,
-          opacity: pendingModelId ? 1 : 0.5,
-        }}
+        variant="contained"
+        color="primary"
       >
         OK
-      </button>
+      </Button>
     );
 
     const cancelButton = (
-      <button
-        key="cancel"
-        onClick={onClose}
-        className="px-5 py-2 rounded-full text-sm font-semibold transition border"
-        style={{
-          backgroundColor: theme.colors.surfaceAlt,
-          color: theme.colors.textSecondary,
-          borderColor: theme.colors.border,
-        }}
-      >
+      <Button key="cancel" onClick={onClose} variant="outlined" color="inherit">
         Cancel
-      </button>
+      </Button>
     );
 
     return isMacPlatform()
@@ -84,114 +86,82 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: theme.colors.overlayStrong }}
-        onClick={onClose}
-      ></div>
-
-      <div
-        className="relative mx-4"
-        style={{
-          color: theme.colors.textPrimary,
-              backgroundColor: theme.colors.surface,
-          height: "min(820px, 90vh)",
-        }}
-        role="dialog"
-        aria-modal="true"
+    <ThemeProvider theme={lightTheme}>
+      <Dialog
+        open={isOpen}
+        onClose={onClose}
+        fullWidth
+        maxWidth="lg"
         aria-labelledby="model-chooser-title"
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            maxHeight: "90vh",
+            display: "flex",
+          },
+        }}
       >
-        <div
-          className="rounded-3xl border overflow-hidden shadow-2xl flex flex-col h-full"
-          style={{
-            borderColor: theme.colors.border,
-            boxShadow: theme.colors.panelShadow,
-            background: "linear-gradient(135deg, #0f172a, #111b2f, #132337)",
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <header className="p-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 id="model-chooser-title" className="text-2xl font-semibold">
-                Choose an AI Engine
-              </h2>
-            </div>
-          </header>
-
-          <div className="px-6 pb-6 flex flex-col gap-4 flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto pr-1">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {models.map((model) => {
-                  const isSelected = model.id === pendingModelId;
-                  return (
-                    <button
-                      key={model.id}
-                      onClick={() => setPendingModelId(model.id)}
-                      className="text-left rounded-2xl p-5 border transition relative"
-                      style={{
-                        borderColor: isSelected
-                          ? theme.colors.accent
-                          : theme.colors.border,
-                        backgroundColor: isSelected
-                          ? "rgba(29, 148, 164, 0.1)"
-                          : theme.colors.surface,
-                        boxShadow: isSelected
-                          ? theme.colors.accentShadow
-                          : "none",
+        <DialogTitle id="model-chooser-title">Choose an AI Engine</DialogTitle>
+        <DialogContent dividers sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+          <Box sx={{ flex: 1, overflowY: "auto", pr: 1 }}>
+            <Grid container spacing={2}>
+              {models.map((model) => {
+                const isSelected = model.id === pendingModelId;
+                return (
+                  <Grid item xs={12} sm={6} key={model.id}>
+                    <Card
+                      variant="outlined"
+                      sx={{
+                        height: "100%",
+                        borderColor: isSelected ? "primary.main" : "divider",
+                        boxShadow: isSelected ? 6 : "none",
+                        transition: (themeInstance) =>
+                          themeInstance.transitions.create(["border-color", "box-shadow"], {
+                            duration: themeInstance.transitions.duration.short,
+                          }),
                       }}
                     >
-                      <div className="flex items-center mb-3 gap-2">
-                        {isSelected && (
-                          <span
-                            className="px-3 py-1 rounded-full text-xs font-semibold"
-                            style={{
-                              backgroundColor: theme.colors.accent,
-                              color: theme.colors.textPrimary,
+                      <CardActionArea onClick={() => setPendingModelId(model.id)} sx={{ height: "100%" }}>
+                        <CardContent>
+                          <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                            {isSelected && <Chip color="primary" size="small" label="Selected" />}
+                            {(model.badge || "").trim().length > 0 && (
+                              <Typography
+                                variant="caption"
+                                sx={{ letterSpacing: "0.3em", textTransform: "uppercase", color: "text.secondary" }}
+                              >
+                                {model.badge}
+                              </Typography>
+                            )}
+                          </Stack>
+                          <Typography variant="h6" component="h3" gutterBottom>
+                            {model.name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                            {model.description}
+                          </Typography>
+                          <Box
+                            sx={{
+                              border: 1,
+                              borderColor: "divider",
+                              borderRadius: 2,
+                              p: 2,
+                              bgcolor: "background.default",
                             }}
                           >
-                            Selected
-                          </span>
-                        )}
-                        {(model.badge || "").trim().length > 0 && (
-                          <span
-                            className="text-xs font-semibold tracking-[0.3em] uppercase ml-auto"
-                            style={{ color: theme.colors.textMuted }}
-                          >
-                            {model.badge}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-xl font-semibold mb-2">
-                        {model.name}
-                      </h3>
-                      <p
-                        className="text-sm leading-relaxed mb-4"
-                        style={{ color: theme.colors.textSecondary }}
-                      >
-                        {model.description}
-                      </p>
-                      <p
-                        className="text-sm rounded-xl p-3 border"
-                        style={{
-                          borderColor: theme.colors.borderMuted,
-                          backgroundColor: theme.colors.surfaceAlt,
-                          color: theme.colors.textPrimary,
-                        }}
-                      >
-                        {model.pricing}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 flex-wrap flex-shrink-0 pt-2">
-              {actionButtons}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+                            <Typography variant="body2">{model.pricing}</Typography>
+                          </Box>
+                        </CardContent>
+                      </CardActionArea>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2, gap: 1.5, flexWrap: "wrap" }}>{actionButtons}</DialogActions>
+      </Dialog>
+    </ThemeProvider>
   );
 };

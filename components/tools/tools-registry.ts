@@ -278,8 +278,9 @@ export const TOOLS: ToolDefinition[] = [
     icon: "M15 4V2m0 18v2M4 15H2m18 0h2 M6.3 7.7L3.5 4.9m15.6 15.6l-2.8-2.8 M6.3 17.7L3.5 20.5m15.6-15.6l-2.8 2.8 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", // Dashed circleish
     parameters: [],
     promptTemplate: () =>
-      `Remove the background from the image, leaving the main subject isolated on a transparent background.`,
+      `Replace the background with a perfectly flat chroma key green screen (#00FF66) while keeping the subject, lighting, and shadows untouched. Ensure the background is a solid, even fill with no checkerboard or transparency.`,
     referenceImages: "0",
     capabilities: { "transparent-background": true },
+    postProcessingFunctions: ["green-screen-to-alpha"],
   },
 ];

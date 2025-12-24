@@ -16,9 +16,7 @@ export const getToolById = (toolId: string | null): ToolDefinition | null => {
   return TOOLS.find((tool) => tool.id === toolId) ?? null;
 };
 
-export const getToolReferenceMode = (
-  toolId: string | null
-): ReferenceMode => {
+export const getToolReferenceMode = (toolId: string | null): ReferenceMode => {
   const tool = getToolById(toolId);
   return tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
 };
@@ -40,9 +38,7 @@ export const getReferenceConstraints = (
   }
 };
 
-export const toolRequiresEditImage = (
-  tool: ToolDefinition | null
-): boolean => {
+export const toolRequiresEditImage = (tool: ToolDefinition | null): boolean => {
   if (!tool) {
     return false;
   }

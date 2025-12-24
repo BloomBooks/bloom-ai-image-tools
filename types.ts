@@ -61,6 +61,8 @@ export interface ToolDefinition {
   referenceImages: "0" | "0+" | "1" | "1+";
   editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
   capabilities?: ToolCapabilities;
+  /** Optional post-processing pipeline (run sequentially on the returned image). */
+  postProcessingFunctions?: string[];
 }
 
 export interface EthnicityCategory {

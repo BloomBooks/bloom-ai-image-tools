@@ -16,6 +16,9 @@
     "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.6",
     "copy-image-clipboard": "^2.1.2",
     "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",

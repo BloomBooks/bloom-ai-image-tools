@@ -5,6 +5,8 @@ import React, {
   useMemo,
   useRef,
 } from "react";
+import { CssBaseline } from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
 import {
   AppState,
   HistoryItem,
@@ -24,6 +26,7 @@ import {
 } from "./services/openRouterService";
 import { TOOLS } from "./components/tools/tools-registry";
 import { theme } from "./themes";
+import { darkTheme } from "./components/materialUITheme";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
 import JSON5 from "json5";
 import modelCatalogText from "./data/models-registry.json5?raw";
@@ -66,8 +69,12 @@ import {
   getMimeTypeFromUrl,
   prepareImageBlob,
 } from "./lib/imageUtils";
-import { getReferenceConstraints, getToolReferenceMode } from "./lib/toolHelpers";
+import {
+  getReferenceConstraints,
+  getToolReferenceMode,
+} from "./lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "./lib/formatters";
+import { applyPostProcessingPipeline } from "./lib/postProcessing";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -491,8 +498,7 @@ export default function App() {
             const fallbackStyleId =
               Object.values(mergedParams)
                 .map((params) => getStyleIdFromParams(params))
-                .find((styleId): styleId is string => Boolean(styleId)) ||
-              null;
+                .find((styleId): styleId is string => Boolean(styleId)) || null;
             const resolvedStyleId = persistedStyleId || fallbackStyleId;
             if (resolvedStyleId) {
               setSelectedArtStyleId(resolvedStyleId);
@@ -818,7 +824,12 @@ export default function App() {
         { signal: abortController.signal, imageConfig }
       );
 
-      const resolution = await getImageDimensions(result.imageData);
+      const processedImageData = await applyPostProcessingPipeline(
+        result.imageData,
+        tool.postProcessingFunctions
+      );
+
+      const resolution = await getImageDimensions(processedImageData);
 
       let newItem: HistoryItem = {
         id: uuid(),
@@ -826,7 +837,7 @@ export default function App() {
           requiresEditImage && targetImage
             ? targetImage.id
             : constrainedReferences[0]?.id || null,
-        imageData: result.imageData,
+        imageData: processedImageData,
         toolId: tool.id,
         parameters: params,
         durationMs: result.duration,
@@ -1232,16 +1243,67 @@ export default function App() {
         )} total`
       : null;
 
+  const creditsTooltipLines = [creditsPrimaryLabel, creditsSecondaryLabel]
+    .filter((line): line is string => Boolean(line));
+
+  const creditsTooltipLabel =
+    creditsTooltipLines.join(". ") || creditsPrimaryLabel;
+
+  const creditsProgressFraction =
+    credits && credits.totalCredits > 0
+      ? Math.min(
+          1,
+          Math.max(0, credits.remainingCredits / credits.totalCredits)
+        )
+      : null;
+
+  const creditsProgressAriaProps: React.AriaAttributes =
+    creditsProgressFraction !== null && credits
+      ? {
+          role: "progressbar",
+          "aria-valuemin": 0,
+          "aria-valuemax": credits.totalCredits,
+          "aria-valuenow": credits.remainingCredits,
+        }
+      : { role: "status" };
+
+  const isCreditsLow =
+    creditsProgressFraction !== null && !creditsError
+      ? creditsProgressFraction < 0.1
+      : false;
+
+  const creditsLabelColor = isCreditsLow
+    ? theme.colors.danger
+    : theme.colors.textMuted;
+
+  const progressTrackBackground = creditsError
+    ? "rgba(239, 68, 68, 0.15)"
+    : isCreditsLow
+    ? theme.colors.dangerSubtle
+    : theme.colors.surfaceAlt;
+
+  const progressBorderColor = isCreditsLow
+    ? theme.colors.danger
+    : theme.colors.border;
+
+  const progressFillGradient = creditsError
+    ? "linear-gradient(90deg, #ef4444, #f87171)"
+    : isCreditsLow
+    ? `linear-gradient(90deg, ${theme.colors.danger}, ${theme.colors.dangerHover})`
+    : `linear-gradient(90deg, ${theme.colors.accent}, ${theme.colors.accentHover})`;
+
   const shouldShowConnectToOpenRouterCTA = !effectiveApiKey;
 
   return (
-    <div
-      className="flex flex-col h-screen font-sans"
-      style={{
-        backgroundColor: theme.colors.appBackground,
-        color: theme.colors.textPrimary,
-      }}
-    >
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      <div
+        className="flex flex-col h-screen font-sans"
+        style={{
+          backgroundColor: theme.colors.appBackground,
+          color: theme.colors.textPrimary,
+        }}
+      >
       {/* Header */}
       <header
         className="h-16 border-b flex items-center justify-between px-6 z-30 shadow-md"
@@ -1276,32 +1338,52 @@ export default function App() {
               </button>
             ) : (
               <div
-                className="text-right leading-tight"
-                title={creditsSecondaryLabel || undefined}
+                className="text-right leading-tight relative group focus:outline-none"
+                tabIndex={0}
+                aria-label={creditsTooltipLabel}
+                style={{ cursor: "default" }}
               >
                 <span
                   className="block text-xs font-semibold uppercase tracking-wide"
-                  style={{ color: theme.colors.textMuted }}
+                  style={{ color: creditsLabelColor }}
                 >
                   OpenRouter Credits
                 </span>
-                <span
-                  className="block text-sm font-bold"
-                  style={{
-                    color: creditsError
-                      ? theme.colors.danger
-                      : theme.colors.textPrimary,
-                  }}
-                >
-                  {creditsPrimaryLabel}
-                </span>
-                {creditsSecondaryLabel && (
-                  <span
-                    className="block text-xs"
-                    style={{ color: theme.colors.textSecondary }}
+                <div className="mt-1 flex flex-col items-end gap-1">
+                  <div
+                    className="w-40 h-2.5 rounded-full overflow-hidden border"
+                    style={{
+                      borderColor: progressBorderColor,
+                      backgroundColor: progressTrackBackground,
+                    }}
+                    {...creditsProgressAriaProps}
                   >
-                    {creditsSecondaryLabel}
-                  </span>
+                    <div
+                      className="h-full rounded-full transition-all duration-200 ease-out"
+                      style={{
+                        backgroundImage: progressFillGradient,
+                        width: `${Math.max(
+                          0,
+                          Math.min(100, (creditsProgressFraction ?? 0) * 100)
+                        )}%`,
+                        opacity: creditsProgressFraction !== null ? 1 : 0.35,
+                      }}
+                    />
+                  </div>
+                </div>
+                {creditsTooltipLines.length > 0 && (
+                  <div
+                    className="absolute top-full right-0 mt-2 px-3 py-2 rounded-lg text-xs shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity duration-150 pointer-events-none border"
+                    style={{
+                      borderColor: progressBorderColor,
+                      backgroundColor: theme.colors.surface,
+                      color: theme.colors.textPrimary,
+                    }}
+                  >
+                    {creditsTooltipLines.map((line, index) => (
+                      <div key={`credits-tooltip-${index}`}>{line}</div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -1429,6 +1511,7 @@ export default function App() {
         onSelect={handleSelectModel}
         onClose={() => setIsModelDialogOpen(false)}
       />
-    </div>
+      </div>
+    </ThemeProvider>
   );
 }

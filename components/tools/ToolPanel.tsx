@@ -1,4 +1,25 @@
-import React from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+} from "react";
+import {
+  Box,
+  Button,
+  ButtonBase,
+  CircularProgress,
+  FormHelperText,
+  MenuItem,
+  Paper,
+  Skeleton,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import type {
   ModelInfo,
   ToolDefinition,
@@ -8,7 +29,6 @@ import type {
 import { TOOLS } from "./tools-registry";
 import { Icon, Icons } from "../Icons";
 import { CapabilityPanel } from "../CapabilityPanel";
-import { theme } from "../../themes";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
 import {
@@ -31,6 +51,67 @@ interface ToolPanelProps {
   selectedArtStyleId: string | null;
   onArtStyleChange: (styleId: string) => void;
 }
+type IdleFriendlyWindow = Window & {
+  requestIdleCallback?: (
+    callback: () => void,
+    options?: { timeout?: number }
+  ) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+type LazyArtStylePickerProps = React.ComponentProps<typeof ArtStylePicker>;
+
+const LazyArtStylePicker: React.FC<LazyArtStylePickerProps> = (props) => {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+
+    const markReady = () => {
+      if (!cancelled) {
+        setIsReady(true);
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      const win = window as IdleFriendlyWindow;
+      if (typeof win.requestIdleCallback === "function") {
+        idleHandle = win.requestIdleCallback(markReady, { timeout: 120 });
+      } else {
+        timeoutHandle = window.setTimeout(markReady, 30);
+      }
+    } else {
+      markReady();
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleHandle !== null && typeof window !== "undefined") {
+        const win = window as IdleFriendlyWindow;
+        win.cancelIdleCallback?.(idleHandle);
+      }
+      if (timeoutHandle !== null && typeof window !== "undefined") {
+        window.clearTimeout(timeoutHandle);
+      }
+    };
+  }, []);
+
+  if (!isReady) {
+    return (
+      <Skeleton
+        variant="rounded"
+        height={88}
+        animation="wave"
+        sx={{ borderRadius: 2, bgcolor: "rgba(255,255,255,0.08)" }}
+      />
+    );
+  }
+
+  return <ArtStylePicker {...props} />;
+};
+
 export const ToolPanel: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
@@ -46,16 +127,56 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   selectedArtStyleId,
   onArtStyleChange,
 }) => {
+  const muiTheme = useTheme();
+  const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId ?? TOOLS[0]?.id ?? null;
+
+  const artStyleOptionsByParam = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getArtStylesByCategories>>();
+    TOOLS.forEach((tool) => {
+      tool.parameters.forEach((param) => {
+        if (param.type !== "art-style") return;
+        const cacheKey = `${tool.id}:${param.name}`;
+        map.set(
+          cacheKey,
+          getArtStylesByCategories(param.artStyleCategories, {
+            excludeNone: param.excludeNoneStyle,
+          })
+        );
+      });
+    });
+    return map;
+  }, []);
 
   const handleToolSelect = (toolId: string, isDisabled: boolean) => {
     if (isDisabled) return;
-    onToolSelect(toolId);
+    const timingLabel = `tool-panel-open:${toolId}`;
+    selectionTimingRef.current = timingLabel;
+    if (typeof console !== "undefined" && console.time) {
+      console.time(timingLabel);
+    }
+    startTransition(() => {
+      onToolSelect(toolId);
+    });
   };
 
-  const handleParamChange = (toolId: string, name: string, value: string) => {
-    onParamChange(toolId, name, value);
-  };
+  useEffect(() => {
+    if (!resolvedActiveToolId) return;
+    const timingLabel = `tool-panel-open:${resolvedActiveToolId}`;
+    if (selectionTimingRef.current === timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(timingLabel);
+      }
+      selectionTimingRef.current = null;
+    }
+  }, [resolvedActiveToolId]);
+
+  const handleParamChange = useCallback(
+    (toolId: string, name: string, value: string) => {
+      onParamChange(toolId, name, value);
+    },
+    [onParamChange]
+  );
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
     const toolParams = paramsByTool[tool.id] || {};
@@ -98,10 +219,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     tool.parameters.forEach((param) => {
       if (param.type === "art-style") {
         const styleValue =
-          selectedArtStyleId ??
-          payload[param.name] ??
-          param.defaultValue ??
-          "";
+          selectedArtStyleId ?? payload[param.name] ?? param.defaultValue ?? "";
         payload[param.name] = styleValue;
       }
     });
@@ -109,137 +227,152 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     onApplyTool(tool.id, payload);
   };
 
-  const renderParameterField = (tool: ToolDefinition, param: ToolParameter) => {
-    const label = (
-      <label
-        className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
-        style={{ color: theme.colors.textSecondary }}
-      >
-        {param.label}
-      </label>
-    );
+  const renderParameterField = useCallback(
+    (tool: ToolDefinition, param: ToolParameter) => {
+      const value = paramsByTool[tool.id]?.[param.name] ?? "";
+      const inputTestId = `input-${param.name}`;
 
-    if (param.type === "art-style") {
-      const storedValue = paramsByTool[tool.id]?.[param.name] ?? "";
-      const stylesForPicker = getArtStylesByCategories(
-        param.artStyleCategories,
-        { excludeNone: param.excludeNoneStyle }
-      );
-      const pickerValue =
-        selectedArtStyleId ??
-        (storedValue || param.defaultValue || "");
+      if (param.type === "art-style") {
+        const storedValue = paramsByTool[tool.id]?.[param.name] ?? "";
+        const cacheKey = `${tool.id}:${param.name}`;
+        const stylesForPicker = artStyleOptionsByParam.get(cacheKey) ?? [];
+        const pickerValue =
+          selectedArtStyleId ?? (storedValue || param.defaultValue || "");
 
-      return (
-        <div key={param.name}>
-          {label}
-          <ArtStylePicker
-            styles={stylesForPicker}
-            value={pickerValue}
-            onChange={(next) => {
-              onArtStyleChange(next);
-            }}
-            disabled={
-              isProcessing ||
-              stylesForPicker.length === 0 ||
-              ART_STYLES.length === 0
-            }
-            data-testid={`input-${param.name}`}
-          />
-        </div>
-      );
-    }
+        return (
+          <Stack key={param.name} spacing={1} sx={{ width: "100%" }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: muiTheme.palette.text.secondary,
+              }}
+            >
+              {param.label}
+            </Typography>
+            <LazyArtStylePicker
+              styles={stylesForPicker}
+              value={pickerValue}
+              onChange={onArtStyleChange}
+              disabled={
+                isProcessing ||
+                stylesForPicker.length === 0 ||
+                ART_STYLES.length === 0
+              }
+              data-testid={inputTestId}
+            />
+          </Stack>
+        );
+      }
 
-    const value = paramsByTool[tool.id]?.[param.name] ?? "";
-
-    if (param.type === "textarea") {
-      return (
-        <div key={param.name}>
-          {label}
-          <textarea
-            data-testid={`input-${param.name}`}
-            className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
-            style={{
-              backgroundColor: theme.colors.surfaceAlt,
-              border: `1px solid ${theme.colors.border}`,
-              color: theme.colors.textPrimary,
-            }}
-            rows={3}
+      if (param.type === "textarea") {
+        return (
+          <TextField
+            key={param.name}
+            label={param.label}
             placeholder={param.placeholder}
             value={value}
             onChange={(event) =>
               handleParamChange(tool.id, param.name, event.target.value)
             }
+            multiline
+            rows={3}
+            fullWidth
+            size="small"
+            disabled={isProcessing}
+            inputProps={{ "data-testid": inputTestId }}
           />
-        </div>
-      );
-    }
+        );
+      }
 
-    if (param.type === "select") {
-      return (
-        <div key={param.name}>
-          {label}
-          <select
-            data-testid={`input-${param.name}`}
-            className="w-full rounded-md p-2.5 text-sm outline-none"
-            style={{
-              backgroundColor: theme.colors.surfaceAlt,
-              border: `1px solid ${theme.colors.border}`,
-              color: theme.colors.textPrimary,
-            }}
+      if (param.type === "select") {
+        return (
+          <TextField
+            key={param.name}
+            select
+            label={param.label}
             value={value}
             onChange={(event) =>
               handleParamChange(tool.id, param.name, event.target.value)
             }
+            fullWidth
+            size="small"
+            disabled={isProcessing}
+            inputProps={{ "data-testid": inputTestId }}
+            SelectProps={{
+              MenuProps: { disablePortal: false },
+              displayEmpty: false,
+            }}
           >
             {param.options?.map((option) => (
-              <option key={option} value={option}>
+              <MenuItem key={option} value={option}>
                 {option}
-              </option>
+              </MenuItem>
             ))}
-          </select>
-        </div>
-      );
-    }
+          </TextField>
+        );
+      }
 
-    return (
-      <div key={param.name}>
-        {label}
-        <input
-          type="text"
-          className="w-full rounded-md p-2.5 text-sm outline-none transition-all"
-          style={{
-            backgroundColor: theme.colors.surfaceAlt,
-            border: `1px solid ${theme.colors.border}`,
-            color: theme.colors.textPrimary,
-          }}
+      return (
+        <TextField
+          key={param.name}
+          label={param.label}
           placeholder={param.placeholder}
           value={value}
           onChange={(event) =>
             handleParamChange(tool.id, param.name, event.target.value)
           }
+          fullWidth
+          size="small"
+          disabled={isProcessing}
+          inputProps={{ "data-testid": inputTestId }}
         />
-      </div>
-    );
-  };
+      );
+    },
+    [
+      artStyleOptionsByParam,
+      isProcessing,
+      muiTheme.palette.text.secondary,
+      onArtStyleChange,
+      paramsByTool,
+      selectedArtStyleId,
+      handleParamChange,
+    ]
+  );
 
   return (
-    <div
-      className="w-80 border-r flex flex-col h-full shadow-xl z-20"
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.border,
-        boxShadow: theme.colors.panelShadow,
-        color: theme.colors.textPrimary,
+    <Box
+      component="aside"
+      sx={{
+        width: 320,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        borderRight: `1px solid ${muiTheme.palette.divider}`,
+        boxShadow: muiTheme.shadows[8],
+        zIndex: 20,
+        bgcolor: muiTheme.palette.background.default,
       }}
     >
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          p: 2,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+        className="custom-scrollbar"
+      >
         {TOOLS.map((tool) => {
           const isActive = resolvedActiveToolId === tool.id;
           const referenceConstraints = getReferenceConstraints(
             tool.referenceImages
           );
-          const needsReference =
-            referenceConstraints.min > referenceImageCount;
+          const needsReference = referenceConstraints.min > referenceImageCount;
           const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
           // Tools can always be selected, but authentication is still required
           const isDisabled = !isAuthenticated;
@@ -267,75 +400,88 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
               : tool.capabilities
             : tool.capabilities;
 
+          const cardBackground = isDisabled
+            ? alpha(muiTheme.palette.background.paper, 0.4)
+            : isActive
+            ? alpha(muiTheme.palette.primary.main, 0.05)
+            : muiTheme.palette.background.paper;
+          const cardBorder = isActive
+            ? muiTheme.palette.primary.main
+            : muiTheme.palette.divider;
+
           return (
-            <div
+            <Paper
               key={tool.id}
-              className="rounded-xl transition-all duration-200 border relative"
-              style={{
-                backgroundColor: isDisabled
-                  ? theme.colors.surfaceAlt
-                  : isActive
-                  ? theme.colors.surfaceRaised
-                  : theme.colors.surface,
-                borderColor: isDisabled
-                  ? theme.colors.borderMuted
-                  : isActive
-                  ? theme.colors.accent
-                  : theme.colors.border,
+              variant="outlined"
+              sx={{
+                borderRadius: 3,
+                borderColor: cardBorder,
+                bgcolor: cardBackground,
                 opacity: isDisabled ? 0.6 : 1,
-                cursor: isDisabled ? "not-allowed" : "pointer",
-                boxShadow: isActive ? theme.colors.accentShadow : "none",
+                boxShadow: isActive ? muiTheme.shadows[8] : "none",
+                transition: "all 0.2s ease",
               }}
             >
-              <button
-                type="button"
+              <ButtonBase
                 onClick={() => handleToolSelect(tool.id, isDisabled)}
-                className={`w-full text-left p-4 flex items-start gap-3 ${
-                  isDisabled ? "cursor-not-allowed" : ""
-                }`}
                 disabled={isDisabled}
                 title={disabledReason}
+                disableRipple
+                sx={{
+                  width: "100%",
+                  textAlign: "left",
+                  p: 2,
+                  display: "flex",
+                  gap: 2,
+                  alignItems: "flex-start",
+                  borderRadius: 3,
+                }}
               >
-                <div
-                  className="p-2 rounded-lg"
-                  style={{
-                    backgroundColor: theme.colors.surfaceAlt,
-                    color: theme.colors.textMuted,
+                <Box
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 2,
+                    bgcolor: alpha(muiTheme.palette.background.default, 0.7),
+                    color: muiTheme.palette.text.secondary,
                   }}
                 >
-                  <Icon path={tool.icon} className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3
-                    className="font-medium"
-                    style={{
+                  <Icon path={tool.icon} style={{ width: 20, height: 20 }} />
+                </Box>
+                <Box>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 600,
                       color: isActive
-                        ? theme.colors.textPrimary
-                        : theme.colors.textSecondary,
+                        ? muiTheme.palette.text.primary
+                        : muiTheme.palette.text.secondary,
                     }}
                   >
                     {tool.title}
-                  </h3>
+                  </Typography>
                   {isActive && tool.description && (
-                    <p
-                      className="text-xs mt-1 leading-relaxed"
-                      style={{ color: theme.colors.textSecondary }}
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 0.5, color: muiTheme.palette.text.secondary }}
                     >
                       {tool.description}
-                    </p>
+                    </Typography>
                   )}
-                </div>
-              </button>
+                </Box>
+              </ButtonBase>
 
               {isActive && (
-                <div
-                  className="px-4 pb-4 border-t animate-in slide-in-from-top-2 fade-in duration-200"
-                  style={{ borderColor: theme.colors.borderMuted }}
+                <Box
+                  component="form"
+                  onSubmit={(event) => handleSubmit(event, tool)}
+                  sx={{
+                    px: 2,
+                    pb: 2.5,
+                    pt: 0,
+                    borderTop: `1px solid ${muiTheme.palette.divider}`,
+                  }}
                 >
-                  <form
-                    onSubmit={(event) => handleSubmit(event, tool)}
-                    className="space-y-4 mt-2"
-                  >
+                  <Stack spacing={2} mt={2}>
                     {tool.parameters.map((param) =>
                       renderParameterField(tool, param)
                     )}
@@ -345,27 +491,23 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                       selectedModel={selectedModel}
                     />
 
-                    <div className="space-y-2">
-                      <button
+                    <Stack spacing={1.5}>
+                      <Button
                         type="submit"
+                        variant="contained"
+                        color="primary"
+                        fullWidth
                         disabled={isSubmitDisabled}
                         title={submitDisabledReason}
-                        className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
-                        style={{
-                          backgroundColor: isSubmitDisabled
-                            ? theme.colors.accentSubtle
-                            : theme.colors.accent,
-                          color: theme.colors.textPrimary,
-                          cursor: isSubmitDisabled ? "not-allowed" : "pointer",
-                          boxShadow: !isSubmitDisabled
-                            ? theme.colors.accentShadow
-                            : "none",
-                          opacity: isSubmitDisabled ? 0.3 : 1,
+                        sx={{
+                          minHeight: 44,
+                          fontWeight: 600,
+                          gap: 1,
                         }}
                       >
                         {isProcessing ? (
                           <>
-                            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                            <CircularProgress size={18} color="inherit" />
                             Processing...
                           </>
                         ) : (
@@ -375,40 +517,37 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                                 ? "Generate Image"
                                 : "Apply Changes"}
                             </span>
-                            <Icon path={Icons.ArrowRight} className="w-4 h-4" />
+                            <Icon
+                              path={Icons.ArrowRight}
+                              style={{ width: 18, height: 18 }}
+                            />
                           </>
                         )}
-                      </button>
+                      </Button>
                       {submitDisabledReason && !isProcessing && (
-                        <p
-                          className="text-xs text-center"
-                          style={{ color: theme.colors.textMuted }}
-                        >
+                        <FormHelperText sx={{ textAlign: "center" }}>
                           {submitDisabledReason}
-                        </p>
+                        </FormHelperText>
                       )}
                       {isProcessing && (
-                        <button
+                        <Button
                           type="button"
+                          variant="outlined"
+                          color="inherit"
+                          fullWidth
                           onClick={onCancelProcessing}
-                          className="w-full py-2.5 rounded-lg font-medium text-sm transition-all border"
-                          style={{
-                            backgroundColor: theme.colors.surfaceAlt,
-                            borderColor: theme.colors.border,
-                            color: theme.colors.textSecondary,
-                          }}
                         >
                           Cancel Generation
-                        </button>
+                        </Button>
                       )}
-                    </div>
-                  </form>
-                </div>
+                    </Stack>
+                  </Stack>
+                </Box>
               )}
-            </div>
+            </Paper>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };

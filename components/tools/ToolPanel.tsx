@@ -15,6 +15,7 @@ import { ArtStylePicker } from "../artStyle/ArtStylePicker";
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
+  onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   referenceImageCount: number;
   hasTargetImage: boolean;
@@ -33,6 +34,7 @@ const requiresEditImage = (tool: ToolDefinition) => tool.editImage !== false;
 export const ToolPanel: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
+  onCancelProcessing,
   onToolSelect,
   referenceImageCount,
   hasTargetImage,
@@ -193,16 +195,22 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
           const needsReference =
             requiresAtLeastOneReference(tool) && referenceImageCount === 0;
           const needsTarget = requiresEditImage(tool) && !hasTargetImage;
-          const isDisabled = !isAuthenticated || needsReference || needsTarget;
+          // Tools can always be selected, but authentication is still required
+          const isDisabled = !isAuthenticated;
           const disabledReason = !isAuthenticated
             ? "Connect to OpenRouter"
-            : needsTarget
+            : undefined;
+          const missingRequired = hasUnfilledRequiredParams(tool);
+          // Submit button is disabled if missing requirements
+          const submitDisabledReason = needsTarget
             ? "Add an image to edit first"
             : needsReference
             ? "Add reference images"
+            : missingRequired
+            ? "Fill in required fields"
             : undefined;
-          const missingRequired = hasUnfilledRequiredParams(tool);
-          const isSubmitDisabled = isProcessing || missingRequired;
+          const isSubmitDisabled =
+            isProcessing || needsTarget || needsReference || missingRequired;
 
           const effectiveCapabilities = isActive
             ? tool.referenceImages === "1+" && referenceImageCount > 1
@@ -291,38 +299,63 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                       selectedModel={selectedModel}
                     />
 
-                    <button
-                      type="submit"
-                      disabled={isSubmitDisabled}
-                      className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
-                      style={{
-                        backgroundColor: isSubmitDisabled
-                          ? theme.colors.accentSubtle
-                          : theme.colors.accent,
-                        color: theme.colors.textPrimary,
-                        cursor: isSubmitDisabled ? "not-allowed" : "pointer",
-                        boxShadow: !isSubmitDisabled
-                          ? theme.colors.accentShadow
-                          : "none",
-                        opacity: isSubmitDisabled ? 0.3 : 1,
-                      }}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <span>
-                            {tool.id === "generate_image"
-                              ? "Generate Image"
-                              : "Apply Changes"}
-                          </span>
-                          <Icon path={Icons.ArrowRight} className="w-4 h-4" />
-                        </>
+                    <div className="space-y-2">
+                      <button
+                        type="submit"
+                        disabled={isSubmitDisabled}
+                        title={submitDisabledReason}
+                        className="w-full py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2"
+                        style={{
+                          backgroundColor: isSubmitDisabled
+                            ? theme.colors.accentSubtle
+                            : theme.colors.accent,
+                          color: theme.colors.textPrimary,
+                          cursor: isSubmitDisabled ? "not-allowed" : "pointer",
+                          boxShadow: !isSubmitDisabled
+                            ? theme.colors.accentShadow
+                            : "none",
+                          opacity: isSubmitDisabled ? 0.3 : 1,
+                        }}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <span>
+                              {tool.id === "generate_image"
+                                ? "Generate Image"
+                                : "Apply Changes"}
+                            </span>
+                            <Icon path={Icons.ArrowRight} className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+                      {submitDisabledReason && !isProcessing && (
+                        <p
+                          className="text-xs text-center"
+                          style={{ color: theme.colors.textMuted }}
+                        >
+                          {submitDisabledReason}
+                        </p>
                       )}
-                    </button>
+                      {isProcessing && (
+                        <button
+                          type="button"
+                          onClick={onCancelProcessing}
+                          className="w-full py-2.5 rounded-lg font-medium text-sm transition-all border"
+                          style={{
+                            backgroundColor: theme.colors.surfaceAlt,
+                            borderColor: theme.colors.border,
+                            color: theme.colors.textSecondary,
+                          }}
+                        >
+                          Cancel Generation
+                        </button>
+                      )}
+                    </div>
                   </form>
                 </div>
               )}

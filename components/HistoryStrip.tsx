@@ -3,12 +3,15 @@ import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
 import { ImageInfoPanel } from "./ImageInfoPanel";
+import { setInternalImageDragData } from "./dragConstants";
 
 interface HistoryStripProps {
   items: HistoryItem[];
   currentId: string | null;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  hasHiddenHistory?: boolean;
+  onRequestHistoryAccess?: () => void;
 }
 
 // Individual history card with its own popover
@@ -119,10 +122,14 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
   currentId,
   onSelect,
   onRemove,
+  hasHiddenHistory = false,
+  onRequestHistoryAccess,
 }) => {
   const handleDragStart = (e: React.DragEvent, id: string) => {
-    e.dataTransfer.setData("text/plain", id);
-    e.dataTransfer.effectAllowed = "copy";
+    setInternalImageDragData(e.dataTransfer, id);
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "copyMove";
+    }
   };
 
   // Show newest items closest to the workspace (leftmost slot).
@@ -162,6 +169,33 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
             onRemove={() => onRemove(item.id)}
           />
         ))}
+        {hasHiddenHistory && onRequestHistoryAccess && (
+          <button
+            type="button"
+            onClick={onRequestHistoryAccess}
+            className="flex flex-col justify-between items-start flex-shrink-0 w-44 h-36 border-2 border-dashed rounded-xl p-4 text-left hover:opacity-90 transition-opacity"
+            style={{
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.surfaceAlt,
+              color: theme.colors.textPrimary,
+              boxShadow: theme.colors.panelShadow,
+            }}
+          >
+            <span className="text-sm font-semibold">
+              More history available
+            </span>
+            <span className="text-xs text-left opacity-80">
+              Connect to a folder on your computer for more history.
+            </span>
+            <span
+              className="mt-2 inline-flex items-center gap-2 text-xs font-semibold"
+              style={{ color: theme.colors.accent }}
+            >
+              <Icon path={Icons.Refresh} className="w-3.5 h-3.5" />
+              Reconnect folder
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

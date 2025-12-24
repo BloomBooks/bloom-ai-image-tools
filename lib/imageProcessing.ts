@@ -27,7 +27,12 @@ export const cropWhitespace = (imageData: string): Promise<string> => {
       // Helper to get pixel at x,y
       const getPixel = (x: number, y: number) => {
         const idx = (y * width + x) * 4;
-        return { r: data[idx], g: data[idx + 1], b: data[idx + 2], a: data[idx + 3] };
+        return {
+          r: data[idx],
+          g: data[idx + 1],
+          b: data[idx + 2],
+          a: data[idx + 3],
+        };
       };
 
       // Sample corners and edges to detect background color
@@ -42,7 +47,9 @@ export const cropWhitespace = (imageData: string): Promise<string> => {
         { x: width - 1, y: Math.floor(height / 2) },
       ];
 
-      let bgR = 0, bgG = 0, bgB = 0;
+      let bgR = 0,
+        bgG = 0,
+        bgB = 0;
       let validSamples = 0;
       for (const pt of samplePoints) {
         const px = getPixel(pt.x, pt.y);
@@ -88,7 +95,7 @@ export const cropWhitespace = (imageData: string): Promise<string> => {
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const px = getPixel(x, y);
-          
+
           // Skip transparent pixels
           if (px.a < 128) continue;
 
@@ -209,7 +216,7 @@ export const processImageForThumbnail = async (
   imageData: string
 ): Promise<string> => {
   const cropped = await cropWhitespace(imageData);
-  const resized = await resizeImage(cropped, 200);
+  const resized = await resizeImage(cropped, 400);
   return resized;
 };
 

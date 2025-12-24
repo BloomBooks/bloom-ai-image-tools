@@ -1,13 +1,10 @@
 import React from "react";
-import {
-  AppState,
-  HistoryItem,
-  ModelInfo,
-  ToolParamsById,
-} from "../types";
+import { AppState, HistoryItem, ModelInfo, ToolParamsById } from "../types";
 import { ToolPanel } from "./tools/ToolPanel";
 import { Workspace } from "./Workspace";
 import { HistoryStrip } from "./HistoryStrip";
+import { theme } from "../themes";
+import { Icon, Icons } from "./Icons";
 
 interface ImageToolsPanelProps {
   appState: AppState;
@@ -17,7 +14,11 @@ interface ImageToolsPanelProps {
   rightImage: HistoryItem | null;
   activeToolId: string | null;
   toolParams: ToolParamsById;
+  historyItems: HistoryItem[];
+  hasHiddenHistory: boolean;
+  onRequestHistoryAccess: () => void;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
+  onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
   onSetTarget: (id: string) => void;
@@ -42,7 +43,11 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
   rightImage,
   activeToolId,
   toolParams,
+  historyItems,
+  hasHiddenHistory,
+  onRequestHistoryAccess,
   onApplyTool,
+  onCancelProcessing,
   onToolSelect,
   onParamChange,
   onSetTarget,
@@ -65,18 +70,29 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
       {appState.error && (
         <div
           data-testid="error-banner"
-          className="px-4 py-3 flex items-center justify-between"
+          role="alert"
+          className="mx-4 my-3 px-4 py-3 flex items-start gap-3 border rounded-2xl shadow-lg"
           style={{
-            backgroundColor: "#dc2626",
-            color: "white",
+            backgroundColor: "#ffffff",
+            color: "#0f172a",
+            borderColor: theme.colors.accent,
+            boxShadow: theme.colors.accentShadow,
           }}
         >
-          <span>{appState.error}</span>
+          <div className="flex-1 leading-relaxed">
+            <span>{appState.error}</span>
+          </div>
           <button
             onClick={onDismissError}
-            className="ml-4 px-2 py-1 rounded hover:bg-red-700"
+            className="ml-4 px-2 py-0 text-lg font-semibold"
+            style={{
+              backgroundColor: "transparent",
+              border: "none",
+              color: theme.colors.accent,
+            }}
+            aria-label="Dismiss message"
           >
-            ✕
+            ×
           </button>
         </div>
       )}
@@ -85,8 +101,9 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
         <ToolPanel
           onApplyTool={onApplyTool}
           isProcessing={appState.isProcessing}
+          onCancelProcessing={onCancelProcessing}
           onToolSelect={onToolSelect}
-          referenceImageCount={appState.referenceImageIds.length}
+          referenceImageCount={referenceImages.length}
           hasTargetImage={hasTargetImage}
           isAuthenticated={appState.isAuthenticated}
           selectedModel={selectedModel}
@@ -114,9 +131,12 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
           />
 
           <HistoryStrip
-            items={appState.history}
+            items={historyItems}
+            currentId={appState.rightPanelImageId}
             onSelect={onSelectHistoryItem}
             onRemove={onRemoveHistoryItem}
+            hasHiddenHistory={hasHiddenHistory}
+            onRequestHistoryAccess={onRequestHistoryAccess}
           />
         </div>
       </div>

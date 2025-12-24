@@ -98,7 +98,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
         className="relative mx-4"
         style={{
           color: theme.colors.textPrimary,
-          width: "min(1100px, 90vw)",
+              backgroundColor: theme.colors.surface,
           height: "min(820px, 90vh)",
         }}
         role="dialog"

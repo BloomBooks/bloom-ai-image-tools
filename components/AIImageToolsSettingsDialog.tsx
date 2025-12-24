@@ -1,6 +1,7 @@
 import React from "react";
 import { theme } from "../themes";
 import { IMAGE_TOOLS_FS_IMAGES_DIR } from "../services/persistence/constants";
+import openRouterIcon from "../assets/openrouter.svg";
 import { Icon, Icons } from "./Icons";
 import { OpenRouterConnect } from "./OpenRouterConnect";
 
@@ -57,13 +58,13 @@ export const AIImageToolsSettingsDialog: React.FC<
       : "API key linked"
     : "Not connected";
 
-  const connectionDescription = openRouter.isAuthenticated
-    ? openRouter.usingEnvKey
-      ? "Tools are using a temporary key supplied by the environment."
-      : openRouter.authMethod === "oauth"
-      ? "Signed in with OpenRouter OAuth."
-      : "Using a manually provided OpenRouter API key."
-    : "Connect with OpenRouter OAuth or paste a key below to start generating images.";
+  // const connectionDescription = openRouter.isAuthenticated
+  //   ? openRouter.usingEnvKey
+  //     ? "Tools are using a temporary key supplied by the environment."
+  //     : openRouter.authMethod === "oauth"
+  //     ? "Signed in with OpenRouter OAuth."
+  //     : "Using a manually provided OpenRouter API key."
+  //   : "Connect with OpenRouter OAuth or paste a key below to start generating images.";
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center">
@@ -137,7 +138,12 @@ export const AIImageToolsSettingsDialog: React.FC<
               }}
             >
               <div className="flex items-start gap-3">
-                <Icon path={Icons.Link} className="w-5 h-5" />
+                <img
+                  src={openRouterIcon}
+                  alt=""
+                  aria-hidden="true"
+                  className="w-5 h-5"
+                />
                 <div>
                   <p id="openrouter-section-title" className="font-semibold">
                     OpenRouter connection
@@ -157,13 +163,13 @@ export const AIImageToolsSettingsDialog: React.FC<
                     className="flex items-center justify-between flex-wrap gap-2 text-xs"
                     style={{ color: theme.colors.textSecondary }}
                   >
-                    <span
+                    {/* <span
                       className="font-semibold"
                       style={{ color: theme.colors.textPrimary }}
                     >
                       Status: {connectionStatus}
-                    </span>
-                    <span>{connectionDescription}</span>
+                    </span> */}
+                    {/* <span>{connectionDescription}</span> */}
                   </div>
                   <OpenRouterConnect
                     isAuthenticated={openRouter.isAuthenticated}

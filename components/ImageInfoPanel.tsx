@@ -2,6 +2,7 @@ import React from "react";
 import { HistoryItem } from "../types";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
+import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
 
 const rowStyle: React.CSSProperties = {
   display: "grid",
@@ -22,8 +23,37 @@ interface ImageInfoPanelProps {
   item: HistoryItem;
 }
 
+const resolveStyleSummary = (item: HistoryItem): string | null => {
+  const paramStyleId = item.parameters?.styleId;
+  const candidates = [item.sourceStyleId, paramStyleId];
+  const styleId = candidates.find(
+    (value): value is string => Boolean(value) && !isClearArtStyleId(value)
+  );
+  if (!styleId) {
+    return null;
+  }
+  const style = getArtStyleById(styleId);
+  if (!style) {
+    return styleId;
+  }
+  return `${style.name} (${styleId})`;
+};
+
 export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   const tool = TOOLS.find((t) => t.id === item.toolId);
+  const promptContent =
+    item.promptUsed && item.promptUsed.length
+      ? item.promptUsed
+      : "Prompt unavailable.";
+  const redundantParameterKeys = new Set(["prompt"]);
+  const displayedParameters = Object.entries(item.parameters).filter(
+    ([key, value]) => {
+      if (redundantParameterKeys.has(key)) {
+        return false;
+      }
+      return value?.trim().length;
+    }
+  );
 
   const rows: Array<{
     label: string;
@@ -38,11 +68,14 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       testId: "history-model",
     },
     {
+      label: "Art Style",
+      value: resolveStyleSummary(item),
+      testId: "history-art-style",
+    },
+    {
       label: "Duration",
       value:
-        item.durationMs > 0
-          ? (item.durationMs / 1000).toFixed(2) + "s"
-          : null,
+        item.durationMs > 0 ? (item.durationMs / 1000).toFixed(2) + "s" : null,
     },
     {
       label: "Cost",
@@ -84,7 +117,43 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           </div>
         ))}
 
-      {Object.keys(item.parameters).length > 0 && (
+      {item.sourceSummary && (
+        <div
+          className="mt-2 pt-2 border-t"
+          style={{ borderColor: theme.colors.border }}
+        >
+          <span
+            className="block mb-1"
+            style={{ color: theme.colors.textMuted }}
+          >
+            Sources:
+          </span>
+          <div style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>
+            {item.sourceSummary}
+          </div>
+        </div>
+      )}
+
+      <div
+        className="mt-2 pt-2 border-t"
+        style={{ borderColor: theme.colors.border }}
+      >
+        <span className="block mb-1" style={{ color: theme.colors.textMuted }}>
+          Full Prompt:
+        </span>
+        <div
+          style={{
+            color: theme.colors.textPrimary,
+            fontSize: "11px",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.4,
+          }}
+        >
+          {promptContent}
+        </div>
+      </div>
+
+      {displayedParameters.length > 0 && (
         <div
           className="mt-2 pt-2 border-t"
           style={{ borderColor: theme.colors.border }}
@@ -99,7 +168,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
             className="italic text-[10px] break-words"
             style={{ color: theme.colors.textSecondary }}
           >
-            {Object.entries(item.parameters).map(([k, v]) => (
+            {displayedParameters.map(([k, v]) => (
               <div key={k}>
                 {k}: {v}
               </div>

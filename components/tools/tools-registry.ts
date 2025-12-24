@@ -13,11 +13,32 @@ const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map(
   (category) => category.label
 );
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
+const SHAPE_OPTIONS = [
+  "Square",
+  "Portrait Rectangle",
+  "Landscape Rectangle",
+] as const;
+const DEFAULT_SHAPE = SHAPE_OPTIONS[0];
+const SHAPE_HINTS: Record<string, string> = {
+  Square: "Use a square composition (equal width and height).",
+  "Portrait Rectangle":
+    "Use a tall portrait rectangle, roughly a 3:4 aspect ratio.",
+  "Landscape Rectangle":
+    "Use a wide landscape rectangle, roughly a 4:3 aspect ratio.",
+};
+
+const SIZE_OPTIONS = ["1k", "2k", "4k"] as const;
+const DEFAULT_SIZE = SIZE_OPTIONS[0];
+const SIZE_HINTS: Record<string, string> = {
+  "1k": "1k image (1024px on the long edge.)",
+  "2k": "2k image (2048px on the long edge.)",
+  "4k": "4k image (4096px on the long edge.)",
+};
 
 export const TOOLS: ToolDefinition[] = [
   {
     id: "generate_image",
-    title: "New Image",
+    title: "Create an Image",
     description:
       "Generate a new image from scratch. You can provide reference images to guide the generation.",
     icon: "M12 4.5v15m7.5-7.5h-15", // Plus icon
@@ -36,9 +57,35 @@ export const TOOLS: ToolDefinition[] = [
         defaultValue: DEFAULT_ART_STYLE_ID,
         optional: true,
       },
+      {
+        name: "shape",
+        label: "Shape",
+        type: "select",
+        options: [...SHAPE_OPTIONS],
+        defaultValue: DEFAULT_SHAPE,
+      },
+      {
+        name: "size",
+        label: "Size",
+        type: "select",
+        options: [...SIZE_OPTIONS],
+        defaultValue: DEFAULT_SIZE,
+      },
     ],
-    promptTemplate: (params) =>
-      applyArtStyleToPrompt(params.prompt || "", params.styleId),
+    promptTemplate: (params) => {
+      const promptText = (params.prompt || "").trim();
+      const basePrompt = promptText || "Create a new illustration.";
+      const selectedShape =
+        (params.shape && params.shape.trim()) || DEFAULT_SHAPE;
+      const shapeHint =
+        SHAPE_HINTS[selectedShape] || SHAPE_HINTS[DEFAULT_SHAPE];
+      const selectedSize = (params.size && params.size.trim()) || DEFAULT_SIZE;
+      const sizeHint = SIZE_HINTS[selectedSize] || SIZE_HINTS[DEFAULT_SIZE];
+      const noTextReminder =
+        "Do not add any frame, no lettering or typography unless the description explicitly requests text.";
+      const combinedPrompt = `${basePrompt}\n\n${shapeHint} ${sizeHint} ${noTextReminder}`;
+      return applyArtStyleToPrompt(combinedPrompt, params.styleId);
+    },
     referenceImages: "0+",
     editImage: false,
   },

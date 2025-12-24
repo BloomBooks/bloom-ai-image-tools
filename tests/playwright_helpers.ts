@@ -1,4 +1,6 @@
 import { expect, Page } from "@playwright/test";
+import path from "path";
+import { fileURLToPath } from "url";
 import { IMAGE_TOOLS_DB_NAME } from "../services/persistence/constants";
 import { ENV_KEY_SKIP_FLAG } from "../lib/authFlags";
 import {
@@ -29,4 +31,22 @@ export const resetImageToolsPersistence = async (page: Page) => {
 		});
 	}, IMAGE_TOOLS_DB_NAME);
 	await page.reload();
+};
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+export const SAMPLE_IMAGE_PATH = path.resolve(
+	currentDir,
+	"..",
+	"assets",
+	"art-styles",
+	"line-drawing-sketch.png"
+);
+
+export const uploadSampleImageToTarget = async (page: Page) => {
+	const uploadInput = page.getByTestId("target-upload-input");
+	await uploadInput.setInputFiles(SAMPLE_IMAGE_PATH);
+	await expect(
+		page.getByRole("img", { name: "Image to Edit" })
+	).toBeVisible();
 };

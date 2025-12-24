@@ -31,7 +31,4 @@ export const theme = {
     panelShadow: "0 20px 45px rgba(0, 0, 0, 0.45)",
     insetShadow: "0 10px 20px rgba(0, 0, 0, 0.35)",
   },
-  gradients: {
-    canvas: "radial-gradient(circle at center, #1e293b, transparent)",
-  },
 };

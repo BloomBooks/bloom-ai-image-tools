@@ -1,6 +1,6 @@
 import { createStore, del, get, set } from "idb-keyval";
 import {
-  IMAGE_TOOLS_DB_NAME,
+  IMAGE_TOOLS_FS_DB_NAME,
   IMAGE_TOOLS_FS_HANDLE_KEY,
   IMAGE_TOOLS_FS_HANDLE_STORE,
   IMAGE_TOOLS_FS_IMAGES_DIR,
@@ -33,7 +33,10 @@ const resolveHandleStore = () => {
     return null;
   }
   if (!handleStore) {
-    handleStore = createStore(IMAGE_TOOLS_DB_NAME, IMAGE_TOOLS_FS_HANDLE_STORE);
+    handleStore = createStore(
+      IMAGE_TOOLS_FS_DB_NAME,
+      IMAGE_TOOLS_FS_HANDLE_STORE
+    );
   }
   return handleStore;
 };

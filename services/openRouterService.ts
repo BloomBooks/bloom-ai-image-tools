@@ -1,4 +1,32 @@
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
+
+export type OpenRouterApiErrorReason = "insufficient-credits";
+
+export class OpenRouterApiError extends Error {
+  status: number;
+  reason?: OpenRouterApiErrorReason;
+  detailMessage?: string;
+  infoUrl?: string;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      reason?: OpenRouterApiErrorReason;
+      detailMessage?: string;
+      infoUrl?: string;
+    }
+  ) {
+    super(message);
+    this.name = "OpenRouterApiError";
+    this.status = options.status;
+    this.reason = options.reason;
+    this.detailMessage = options.detailMessage;
+    this.infoUrl = options.infoUrl;
+    Object.setPrototypeOf(this, OpenRouterApiError.prototype);
+  }
+}
 // Pick an image-generation-capable model; override with env OPENROUTER_IMAGE_MODEL if needed.
 // Note: google/gemini-2.5-flash-image (aka "Nano Banana") supports image output,
 // whereas google/gemini-2.5-flash only supports text output.
@@ -17,6 +45,20 @@ export interface EditImageResult {
   duration: number;
   model: string; // Model ID used (from API response)
   cost: number; // Cost in dollars (from API response usage.cost)
+}
+
+export interface EditImageOptions {
+  signal?: AbortSignal;
+}
+
+export interface OpenRouterCredits {
+  totalCredits: number;
+  totalUsage: number;
+  remainingCredits: number;
+}
+
+export interface FetchOpenRouterCreditsOptions {
+  signal?: AbortSignal;
 }
 
 function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
@@ -44,7 +86,8 @@ export const editImage = async (
   base64Images: string[],
   prompt: string,
   apiKey: string,
-  modelId?: string
+  modelId?: string,
+  options?: EditImageOptions
 ): Promise<EditImageResult> => {
   const key = apiKey?.trim();
   if (!key) {
@@ -53,6 +96,7 @@ export const editImage = async (
     );
   }
 
+  const { signal } = options ?? {};
   const startTime = performance.now();
   const images = (base64Images || []).filter((x) => !!x);
   const hasImage = images.length > 0;
@@ -90,6 +134,7 @@ export const editImage = async (
       "X-Title": "Bloom AI Image Tools",
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   const rawText = await response.text().catch(() => "");
@@ -101,10 +146,30 @@ export const editImage = async (
   }
 
   if (!response.ok) {
-    const message = rawText || response.statusText;
+    const detailMessage =
+      typeof data?.error?.message === "string"
+        ? data.error.message.trim()
+        : undefined;
+
+    if (response.status === 402 && detailMessage) {
+      throw new OpenRouterApiError(detailMessage, {
+        status: response.status,
+        reason: "insufficient-credits",
+        detailMessage,
+        infoUrl: OPENROUTER_KEYS_URL,
+      });
+    }
+
+    const message = detailMessage || rawText || response.statusText || "";
     const preview =
       message.length > 500 ? `${message.slice(0, 500)}…` : message;
-    throw new Error(`OpenRouter request failed: ${response.status} ${preview}`);
+    throw new OpenRouterApiError(
+      `OpenRouter request failed: ${response.status} ${preview}`,
+      {
+        status: response.status,
+        detailMessage,
+      }
+    );
   }
 
   // Try to extract an image URL/base64 from chat-style response
@@ -151,5 +216,67 @@ export const editImage = async (
     duration: performance.now() - startTime,
     model: responseModel,
     cost: responseCost,
+  };
+};
+
+export const fetchOpenRouterCredits = async (
+  apiKey: string,
+  options?: FetchOpenRouterCreditsOptions
+): Promise<OpenRouterCredits> => {
+  const key = apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "OpenRouter API key is missing. Connect to OpenRouter to continue."
+    );
+  }
+
+  const response = await fetch(`${OPENROUTER_BASE_URL}/credits`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "Bloom AI Image Tools",
+    },
+    signal: options?.signal,
+  });
+
+  const rawText = await response.text().catch(() => "");
+  let data: any = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { _nonJsonBody: rawText };
+  }
+
+  if (!response.ok) {
+    const detailMessage =
+      typeof data?.error?.message === "string"
+        ? data.error.message.trim()
+        : undefined;
+    const message = detailMessage || rawText || response.statusText || "";
+    const preview =
+      message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    throw new OpenRouterApiError(
+      `Failed to fetch OpenRouter credits: ${response.status} ${preview}`,
+      {
+        status: response.status,
+        detailMessage,
+      }
+    );
+  }
+
+  const normalize = (value: unknown): number => {
+    const num = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const totalCredits = normalize(data?.data?.total_credits);
+  const totalUsage = normalize(data?.data?.total_usage);
+  const remainingCredits = Math.max(0, totalCredits - totalUsage);
+
+  return {
+    totalCredits,
+    totalUsage,
+    remainingCredits,
   };
 };

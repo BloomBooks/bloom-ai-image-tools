@@ -40,8 +40,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
   const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
-  const showTargetPanel =
-    (tool ? tool.editImage !== false : true) || !targetImage;
+  // Only show target panel if the tool requires an image to edit (editImage !== false)
+  const showTargetPanel = tool ? tool.editImage !== false : true;
 
   const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
@@ -73,11 +73,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       className="flex-1 flex overflow-hidden relative"
       style={{ backgroundColor: theme.colors.surface }}
     >
-      <div
-        className="absolute inset-0 -z-10"
-        style={{ background: theme.gradients.canvas }}
-      ></div>
-
       <div className="flex w-full h-full gap-[10px]">
         {/* Left Column: Target + References */}
         <div className="flex-1 flex flex-col gap-4 min-h-0">
@@ -91,6 +86,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               <ImagePanel
                 image={targetImage}
                 label="Image to Edit"
+                panelTestId="target-panel"
                 onUpload={onUploadTarget}
                 isDropZone={true}
                 onDrop={onSetTarget}
@@ -126,6 +122,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           <ImagePanel
             image={rightImage}
             label="Result"
+            panelTestId="result-panel"
             onUpload={onUploadRight}
             isDropZone={true}
             onDrop={onSetRight}

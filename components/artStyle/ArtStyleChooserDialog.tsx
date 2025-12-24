@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
@@ -36,6 +36,20 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     ? CLEAR_ART_STYLE_ID
     : undefined;
 
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen || !normalizedSelectedId) return;
+    const container = scrollAreaRef.current;
+    if (!container) return;
+    const selectedButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("[data-style-id]")
+    ).find((element) => element.dataset.styleId === normalizedSelectedId);
+    if (selectedButton) {
+      selectedButton.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [isOpen, normalizedSelectedId]);
+
   if (!isOpen) return null;
 
   const handleSelect = (styleId: string) => {
@@ -44,7 +58,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   };
 
   const dialogContent = (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4 sm:p-8">
       <div
         className="absolute inset-0"
         style={{ backgroundColor: theme.colors.overlayStrong }}
@@ -54,7 +68,8 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
         className="relative mx-4"
         style={{
           width: "min(1000px, 92vw)",
-          height: "min(820px, 92vh)",
+          maxHeight: "min(900px, 90vh)",
+          backgroundColor: theme.colors.surface,
         }}
         role="dialog"
         aria-modal="true"
@@ -67,6 +82,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
             borderColor: theme.colors.border,
             background: "linear-gradient(135deg, #0e1729, #111c31)",
             boxShadow: theme.colors.panelShadow,
+            maxHeight: "min(900px, 90vh)",
           }}
         >
           <header
@@ -75,12 +91,6 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p
-                  className="text-sm uppercase tracking-[0.3em]"
-                  style={{ color: theme.colors.textMuted }}
-                >
-                  Style
-                </p>
                 <h2
                   id="art-style-dialog-title"
                   className="text-2xl font-semibold mt-2"
@@ -102,7 +112,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
               </button>
             </div>
           </header>
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6" ref={scrollAreaRef}>
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {displayStyles.map((style) => {
                 const isSelected = normalizedSelectedId
@@ -111,6 +121,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                 return (
                   <button
                     key={style.id}
+                    data-style-id={style.id}
                     onClick={() => handleSelect(style.id)}
                     className="flex flex-col rounded-2xl border text-left overflow-hidden transition focus:outline-none"
                     style={{

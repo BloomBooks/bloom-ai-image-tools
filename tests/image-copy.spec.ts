@@ -1,16 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import path from "path";
-import { fileURLToPath } from "url";
-import { resetImageToolsPersistence } from "./playwright_helpers";
-
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const SAMPLE_IMAGE_PATH = path.resolve(
-  currentDir,
-  "..",
-  "assets",
-  "art-styles",
-  "line-drawing-sketch.png"
-);
+import {
+  resetImageToolsPersistence,
+  uploadSampleImageToTarget,
+} from "./playwright_helpers";
 const isVerbose = !!process.env.E2E_VERBOSE;
 
 const setupClipboardHarness = async (page: Page) => {
@@ -56,13 +48,6 @@ const setupClipboardHarness = async (page: Page) => {
       return Promise.resolve();
     };
   });
-};
-
-const uploadSampleImageToTarget = async (page: Page) => {
-  const uploadInput = page.getByTestId("target-upload-input");
-  await uploadInput.setInputFiles(SAMPLE_IMAGE_PATH);
-
-  await expect(page.getByRole("img", { name: "Image to Edit" })).toBeVisible();
 };
 
 const copyTargetImage = async (page: Page) => {

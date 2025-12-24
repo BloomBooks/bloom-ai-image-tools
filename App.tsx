@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   AppState,
   HistoryItem,
@@ -8,7 +14,13 @@ import {
   ToolParamsById,
 } from "./types";
 import { ImageToolsPanel } from "./components/ImageToolsPanel";
-import { editImage } from "./services/openRouterService";
+import {
+  editImage,
+  fetchOpenRouterCredits,
+  OpenRouterApiError,
+  OPENROUTER_KEYS_URL,
+  OpenRouterCredits,
+} from "./services/openRouterService";
 import { TOOLS } from "./components/tools/tools-registry";
 import { theme } from "./themes";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
@@ -28,7 +40,10 @@ import {
   AUTH_METHOD_STORAGE_KEY,
 } from "./lib/authStorage";
 import { createBrowserImageToolsPersistence } from "./services/persistence/browserPersistence";
-import { IMAGE_TOOLS_STATE_VERSION } from "./services/persistence/constants";
+import {
+  IMAGE_TOOLS_STATE_VERSION,
+  LOCAL_HISTORY_CACHE_LIMIT,
+} from "./services/persistence/constants";
 import {
   FileSystemImageBinding,
   deleteImageFile,
@@ -40,6 +55,7 @@ import {
   supportsFileSystemAccess,
   writeImageFile,
 } from "./services/persistence/fileSystemAccess";
+import { isClearArtStyleId } from "./lib/artStyles";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -66,6 +82,77 @@ const getDataUrlMime = (dataUrl: string | null | undefined): string | null => {
   return match ? match[1].toLowerCase() : null;
 };
 
+const formatCreditsValue = (value: number | null | undefined): string => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "--";
+  }
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+};
+
+const formatSourceSummary = (
+  editImageCount: number,
+  referenceImageCount: number
+): string | null => {
+  const normalizedEdit = Math.max(0, editImageCount);
+  const normalizedReference = Math.max(0, referenceImageCount);
+  const parts: string[] = [];
+
+  if (normalizedEdit > 0) {
+    const label = normalizedEdit === 1 ? "image" : "images";
+    parts.push(`${normalizedEdit} ${label} to edit`);
+  }
+
+  if (normalizedReference > 0) {
+    const label = normalizedReference === 1 ? "reference image" : "reference images";
+    parts.push(`${normalizedReference} ${label}`);
+  }
+
+  if (!parts.length) {
+    return null;
+  }
+
+  if (parts.length === 1) {
+    return `Included ${parts[0]}.`;
+  }
+
+  const summary = `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  return `Included ${summary}.`;
+};
+
+const STYLE_PARAM_KEY = "styleId";
+
+const normalizeStyleIdValue = (value?: string | null): string | null => {
+  if (!value || isClearArtStyleId(value)) {
+    return null;
+  }
+  return value;
+};
+
+const getStyleIdFromParams = (
+  params?: Record<string, string>
+): string | null => {
+  if (!params) return null;
+  const hasKey = Object.prototype.hasOwnProperty.call(params, STYLE_PARAM_KEY);
+  if (!hasKey) {
+    return null;
+  }
+  const raw = (params as Record<string, string | undefined>)[STYLE_PARAM_KEY];
+  return normalizeStyleIdValue(raw ?? null);
+};
+
+const getStyleIdFromHistoryItem = (
+  item?: HistoryItem | null
+): string | null => {
+  if (!item) return null;
+  return (
+    normalizeStyleIdValue(item.sourceStyleId ?? null) ||
+    getStyleIdFromParams(item.parameters)
+  );
+};
+
 // Only use the E2E test key - this should only be set during Playwright tests
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
 const MODEL_CATALOG: ModelInfo[] = (() => {
@@ -79,6 +166,50 @@ const MODEL_CATALOG: ModelInfo[] = (() => {
 })();
 const DEFAULT_MODEL =
   MODEL_CATALOG.find((model) => model.default) || MODEL_CATALOG[0] || null;
+
+const renderLinkWithUrl = (url: string) => (
+  <a
+    href={url}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{ color: "inherit", textDecoration: "underline" }}
+  >
+    {url}
+  </a>
+);
+
+const linkifyMessageWithUrl = (
+  message: string,
+  url: string
+): React.ReactNode => {
+  if (!message) {
+    return renderLinkWithUrl(url);
+  }
+
+  if (!message.includes(url)) {
+    return (
+      <>
+        {message} {renderLinkWithUrl(url)}
+      </>
+    );
+  }
+
+  const parts = message.split(url);
+  return parts.map((part, index) => (
+    <React.Fragment key={`openrouter-credit-message-${index}`}>
+      {part}
+      {index < parts.length - 1 && renderLinkWithUrl(url)}
+    </React.Fragment>
+  ));
+};
+
+const buildInsufficientCreditsError = (
+  message: string,
+  url: string
+): React.ReactNode => {
+  const safeMessage = message?.trim() || "This request requires more credits.";
+  return <>OpenRouter said "{linkifyMessageWithUrl(safeMessage, url)}"</>;
+};
 
 const getEnvApiKey = (): string => {
   if (!ENV_API_KEY) return "";
@@ -94,11 +225,16 @@ const sanitizePersistedAppState = (
   const history = Array.isArray(persisted?.history)
     ? (persisted?.history as HistoryItem[])
     : [];
-  const idSet = new Set(history.map((item) => item.id));
+  const accessibleIds = new Set(
+    history.filter((item) => !!item.imageData).map((item) => item.id)
+  );
 
-  const normalizeId = (id: string | null) => (id && idSet.has(id) ? id : null);
+  const normalizeId = (id: string | null) =>
+    id && accessibleIds.has(id) ? id : null;
   const referenceImageIds = Array.isArray(persisted?.referenceImageIds)
-    ? (persisted?.referenceImageIds as string[]).filter((id) => idSet.has(id))
+    ? (persisted?.referenceImageIds as string[]).filter((id) =>
+        accessibleIds.has(id)
+      )
     : [];
 
   return {
@@ -133,6 +269,9 @@ export default function App() {
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsError, setCreditsError] = useState<string | null>(null);
   const browserPersistence = useMemo(
     () => createBrowserImageToolsPersistence(),
     []
@@ -146,10 +285,13 @@ export default function App() {
   const [fsSupported, setFsSupported] = useState(() =>
     supportsFileSystemAccess()
   );
+  const requestAbortControllerRef = useRef<AbortController | null>(null);
+  const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
   const envApiKey = getEnvApiKey();
+  const effectiveApiKey = apiKey || envApiKey;
   const usingEnvKey = !!(envApiKey && !apiKey);
   const isFolderPersistenceActive = !!fsBinding;
   const openRouterStatusLabel = state.isAuthenticated
@@ -238,12 +380,69 @@ export default function App() {
     return tool?.referenceImages ?? "0";
   };
 
+  const refreshCredits = useCallback(async () => {
+    if (creditsRequestAbortControllerRef.current) {
+      creditsRequestAbortControllerRef.current.abort();
+      creditsRequestAbortControllerRef.current = null;
+    }
+
+    if (!effectiveApiKey) {
+      setCredits(null);
+      setCreditsError(null);
+      setCreditsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    creditsRequestAbortControllerRef.current = controller;
+    setCreditsLoading(true);
+    setCreditsError(null);
+
+    try {
+      const result = await fetchOpenRouterCredits(effectiveApiKey, {
+        signal: controller.signal,
+      });
+      setCredits(result);
+    } catch (error) {
+      const isAbortError =
+        error instanceof DOMException
+          ? error.name === "AbortError"
+          : (error as any)?.name === "AbortError";
+      if (isAbortError) {
+        return;
+      }
+      console.error("Failed to fetch OpenRouter credits", error);
+      setCreditsError("Credits unavailable");
+    } finally {
+      if (creditsRequestAbortControllerRef.current === controller) {
+        creditsRequestAbortControllerRef.current = null;
+        setCreditsLoading(false);
+      }
+    }
+  }, [effectiveApiKey]);
+
   useEffect(() => {
     setState((prev) => ({
       ...prev,
       isAuthenticated: !!(apiKey || envApiKey),
     }));
   }, [apiKey, envApiKey]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+    void refreshCredits();
+  }, [isHydrated, refreshCredits]);
+
+  useEffect(() => {
+    return () => {
+      if (creditsRequestAbortControllerRef.current) {
+        creditsRequestAbortControllerRef.current.abort();
+        creditsRequestAbortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isHydrated || !fsBinding) {
@@ -366,19 +565,30 @@ export default function App() {
     localStorage.removeItem(AUTH_METHOD_STORAGE_KEY);
   }, [isHydrated, apiKey]);
 
-  const persistableState = useMemo(
-    () => ({
+  const persistableState = useMemo(() => {
+    const cacheStart = Math.max(
+      state.history.length - LOCAL_HISTORY_CACHE_LIMIT,
+      0
+    );
+    const historyForPersistence = state.history.map((item, index) => {
+      const keepImageData =
+        !fsBinding ||
+        !item.imageFileName ||
+        !item.imageData ||
+        index >= cacheStart;
+      if (keepImageData) {
+        return item;
+      }
+      return { ...item, imageData: "" };
+    });
+
+    return {
       version: IMAGE_TOOLS_STATE_VERSION,
       appState: {
         targetImageId: state.targetImageId,
         referenceImageIds: state.referenceImageIds,
         rightPanelImageId: state.rightPanelImageId,
-        history: state.history.map((item) => {
-          if (fsBinding && item.imageFileName) {
-            return { ...item, imageData: "" };
-          }
-          return item;
-        }),
+        history: historyForPersistence,
       },
       paramsByTool,
       activeToolId,
@@ -387,20 +597,33 @@ export default function App() {
         apiKey,
         authMethod,
       },
-    }),
-    [
-      state.targetImageId,
-      state.referenceImageIds,
-      state.rightPanelImageId,
-      state.history,
-      fsBinding,
-      paramsByTool,
-      activeToolId,
-      selectedModelId,
-      apiKey,
-      authMethod,
-    ]
+    };
+  }, [
+    state.targetImageId,
+    state.referenceImageIds,
+    state.rightPanelImageId,
+    state.history,
+    fsBinding,
+    paramsByTool,
+    activeToolId,
+    selectedModelId,
+    apiKey,
+    authMethod,
+  ]);
+
+  const accessibleHistoryItems = useMemo(
+    () => state.history.filter((item) => !!item.imageData),
+    [state.history]
   );
+
+  const hasHiddenHistory = useMemo(() => {
+    if (fsBinding || !fsSupported) {
+      return false;
+    }
+    return state.history.some(
+      (item) => !item.imageData && !!item.imageFileName
+    );
+  }, [fsBinding, fsSupported, state.history]);
 
   useEffect(() => {
     if (!isHydrated || !persistence) return;
@@ -495,6 +718,16 @@ export default function App() {
     }
   }, [fsBinding, state.history]);
 
+  const handleCancelProcessing = useCallback(() => {
+    const controller = requestAbortControllerRef.current;
+    if (!controller) {
+      return;
+    }
+    controller.abort();
+    requestAbortControllerRef.current = null;
+    setState((prev) => ({ ...prev, isProcessing: false }));
+  }, []);
+
   const handleApplyTool = async (
     toolId: string,
     params: Record<string, string>
@@ -539,10 +772,29 @@ export default function App() {
       rightPanelImageId: null,
     }));
 
+    const abortController = new AbortController();
+    requestAbortControllerRef.current = abortController;
+    let shouldRefreshCredits = false;
+
     try {
       const basePrompt = tool.promptTemplate(params);
 
       const constrainedReferences = referenceItems.slice(0, max);
+      const referenceStyleId =
+        constrainedReferences
+          .map((item) => getStyleIdFromHistoryItem(item))
+          .find((styleId): styleId is string => Boolean(styleId)) || null;
+      const derivedSourceStyleId =
+        getStyleIdFromParams(params) ||
+        getStyleIdFromHistoryItem(targetImage) ||
+        referenceStyleId ||
+        null;
+      const editImageCount = requiresEditImage && targetImage ? 1 : 0;
+      const referenceImageCount = constrainedReferences.length;
+      const sourceSummary = formatSourceSummary(
+        editImageCount,
+        referenceImageCount
+      );
       const sourceImages = [
         ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
         ...constrainedReferences.map((h) => h.imageData),
@@ -553,8 +805,8 @@ export default function App() {
           ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
           : basePrompt;
 
-      const effectiveApiKey = apiKey || envApiKey;
-      if (!effectiveApiKey) {
+      const resolvedApiKey = effectiveApiKey;
+      if (!resolvedApiKey) {
         setState((prev) => ({
           ...prev,
           isProcessing: false,
@@ -562,6 +814,8 @@ export default function App() {
         }));
         return;
       }
+
+      shouldRefreshCredits = true;
 
       // In E2E, we authenticate via an env key. In that mode we want the model
       // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
@@ -572,8 +826,9 @@ export default function App() {
       const result = await editImage(
         sourceImages,
         prompt,
-        effectiveApiKey,
-        modelIdForRequest
+        resolvedApiKey,
+        modelIdForRequest,
+        { signal: abortController.signal }
       );
 
       const resolution = await getImageDimensions(result.imageData);
@@ -592,6 +847,8 @@ export default function App() {
         model: result.model,
         timestamp: Date.now(),
         promptUsed: prompt,
+        sourceStyleId: derivedSourceStyleId,
+        sourceSummary,
         resolution,
       };
 
@@ -606,10 +863,43 @@ export default function App() {
         isProcessing: false,
       }));
     } catch (error) {
-      console.error("Failed to apply tool:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to process image.";
-      setState((prev) => ({ ...prev, isProcessing: false, error: message }));
+      const isAbortError =
+        error instanceof DOMException
+          ? error.name === "AbortError"
+          : (error as any)?.name === "AbortError";
+      if (isAbortError) {
+        shouldRefreshCredits = false;
+        setState((prev) => ({ ...prev, isProcessing: false }));
+      } else {
+        console.error("Failed to apply tool:", error);
+        let errorContent: React.ReactNode;
+        if (
+          error instanceof OpenRouterApiError &&
+          error.reason === "insufficient-credits" &&
+          error.detailMessage
+        ) {
+          const infoUrl = error.infoUrl || OPENROUTER_KEYS_URL;
+          errorContent = buildInsufficientCreditsError(
+            error.detailMessage,
+            infoUrl
+          );
+        } else {
+          errorContent =
+            error instanceof Error ? error.message : "Failed to process image.";
+        }
+        setState((prev) => ({
+          ...prev,
+          isProcessing: false,
+          error: errorContent,
+        }));
+      }
+    } finally {
+      if (requestAbortControllerRef.current === abortController) {
+        requestAbortControllerRef.current = null;
+      }
+      if (shouldRefreshCredits) {
+        void refreshCredits();
+      }
     }
   };
 
@@ -638,6 +928,7 @@ export default function App() {
           imageData: base64,
           toolId: "original",
           parameters: {},
+          sourceStyleId: null,
           durationMs: 0,
           cost: 0,
           model: "",
@@ -710,6 +1001,7 @@ export default function App() {
           imageData: base64,
           toolId: "original",
           parameters: {},
+          sourceStyleId: null,
           durationMs: 0,
           cost: 0,
           model: "",
@@ -814,7 +1106,14 @@ export default function App() {
   };
 
   const handleProvideKey = (key: string) => {
-    setApiKey(key);
+    const trimmed = key.trim();
+    if (!trimmed) {
+      setApiKey(null);
+      setAuthMethod(null);
+      setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
+      return;
+    }
+    setApiKey(trimmed);
     setAuthMethod("manual");
   };
 
@@ -884,14 +1183,15 @@ export default function App() {
   };
 
   const targetImage = state.targetImageId
-    ? state.history.find((h) => h.id === state.targetImageId) || null
+    ? accessibleHistoryItems.find((h) => h.id === state.targetImageId) || null
     : null;
 
   const referenceItems = state.referenceImageIds
-    .map((id) => state.history.find((h) => h.id === id) || null)
+    .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
     .filter((h): h is HistoryItem => !!h);
   const rightItem =
-    state.history.find((h) => h.id === state.rightPanelImageId) || null;
+    accessibleHistoryItems.find((h) => h.id === state.rightPanelImageId) ||
+    null;
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -912,6 +1212,31 @@ export default function App() {
       return prev;
     });
   };
+
+  const creditsPrimaryLabel = (() => {
+    if (!effectiveApiKey) {
+      return "Connect to view";
+    }
+    if (creditsLoading) {
+      return "Updating...";
+    }
+    if (creditsError) {
+      return creditsError;
+    }
+    if (credits) {
+      return `${formatCreditsValue(credits.remainingCredits)} left`;
+    }
+    return "--";
+  })();
+
+  const creditsSecondaryLabel =
+    effectiveApiKey && credits && !creditsLoading && !creditsError
+      ? `${formatCreditsValue(credits.totalUsage)} used / ${formatCreditsValue(
+          credits.totalCredits
+        )} total`
+      : null;
+
+  const shouldShowConnectToOpenRouterCTA = !effectiveApiKey;
 
   return (
     <div
@@ -939,6 +1264,51 @@ export default function App() {
 
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-4">
+            {shouldShowConnectToOpenRouterCTA ? (
+              <button
+                type="button"
+                onClick={() => setIsSettingsDialogOpen(true)}
+                className="px-6 py-2.5 rounded-3xl text-sm font-semibold tracking-widest uppercase shadow-lg transition-all duration-200 hover:-translate-y-0.5"
+                style={{
+                  color: theme.colors.surface,
+                  borderColor: theme.colors.accent,
+                  backgroundImage: `linear-gradient(120deg, ${theme.colors.accent}, ${theme.colors.accentHover})`,
+                  boxShadow: theme.colors.accentShadow,
+                }}
+              >
+                Connect to OpenRouter
+              </button>
+            ) : (
+              <div
+                className="text-right leading-tight"
+                title={creditsSecondaryLabel || undefined}
+              >
+                <span
+                  className="block text-xs font-semibold uppercase tracking-wide"
+                  style={{ color: theme.colors.textMuted }}
+                >
+                  OpenRouter Credits
+                </span>
+                <span
+                  className="block text-sm font-bold"
+                  style={{
+                    color: creditsError
+                      ? theme.colors.danger
+                      : theme.colors.textPrimary,
+                  }}
+                >
+                  {creditsPrimaryLabel}
+                </span>
+                {creditsSecondaryLabel && (
+                  <span
+                    className="block text-xs"
+                    style={{ color: theme.colors.textSecondary }}
+                  >
+                    {creditsSecondaryLabel}
+                  </span>
+                )}
+              </div>
+            )}
             {selectedModel && (
               <button
                 type="button"
@@ -999,7 +1369,17 @@ export default function App() {
         rightImage={rightItem}
         activeToolId={activeToolId}
         toolParams={paramsByTool}
+        historyItems={accessibleHistoryItems}
+        hasHiddenHistory={hasHiddenHistory}
+        onRequestHistoryAccess={() => {
+          if (!fsSupported) {
+            setIsSettingsDialogOpen(true);
+            return;
+          }
+          void handleEnableFolderStorage();
+        }}
         onApplyTool={handleApplyTool}
+        onCancelProcessing={handleCancelProcessing}
         onToolSelect={handleToolSelectWithConstraints}
         onParamChange={handleParamChange}
         onSetTarget={handleSetTargetImage}
@@ -1024,6 +1404,7 @@ export default function App() {
           isLoading: authLoading,
           usingEnvKey,
           authMethod,
+          apiKeyPreview: apiKey || envApiKey || null,
           onConnect: handleConnect,
           onDisconnect: handleDisconnect,
           onProvideKey: handleProvideKey,

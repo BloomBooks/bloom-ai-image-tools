@@ -186,9 +186,24 @@ export const applyArtStyleToPrompt = (
     return core;
   }
 
-  const styleSnippet = getArtStylePrompt(styleId ?? undefined, mode);
+  const normalizedId = styleId ?? undefined;
+  const style = normalizedId ? getArtStyleById(normalizedId) : null;
+  const styleSnippet = normalizedId
+    ? getArtStylePrompt(normalizedId, mode)?.trim()
+    : null;
 
-  if (!styleSnippet) return core;
+  if (!styleSnippet && !style?.name?.trim()) {
+    return core;
+  }
 
-  return `${core}\n\nArt direction: ${styleSnippet}`;
+  const styleName = style?.name?.trim();
+  const artDirectionLabel = styleName
+    ? `Art direction (${styleName}):`
+    : "Art direction:";
+
+  if (!styleSnippet) {
+    return `${core}\n\n${artDirectionLabel}`;
+  }
+
+  return `${core}\n\n${artDirectionLabel} ${styleSnippet}`;
 };

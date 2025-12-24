@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export interface ToolParameter {
   name: string;
   label: string;
@@ -74,11 +76,13 @@ export interface HistoryItem {
   imageFileName?: string | null;
   toolId: string;
   parameters: Record<string, string>;
+  sourceStyleId?: string | null;
   durationMs: number;
   cost: number;
   model: string; // Model ID used (e.g., "google/gemini-2.5-flash-image")
   timestamp: number;
   promptUsed: string;
+  sourceSummary?: string | null;
   resolution?: { width: number; height: number };
 }
 
@@ -91,7 +95,7 @@ export interface AppState {
   history: HistoryItem[];
   isProcessing: boolean;
   isAuthenticated: boolean; // True when an OpenRouter API key is available
-  error: string | null; // Error message to display to user
+  error: ReactNode | null; // Error message to display to user
 }
 
 export interface AuthState {

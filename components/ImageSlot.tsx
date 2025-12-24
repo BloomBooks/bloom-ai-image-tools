@@ -14,6 +14,12 @@ import {
   processImageForThumbnail,
   saveArtStyleThumbnail,
 } from "../lib/imageProcessing";
+import { isClearArtStyleId } from "../lib/artStyles";
+import {
+  getInternalImageDragData,
+  hasInternalImageDragData,
+  setInternalImageDragData,
+} from "./dragConstants";
 
 export type ImageSlotControls = {
   upload?: boolean;
@@ -68,6 +74,23 @@ const VARIANT_CLASSES = {
       "relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden min-h-0",
   },
 } as const;
+
+const getArtStyleIdForImage = (item?: HistoryItem | null): string | null => {
+  if (!item) return null;
+
+  const normalizedFromSource = item.sourceStyleId;
+  if (normalizedFromSource && !isClearArtStyleId(normalizedFromSource)) {
+    return normalizedFromSource;
+  }
+
+  const legacyStyleId = (item.parameters as Record<string, string | undefined>)
+    .styleId;
+  if (legacyStyleId && !isClearArtStyleId(legacyStyleId)) {
+    return legacyStyleId;
+  }
+
+  return null;
+};
 
 const hasImageFilePayload = (dataTransfer: DataTransfer | null): boolean => {
   if (!dataTransfer) return false;
@@ -458,11 +481,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     event.preventDefault();
     if (!isDropZone || disabled) return;
     if (event.dataTransfer) {
-      const hasFiles = hasImageFilePayload(event.dataTransfer);
-      if (hasFiles && onUpload) {
-        event.dataTransfer.dropEffect = "copy";
-      } else {
+      const canHandleInternal =
+        onDrop && hasInternalImageDragData(event.dataTransfer);
+      if (canHandleInternal) {
         event.dataTransfer.dropEffect = "move";
+      } else {
+        const hasFiles = hasImageFilePayload(event.dataTransfer);
+        if (hasFiles && onUpload) {
+          event.dataTransfer.dropEffect = "copy";
+        } else if (onDrop) {
+          event.dataTransfer.dropEffect = "move";
+        } else {
+          event.dataTransfer.dropEffect = "none";
+        }
       }
     }
     setIsDragOver(true);
@@ -483,23 +514,25 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     dragDepthRef.current = 0;
     setIsDragOver(false);
 
+    const internalImageId = onDrop
+      ? getInternalImageDragData(event.dataTransfer)
+      : null;
+    if (internalImageId && onDrop) {
+      onDrop(internalImageId);
+      return;
+    }
+
     const droppedFile = onUpload
       ? getImageFileFromDataTransfer(event.dataTransfer)
       : null;
     if (droppedFile) {
       handleUpload(droppedFile);
-      return;
-    }
-
-    const imageId = event.dataTransfer.getData("text/plain");
-    if (imageId && onDrop) {
-      onDrop(imageId);
     }
   };
 
   const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
-    if (!draggableImageId) return;
-    event.dataTransfer.setData("text/plain", draggableImageId);
+    if (!draggableImageId || !event.dataTransfer) return;
+    setInternalImageDragData(event.dataTransfer, draggableImageId);
     event.dataTransfer.effectAllowed = "copyMove";
   };
 
@@ -512,8 +545,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   };
 
   // Get the art style ID from the image's metadata (parameters)
-  const imageArtStyleId = image?.parameters?.styleId || null;
-  const hasValidArtStyle = imageArtStyleId && imageArtStyleId !== "none";
+  const imageArtStyleId = getArtStyleIdForImage(image);
+  const hasValidArtStyle = !!imageArtStyleId;
 
   const handleContextMenu = (event: React.MouseEvent) => {
     // Only show context menu if we have an image with an art style in its metadata
@@ -806,6 +839,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               style={{
                 backgroundColor: theme.colors.dropZone,
                 border: `2px dashed ${theme.colors.dropZoneBorder}`,
+                pointerEvents: "none",
               }}
             >
               <span

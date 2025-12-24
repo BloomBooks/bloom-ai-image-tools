@@ -7,6 +7,7 @@ interface OpenRouterConnectProps {
   isLoading: boolean;
   usingEnvKey: boolean;
   authMethod: "oauth" | "manual" | null;
+  apiKeyPreview: string | null;
   onConnect: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
@@ -17,12 +18,23 @@ export function OpenRouterConnect({
   isLoading,
   usingEnvKey,
   authMethod,
+  apiKeyPreview,
   onConnect,
   onDisconnect,
   onProvideKey,
 }: OpenRouterConnectProps) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyValue, setKeyValue] = useState("");
+
+  const obfuscateKey = (key: string | null) => {
+    if (!key) {
+      return null;
+    }
+    const prefix = key.slice(0, 4);
+    const hiddenLength = Math.max(key.length - 4, 0);
+    const suffix = hiddenLength > 0 ? "*".repeat(hiddenLength) : "";
+    return `${prefix}${suffix}`;
+  };
 
   const handleKeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,48 +52,78 @@ export function OpenRouterConnect({
   };
 
   const statusLabel = (() => {
-    if (authMethod === "oauth") return "Connected to OpenRouter";
-    return "Using OpenRouter Key";
+    if (usingEnvKey) return "Using OpenRouter key (env)";
+    if (authMethod === "manual") return "Using stored OpenRouter key";
+    return "Connected to OpenRouter";
   })();
-
-  const disconnectPrompt = (() => {
-    if (authMethod === "manual") return "Forget OpenRouter key?";
-    return "Disconnect from OpenRouter?";
-  })();
-
-  const handleStatusClick = () => {
-    // Env keys are not stored in the app, so there's nothing to forget.
-    if (usingEnvKey) return;
-
-    if (window.confirm(disconnectPrompt)) {
-      handleDisconnect();
-    }
-  };
+  const keyPreview =
+    (usingEnvKey || authMethod === "manual") && apiKeyPreview
+      ? obfuscateKey(apiKeyPreview)
+      : null;
 
   // When authenticated, show disconnect link
   if (isAuthenticated) {
     return (
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          data-testid="openrouter-status"
-          onClick={handleStatusClick}
-          disabled={usingEnvKey}
-          className={
-            "flex items-center gap-2 text-sm transition-all " +
-            (usingEnvKey ? "cursor-default" : "underline hover:no-underline")
-          }
-          style={{ color: theme.colors.textPrimary, background: "transparent" }}
-          title={
-            usingEnvKey
-              ? "Using OpenRouter key from environment"
-              : authMethod === "manual"
-              ? "Forget stored OpenRouter key"
-              : "Disconnect and clear stored OpenRouter key"
-          }
-        >
-          {statusLabel}
-        </button>
+      <div className="flex flex-col gap-3 text-sm">
+        <div className="flex items-center gap-3 flex-wrap">
+          <p
+            data-testid="openrouter-status"
+            className="font-semibold"
+            style={{ color: theme.colors.textPrimary }}
+          >
+            {statusLabel}
+          </p>
+          {keyPreview && (
+            <span
+              className="inline-flex items-center rounded-xl border px-4 py-1 font-mono text-xs"
+              style={{
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceAlt,
+                color: theme.colors.textPrimary,
+              }}
+              aria-label="Active OpenRouter key"
+            >
+              {keyPreview}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {authMethod === "manual" && !usingEnvKey && (
+            <button
+              type="button"
+              data-testid="openrouter-clear-key"
+              onClick={handleDisconnect}
+              className="px-4 py-2 rounded-full text-sm font-semibold border"
+              style={{
+                borderColor: theme.colors.border,
+                color: theme.colors.textPrimary,
+                backgroundColor: theme.colors.surface,
+              }}
+            >
+              Clear key
+            </button>
+          )}
+          {authMethod === "oauth" && (
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="px-4 py-2 rounded-full text-sm font-semibold border"
+              style={{
+                borderColor: theme.colors.border,
+                color: theme.colors.textPrimary,
+                backgroundColor: theme.colors.surface,
+              }}
+            >
+              Disconnect
+            </button>
+          )}
+        </div>
+        {usingEnvKey && (
+          <p className="text-xs" style={{ color: theme.colors.textSecondary }}>
+            This environment-provided key cannot be edited here. Restart the
+            session to switch accounts.
+          </p>
+        )}
       </div>
     );
   }

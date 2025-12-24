@@ -156,6 +156,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const [thumbnailStatus, setThumbnailStatus] = React.useState<
     "idle" | "saving" | "success" | "error"
   >("idle");
+  const [imageMetadata, setImageMetadata] = React.useState<{
+    imageId: string;
+    width: number | null;
+    height: number | null;
+    mime: string | null;
+  } | null>(null);
 
   const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
@@ -169,6 +175,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!dataUrl) return null;
     const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
     return match ? match[1].toLowerCase() : null;
+  };
+
+  const getTypeFromFileName = (fileName: string | null | undefined) => {
+    if (!fileName) return null;
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    if (!ext) return null;
+    switch (ext) {
+      case "jpg":
+      case "jpeg":
+        return "jpeg";
+      default:
+        return ext;
+    }
   };
 
   const getBlobFromDataUrl = async (dataUrl: string) => {
@@ -195,14 +214,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     return new Blob([decoded], { type: mime || "application/octet-stream" });
   };
 
-  const normalizeImageMime = (mime: string | null) => {
+  const getTypeFromMime = (mime: string | null) => {
     if (!mime) return null;
-    const lowered = mime.toLowerCase();
-    if (lowered === "image/jpg" || lowered === "image/pjpeg") {
-      return "image/jpeg";
+    const lowered = mime.toLowerCase().replace("image/", "");
+    if (lowered === "jpg" || lowered === "pjpeg") {
+      return "jpeg";
     }
-    if (lowered === "image/x-png") {
-      return "image/png";
+    if (lowered === "x-png") {
+      return "png";
     }
     return lowered;
   };
@@ -211,18 +230,65 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     const blobFromSource = await (dataUrl.startsWith("data:")
       ? getBlobFromDataUrl(dataUrl)
       : getBlobFromImageSource(dataUrl));
-    const normalizedMime =
-      normalizeImageMime(blobFromSource.type) ||
-      normalizeImageMime(getDataUrlMimeType(dataUrl)) ||
-      "image/png";
+    const type =
+      getTypeFromMime(blobFromSource.type) ||
+      getTypeFromMime(getDataUrlMimeType(dataUrl)) ||
+      "png";
 
-    if (blobFromSource.type === normalizedMime) {
+    if (blobFromSource.type === type) {
       return blobFromSource;
     }
 
     const buffer = await blobFromSource.arrayBuffer();
-    return new Blob([buffer], { type: normalizedMime });
+    return new Blob([buffer], { type: type });
   };
+
+  React.useEffect(() => {
+    if (!image) {
+      setImageMetadata(null);
+      return;
+    }
+
+    const normalizedMime =
+      getTypeFromMime(getDataUrlMimeType(image.imageData)) ||
+      getTypeFromMime(getTypeFromFileName(image.imageFileName)) ||
+      null;
+
+    const updateMetadata = (width: number | null, height: number | null) => {
+      setImageMetadata({
+        imageId: image.id,
+        mime: normalizedMime,
+        width: typeof width === "number" && width > 0 ? width : null,
+        height: typeof height === "number" && height > 0 ? height : null,
+      });
+    };
+
+    if (image.resolution) {
+      updateMetadata(image.resolution.width, image.resolution.height);
+      return;
+    }
+
+    if (typeof Image === "undefined") {
+      updateMetadata(null, null);
+      return;
+    }
+
+    let isCancelled = false;
+    const loader = new Image();
+    loader.onload = () => {
+      if (isCancelled) return;
+      updateMetadata(loader.naturalWidth, loader.naturalHeight);
+    };
+    loader.onerror = () => {
+      if (isCancelled) return;
+      updateMetadata(null, null);
+    };
+    loader.src = image.imageData;
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [image]);
 
   const clipboardSupportsMime = (mime: string) => {
     if (typeof ClipboardItem === "undefined") return true;
@@ -249,7 +315,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       return blob;
     }
 
-    if (typeof window !== "undefined" && typeof window.createImageBitmap === "function") {
+    if (
+      typeof window !== "undefined" &&
+      typeof window.createImageBitmap === "function"
+    ) {
       try {
         const bitmap = await window.createImageBitmap(blob);
         try {
@@ -277,7 +346,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           }
         }
       } catch (error) {
-        console.warn("Bitmap-based PNG conversion failed, retrying with default method:", error);
+        console.warn(
+          "Bitmap-based PNG conversion failed, retrying with default method:",
+          error
+        );
       }
     }
 
@@ -632,6 +704,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     : defaultEmptyState;
 
   const actionsNode = renderActions();
+  const activeMetadata =
+    image && imageMetadata?.imageId === image.id ? imageMetadata : null;
+  const metadataLabels = activeMetadata
+    ? {
+        dimension:
+          activeMetadata.width && activeMetadata.height
+            ? `${activeMetadata.width} x ${activeMetadata.height}`
+            : activeMetadata.width || activeMetadata.height
+            ? `${activeMetadata.width ?? "?"} x ${activeMetadata.height ?? "?"}`
+            : "Unknown size",
+        mime: activeMetadata.mime || "Unknown type",
+      }
+    : null;
 
   return (
     <div
@@ -696,6 +781,22 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               }}
             >
               {rolePill.label}
+            </div>
+          )}
+
+          {image && metadataLabels && isHovered && (
+            <div
+              className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 text-[10px] font-semibold px-3 py-1 rounded-full"
+              style={{
+                zIndex: 15,
+                backgroundColor: theme.colors.overlay,
+                color: theme.colors.textPrimary,
+                boxShadow: theme.colors.panelShadow,
+                pointerEvents: "none",
+              }}
+            >
+              <span>{metadataLabels.dimension}</span>
+              <span style={{ opacity: 0.85 }}>{metadataLabels.mime}</span>
             </div>
           )}
 

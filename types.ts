@@ -61,6 +61,12 @@ export interface ToolDefinition {
   capabilities?: ToolCapabilities;
 }
 
+export interface EthnicityCategory {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface HistoryItem {
   id: string;
   parentId: string | null;

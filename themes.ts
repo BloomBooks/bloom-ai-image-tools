@@ -4,7 +4,7 @@ export const kBloomBlueTextBackground = "#19818f"; // darker for better contrast
 export const theme = {
   colors: {
     appBackground: "#0b1220",
-    surface: "transparent",
+    surface: "#0f172a",
     surfaceAlt: "#111827",
     surfaceRaised: "#1e293b",
     border: "#24344d",

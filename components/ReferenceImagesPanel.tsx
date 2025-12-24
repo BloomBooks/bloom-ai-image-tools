@@ -28,6 +28,17 @@ export const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
   onDrop,
   onRemove,
 }) => {
+  const slotCount = Math.max(1, slots.length);
+  const columns = Math.max(1, Math.ceil(Math.sqrt(slotCount)));
+  const minSlotWidth = 100;
+  const maxSlotWidth = 320;
+  const gapPx = 12;
+  const preferredWidthPercent = columns
+    ? `calc((100% - ${(columns - 1) * gapPx}px) / ${columns})`
+    : "100%";
+  const slotSize = `clamp(${minSlotWidth}px, ${preferredWidthPercent}, ${maxSlotWidth}px)`;
+  const slotAspectRatio = "3 / 4";
+
   return (
     <div
       data-testid="reference-panel"
@@ -58,50 +69,55 @@ export const ReferenceImagesPanel: React.FC<ReferenceImagesPanelProps> = ({
       </div>
 
       {/* Slots */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-auto">
         <div
-          className="grid gap-3 h-full"
-          style={{
-            gridTemplateColumns:
-              slots.length <= 1
-                ? "1fr"
-                : "repeat(auto-fit, minmax(180px, 1fr))",
-            gridAutoRows: "minmax(0, 1fr)",
-          }}
+          className="flex flex-wrap gap-3 h-full"
+          style={{ alignContent: "flex-start" }}
         >
           {slots.map((slot) => (
-            <ImageSlot
+            <div
               key={slot.slotIndex}
-              image={slot.image}
-              disabled={disabled}
-              isDropZone={!disabled}
-              onDrop={(imageId) => onDrop(imageId, slot.slotIndex)}
-              onUpload={(file) => onUpload(file, slot.slotIndex)}
-              onRemove={
-                slot.canRemove ? () => onRemove(slot.slotIndex) : undefined
-              }
-              controls={{
-                upload: true,
-                paste: true,
-                copy: true,
-                download: true,
-                remove: slot.canRemove,
+              className="flex"
+              style={{
+                flex: `0 1 ${slotSize}`,
+                maxWidth: slotSize,
+                minWidth: `${minSlotWidth}px`,
+                aspectRatio: slotAspectRatio,
               }}
-              variant="tile"
-              rolePill={
-                slot.roleLabel
-                  ? {
-                      label: slot.roleLabel,
-                      kind: slot.roleKind,
-                      testId: `reference-role-pill-${slot.slotIndex}`,
-                    }
-                  : undefined
-              }
-              dropLabel="Drop to add"
-              dataTestId={`reference-slot-${slot.slotIndex}`}
-              uploadInputTestId={`reference-upload-input-${slot.slotIndex}`}
-              actionLabels={{ remove: "Remove reference" }}
-            />
+            >
+              <ImageSlot
+                image={slot.image}
+                disabled={disabled}
+                isDropZone={!disabled}
+                onDrop={(imageId) => onDrop(imageId, slot.slotIndex)}
+                onUpload={(file) => onUpload(file, slot.slotIndex)}
+                onRemove={
+                  slot.canRemove ? () => onRemove(slot.slotIndex) : undefined
+                }
+                controls={{
+                  upload: true,
+                  paste: true,
+                  copy: true,
+                  download: true,
+                  remove: slot.canRemove,
+                }}
+                variant="tile"
+                rolePill={
+                  slot.roleLabel
+                    ? {
+                        label: slot.roleLabel,
+                        kind: slot.roleKind,
+                        testId: `reference-role-pill-${slot.slotIndex}`,
+                      }
+                    : undefined
+                }
+                dropLabel="Drop to add"
+                dataTestId={`reference-slot-${slot.slotIndex}`}
+                uploadInputTestId={`reference-upload-input-${slot.slotIndex}`}
+                actionLabels={{ remove: "Remove reference" }}
+                className="w-full h-full"
+              />
+            </div>
           ))}
         </div>
       </div>

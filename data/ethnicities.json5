@@ -1,0 +1,116 @@
+{
+  ethnicity_model_version: "1.0",
+  usage_note: "These categories represent high-level visual appearance presets for character rendering. They are not cultural, national, or genetic definitions. All categories should support blending and parameter overrides.",
+  categories: [
+    {
+      id: "asian_general",
+      label: "Asian (General)",
+      description: "Facial features commonly associated with East and Southeast Asian populations, including straighter hair textures, epicanthic eye folds in some cases, and lighter to medium skin tones with warm or neutral undertones.",
+    },
+    {
+      id: "east_asian",
+      label: "East Asian",
+      description: "East Asian visual traits such as flatter facial profiles, straighter black or dark brown hair, lighter to medium skin tones, and eye shapes typical of Chinese, Korean, or Japanese populations.",
+    },
+    {
+      id: "southeast_asian",
+      label: "Southeast Asian",
+      description: "Southeast Asian appearance including medium to darker skin tones, rounder facial structures, straight to wavy dark hair, and facial features common in Thai, Filipino, Vietnamese, and neighboring populations.",
+    },
+    {
+      id: "south_asian",
+      label: "South Asian",
+      description: "South Asian visual characteristics such as medium to dark brown skin tones, thicker eyebrows, prominent eyes, and wavy to curly dark hair, typical of Indian subcontinent populations.",
+    },
+    {
+      id: "central_asian",
+      label: "Central Asian",
+      description: "Central Asian appearance blending East Asian and Western Eurasian traits, including mixed eye shapes, medium skin tones, and straight to wavy hair textures.",
+    },
+    {
+      id: "black_general",
+      label: "Black (General)",
+      description: "Broad Sub-Saharan African visual characteristics including darker skin tones, tightly curled to coiled hair textures, fuller lips, and strong facial bone structure.",
+    },
+    {
+      id: "west_african",
+      label: "Sub-Saharan African – West African",
+      description: "West African visual traits including deep to dark brown skin tones, broad facial features, tightly coiled hair, and strong jawlines.",
+    },
+    {
+      id: "east_african",
+      label: "Sub-Saharan African – East African",
+      description: "East African appearance featuring medium to dark skin tones, often narrower facial structures, longer faces, and tightly curled to coiled hair.",
+    },
+    {
+      id: "southern_african",
+      label: "Sub-Saharan African – Southern African",
+      description: "Southern African visual traits including dark skin tones, varied facial structures, and tightly coiled hair textures common in southern regions of Africa.",
+    },
+    {
+      id: "north_african",
+      label: "North African",
+      description: "North African appearance with light to medium brown skin tones, straight to wavy dark hair, and facial features blending Mediterranean, Arab, and African influences.",
+    },
+    {
+      id: "afro_caribbean",
+      label: "Afro-Caribbean",
+      description: "Afro-Caribbean visual traits combining African ancestry with regional variation, including dark to medium skin tones and tightly curled hair, often with softer facial contours.",
+    },
+    {
+      id: "middle_eastern",
+      label: "Middle Eastern",
+      description: "Middle Eastern appearance characterized by light olive to medium brown skin tones, dark hair, prominent noses, and strong brow lines.",
+    },
+    {
+      id: "caucasian",
+      label: "Caucasian",
+      description: "European-origin visual traits including lighter skin tones, a wide range of hair and eye colors, and varied facial structures from narrow to broad.",
+    },
+    {
+      id: "hispanic",
+      label: "Hispanic / Latino",
+      description: "Hispanic or Latino appearance reflecting mixed Indigenous, European, and African ancestry, typically with medium skin tones, dark hair, and diverse facial features.",
+    },
+    {
+      id: "indigenous_south_american",
+      label: "Indigenous South American",
+      description: "Indigenous South American appearance such as Andean or Amazonian populations, featuring copper to medium brown skin tones, straight dark hair, and strong cheekbones.",
+    },
+    {
+      id: "indigenous_central_american",
+      label: "Indigenous Central American",
+      description: "Indigenous Central American visual traits with medium brown skin tones, straight dark hair, and facial structures common among Mesoamerican populations.",
+    },
+    {
+      id: "indigenous_north_american",
+      label: "Indigenous North American",
+      description: "Indigenous North American appearance including straight dark hair, medium skin tones, and facial features common among Native American populations.",
+    },
+    {
+      id: "pacific_melanesian",
+      label: "Melanesian",
+      description: "Melanesian visual traits including dark skin tones, tightly curled hair, and strong facial features typical of Papua New Guinea and nearby islands.",
+    },
+    {
+      id: "pacific_polynesian",
+      label: "Polynesian",
+      description: "Polynesian appearance with medium to dark skin tones, wavy to curly hair, larger facial structures, and robust builds.",
+    },
+    {
+      id: "pacific_micronesian",
+      label: "Micronesian",
+      description: "Micronesian visual traits featuring medium skin tones, straight to wavy dark hair, and softer facial features compared to other Pacific Islander groups.",
+    },
+    {
+      id: "australian_aboriginal",
+      label: "Australian Aboriginal",
+      description: "Australian Aboriginal appearance characterized by dark skin tones, curly to coiled hair textures, and strong facial bone structures.",
+    },
+    {
+      id: "mixed_global",
+      label: "Mixed / Multiracial",
+      description: "Blended visual appearance combining traits from multiple ethnic appearance groups, with no single dominant phenotype.",
+    },
+  ],
+}

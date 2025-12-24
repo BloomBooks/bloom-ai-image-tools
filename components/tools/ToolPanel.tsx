@@ -245,12 +245,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                 <div
                   className="p-2 rounded-lg"
                   style={{
-                    backgroundColor: isActive
-                      ? theme.colors.accent
-                      : theme.colors.surfaceAlt,
-                    color: isActive
-                      ? theme.colors.textPrimary
-                      : theme.colors.textMuted,
+                    backgroundColor: theme.colors.surfaceAlt,
+                    color: theme.colors.textMuted,
                   }}
                 >
                   <Icon path={tool.icon} className="w-5 h-5" />

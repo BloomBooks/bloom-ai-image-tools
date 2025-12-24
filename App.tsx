@@ -11,11 +11,12 @@ import { ImageToolsPanel } from "./components/ImageToolsPanel";
 import { editImage } from "./services/openRouterService";
 import { TOOLS } from "./components/tools/tools-registry";
 import { theme } from "./themes";
-import { OpenRouterConnect } from "./components/OpenRouterConnect";
 import { handleOAuthCallback, initiateOAuthFlow } from "./lib/openRouterOAuth";
 import JSON5 from "json5";
 import modelCatalogText from "./data/models-registry.json5?raw";
 import { ModelChooserDialog } from "./components/ModelChooserDialog";
+import { AIImageToolsSettingsDialog } from "./components/AIImageToolsSettingsDialog";
+import { Icon, Icons } from "./components/Icons";
 import bloomLogo from "./assets/bloom.svg";
 import {
   createToolParamDefaults,
@@ -119,8 +120,8 @@ export default function App() {
     error: null,
   });
 
-  const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(
-    () => createToolParamDefaults()
+  const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
+    createToolParamDefaults()
   );
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
@@ -130,14 +131,16 @@ export default function App() {
     DEFAULT_MODEL?.id || ""
   );
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const browserPersistence = useMemo(
     () => createBrowserImageToolsPersistence(),
     []
   );
   const persistence: ImageToolsStatePersistence = browserPersistence;
-  const [fsBinding, setFsBinding] =
-    useState<FileSystemImageBinding | null>(null);
+  const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(
+    null
+  );
   const [fsLoading, setFsLoading] = useState(false);
   const [fsError, setFsError] = useState<string | null>(null);
   const [fsSupported, setFsSupported] = useState(() =>
@@ -147,13 +150,20 @@ export default function App() {
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
   const envApiKey = getEnvApiKey();
+  const usingEnvKey = !!(envApiKey && !apiKey);
   const isFolderPersistenceActive = !!fsBinding;
-  const storageButtonLabel = isFolderPersistenceActive
-    ? `Folder: ${fsBinding?.directoryName || "Linked"}`
-    : "Use Folder Storage";
-  const storageButtonTitle = isFolderPersistenceActive
-    ? "Stop syncing history to this folder"
-    : "Store history in a chosen folder (Chromium only)";
+  const openRouterStatusLabel = state.isAuthenticated
+    ? usingEnvKey
+      ? "OpenRouter key supplied by environment"
+      : authMethod === "oauth"
+      ? "OpenRouter connected via OAuth"
+      : "OpenRouter API key linked"
+    : "OpenRouter not connected";
+  const historyStatusLabel = isFolderPersistenceActive
+    ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
+    : "History stored in browser only";
+  const settingsButtonTitle = `${openRouterStatusLabel}. ${historyStatusLabel}.`;
+  const settingsButtonLabel = `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
 
   const persistHistoryImage = useCallback(
     async (
@@ -314,7 +324,9 @@ export default function App() {
           setActiveToolId(persisted.activeToolId ?? null);
           if (
             persisted.selectedModelId &&
-            MODEL_CATALOG.some((model) => model.id === persisted.selectedModelId)
+            MODEL_CATALOG.some(
+              (model) => model.id === persisted.selectedModelId
+            )
           ) {
             setSelectedModelId(persisted.selectedModelId);
           }
@@ -491,9 +503,10 @@ export default function App() {
     if (!tool) return;
 
     const requiresEditImage = tool.editImage !== false;
-    const targetImage = requiresEditImage && state.targetImageId
-      ? state.history.find((h) => h.id === state.targetImageId) || null
-      : null;
+    const targetImage =
+      requiresEditImage && state.targetImageId
+        ? state.history.find((h) => h.id === state.targetImageId) || null
+        : null;
     if (requiresEditImage && !targetImage) {
       setState((prev) => ({
         ...prev,
@@ -553,7 +566,8 @@ export default function App() {
       // In E2E, we authenticate via an env key. In that mode we want the model
       // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
       // rather than whatever the UI's default model happens to be.
-      const modelIdForRequest = envApiKey && !apiKey ? undefined : selectedModel?.id;
+      const modelIdForRequest =
+        envApiKey && !apiKey ? undefined : selectedModel?.id;
 
       const result = await editImage(
         sourceImages,
@@ -679,60 +693,60 @@ export default function App() {
 
   const handleUploadReference = useCallback(
     (file: File, slotIndex?: number) => {
-    const mode = getToolReferenceMode(activeToolId);
-    const { max } = getReferenceConstraints(mode);
+      const mode = getToolReferenceMode(activeToolId);
+      const { max } = getReferenceConstraints(mode);
 
-    // If the active tool doesn't accept references, ignore.
-    if (max === 0) return;
+      // If the active tool doesn't accept references, ignore.
+      if (max === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target?.result as string;
-      const resolution = await getImageDimensions(base64);
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = ev.target?.result as string;
+        const resolution = await getImageDimensions(base64);
 
-      let newItem: HistoryItem = {
-        id: uuid(),
-        parentId: null,
-        imageData: base64,
-        toolId: "original",
-        parameters: {},
-        durationMs: 0,
-        cost: 0,
-        model: "",
-        timestamp: Date.now(),
-        promptUsed: "Original Upload",
-        resolution,
-      };
+        let newItem: HistoryItem = {
+          id: uuid(),
+          parentId: null,
+          imageData: base64,
+          toolId: "original",
+          parameters: {},
+          durationMs: 0,
+          cost: 0,
+          model: "",
+          timestamp: Date.now(),
+          promptUsed: "Original Upload",
+          resolution,
+        };
 
-      if (fsBinding) {
-        newItem = await persistHistoryImage(newItem);
-      }
-
-      setState((prev) => {
-        const nextHistory = [...prev.history, newItem];
-        const nextIds = [...prev.referenceImageIds];
-        const idx =
-          typeof slotIndex === "number" && slotIndex >= 0
-            ? slotIndex
-            : nextIds.length;
-
-        if (idx < nextIds.length) {
-          nextIds[idx] = newItem.id;
-        } else {
-          nextIds.push(newItem.id);
+        if (fsBinding) {
+          newItem = await persistHistoryImage(newItem);
         }
 
-        return {
-          ...prev,
-          history: nextHistory,
-          referenceImageIds: nextIds.slice(0, max),
-        };
-      });
-    };
-    reader.readAsDataURL(file);
+        setState((prev) => {
+          const nextHistory = [...prev.history, newItem];
+          const nextIds = [...prev.referenceImageIds];
+          const idx =
+            typeof slotIndex === "number" && slotIndex >= 0
+              ? slotIndex
+              : nextIds.length;
+
+          if (idx < nextIds.length) {
+            nextIds[idx] = newItem.id;
+          } else {
+            nextIds.push(newItem.id);
+          }
+
+          return {
+            ...prev,
+            history: nextHistory,
+            referenceImageIds: nextIds.slice(0, max),
+          };
+        });
+      };
+      reader.readAsDataURL(file);
     },
     [activeToolId, fsBinding, persistHistoryImage]
-    );
+  );
 
   // Global Paste Listener
   useEffect(() => {
@@ -869,10 +883,9 @@ export default function App() {
     setSelectedModelId(modelId);
   };
 
-  const targetImage =
-    state.targetImageId
-      ? state.history.find((h) => h.id === state.targetImageId) || null
-      : null;
+  const targetImage = state.targetImageId
+    ? state.history.find((h) => h.id === state.targetImageId) || null
+    : null;
 
   const referenceItems = state.referenceImageIds
     .map((id) => state.history.find((h) => h.id === id) || null)
@@ -918,11 +931,7 @@ export default function App() {
         }}
       >
         <div className="flex items-center gap-3">
-          <img
-            src={bloomLogo}
-            alt="Bloom"
-            className="h-7 w-7"
-          />
+          <img src={bloomLogo} alt="Bloom" className="h-7 w-7" />
           <h1 className="text-lg font-bold bg-clip-text ">
             Bloom AI Image Tools
           </h1>
@@ -930,15 +939,6 @@ export default function App() {
 
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-4">
-            <OpenRouterConnect
-              isAuthenticated={state.isAuthenticated}
-              isLoading={authLoading}
-              usingEnvKey={!!(envApiKey && !apiKey)}
-              authMethod={authMethod}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onProvideKey={handleProvideKey}
-            />
             {selectedModel && (
               <button
                 type="button"
@@ -954,27 +954,30 @@ export default function App() {
                 Model: {selectedModel.name}
               </button>
             )}
-            {fsSupported && (
-              <button
-                type="button"
-                onClick={
-                  isFolderPersistenceActive
-                    ? handleDisableFolderStorage
-                    : handleEnableFolderStorage
-                }
-                disabled={fsLoading}
-                className="px-5 py-2 rounded-2xl border font-semibold text-sm tracking-wide disabled:opacity-70"
-                style={{
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.surfaceAlt,
-                  boxShadow: theme.colors.panelShadow,
-                  color: theme.colors.textPrimary,
-                }}
-                title={storageButtonTitle}
-              >
-                {fsLoading ? "Working..." : storageButtonLabel}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsSettingsDialogOpen(true)}
+              className="relative p-2 rounded-full border hover:opacity-80 transition-opacity"
+              style={{
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceAlt,
+                boxShadow: theme.colors.panelShadow,
+                color: theme.colors.textPrimary,
+              }}
+              title={settingsButtonTitle}
+              aria-label={settingsButtonLabel}
+            >
+              <Icon
+                path={Icons.Gear}
+                className={`w-4 h-4 ${fsLoading ? "animate-spin" : ""}`}
+              />
+              {isFolderPersistenceActive && (
+                <span
+                  className="absolute top-1 right-1 block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: theme.colors.accent }}
+                />
+              )}
+            </button>
           </div>
           {fsError && (
             <span
@@ -1011,6 +1014,33 @@ export default function App() {
         onSelectHistoryItem={handleSelectHistoryItem}
         onRemoveHistoryItem={handleRemoveHistoryItem}
         onDismissError={handleDismissError}
+      />
+
+      <AIImageToolsSettingsDialog
+        isOpen={isSettingsDialogOpen}
+        onClose={() => setIsSettingsDialogOpen(false)}
+        openRouter={{
+          isAuthenticated: state.isAuthenticated,
+          isLoading: authLoading,
+          usingEnvKey,
+          authMethod,
+          onConnect: handleConnect,
+          onDisconnect: handleDisconnect,
+          onProvideKey: handleProvideKey,
+        }}
+        history={{
+          isSupported: fsSupported,
+          isLoading: fsLoading,
+          isFolderPersistenceActive,
+          directoryName: fsBinding?.directoryName ?? null,
+          error: fsError,
+          onEnableFolder: () => {
+            void handleEnableFolderStorage();
+          },
+          onDisableFolder: () => {
+            void handleDisableFolderStorage();
+          },
+        }}
       />
 
       <ModelChooserDialog

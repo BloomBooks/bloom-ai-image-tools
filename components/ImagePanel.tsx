@@ -70,6 +70,17 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       boxShadow: theme.colors.panelShadow,
     };
 
+    const slotCount = Math.max(1, slots.length);
+    const columns = Math.max(1, Math.ceil(Math.sqrt(slotCount)));
+    const minSlotWidth = 100;
+    const maxSlotWidth = 320;
+    const gapPx = 12;
+    const preferredWidthPercent = columns
+      ? `calc((100% - ${(columns - 1) * gapPx}px) / ${columns})`
+      : "100%";
+    const slotSize = `clamp(${minSlotWidth}px, ${preferredWidthPercent}, ${maxSlotWidth}px)`;
+    const slotAspectRatio = "3 / 4";
+
     return (
       <div
         data-testid={panelTestId}
@@ -78,7 +89,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       >
         <PanelToolbar label={label} />
         <div className="flex-1 min-h-0 overflow-auto">
-          <div className="flex flex-wrap gap-3 items-start">
+          <div
+            className="flex flex-wrap gap-3 items-start"
+            style={{ alignContent: "flex-start" }}
+          >
             {slots.map((slot) => {
               const slotControls: ImageSlotControls = slot.controls ?? {
                 upload: true,
@@ -88,41 +102,46 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                 remove: slot.canRemove,
               };
 
-              const hasImage = !!slot.image;
-              const slotClassName = hasImage
-                ? "p-3 flex-shrink-0 w-fit max-w-full"
-                : "p-3 flex-shrink-0 min-w-[160px] min-h-[160px]";
-
               return (
-                <ImageSlot
+                <div
                   key={slot.slotIndex}
-                  image={slot.image}
-                  disabled={disabled}
-                  isDropZone={!disabled}
-                  onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
-                  onUpload={
-                    disabled
-                      ? undefined
-                      : (file) => onSlotUpload(file, slot.slotIndex)
-                  }
-                  onRemove={
-                    slot.canRemove && !disabled
-                      ? () => onSlotRemove(slot.slotIndex)
-                      : undefined
-                  }
-                  controls={slotControls}
-                  variant="tile"
-                  rolePill={slot.rolePill}
-                  className={slotClassName}
-                  dropLabel={slot.dropLabel ?? "Drop to add"}
-                  dataTestId={slot.dataTestId}
-                  uploadInputTestId={slot.uploadInputTestId}
-                  actionLabels={
-                    slot.actionLabels ?? {
-                      remove: "Remove reference",
+                  className="flex"
+                  style={{
+                    flex: `0 1 ${slotSize}`,
+                    maxWidth: slotSize,
+                    minWidth: minSlotWidth,
+                    aspectRatio: slotAspectRatio,
+                  }}
+                >
+                  <ImageSlot
+                    image={slot.image}
+                    disabled={disabled}
+                    isDropZone={!disabled}
+                    onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
+                    onUpload={
+                      disabled
+                        ? undefined
+                        : (file) => onSlotUpload(file, slot.slotIndex)
                     }
-                  }
-                />
+                    onRemove={
+                      slot.canRemove && !disabled
+                        ? () => onSlotRemove(slot.slotIndex)
+                        : undefined
+                    }
+                    controls={slotControls}
+                    variant="tile"
+                    rolePill={slot.rolePill}
+                    className="w-full h-full"
+                    dropLabel={slot.dropLabel ?? "Drop to add"}
+                    dataTestId={slot.dataTestId}
+                    uploadInputTestId={slot.uploadInputTestId}
+                    actionLabels={
+                      slot.actionLabels ?? {
+                        remove: "Remove reference",
+                      }
+                    }
+                  />
+                </div>
               );
             })}
           </div>

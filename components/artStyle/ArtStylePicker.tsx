@@ -147,7 +147,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
             className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border"
             style={{ borderColor: theme.colors.borderMuted }}
           >
-            {displayPreview ? (
+            {displayPreview && (
               <img
                 src={displayPreview}
                 alt={
@@ -155,13 +155,6 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
                 }
                 className="w-full h-full object-cover"
               />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-[11px] px-1 text-center"
-                style={{ color: theme.colors.textSecondary }}
-              >
-                No preview
-              </div>
             )}
           </div>
           <div className="flex-1">

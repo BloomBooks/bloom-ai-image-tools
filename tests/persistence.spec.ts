@@ -11,10 +11,12 @@ test.describe("state persistence", () => {
   test("restores history, auth, tool params, and model after reload", async ({
     page,
   }) => {
-    const statusLocator = page.getByTestId("openrouter-status");
-    if ((await statusLocator.count()) > 0 && (await statusLocator.isEnabled())) {
-      page.once("dialog", (dialog) => dialog.accept());
-      await statusLocator.click();
+    const clearKeyButton = page.getByTestId("openrouter-clear-key");
+    if (
+      (await clearKeyButton.count()) > 0 &&
+      (await clearKeyButton.isEnabled())
+    ) {
+      await clearKeyButton.click();
     }
 
     await page.getByTestId("openrouter-provide-key").click();
@@ -45,7 +47,7 @@ test.describe("state persistence", () => {
     await page.reload();
 
     await expect(page.getByTestId("openrouter-status")).toHaveText(
-      "Using OpenRouter Key"
+      "Using stored OpenRouter key"
     );
 
     await expect(page.getByAltText("Image to Edit")).toBeVisible();

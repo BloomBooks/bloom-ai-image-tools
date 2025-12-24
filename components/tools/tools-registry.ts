@@ -4,12 +4,22 @@ import {
   DEFAULT_ART_STYLE_ID,
   getArtStyleById,
 } from "../../lib/artStyles";
+import {
+  ETHNICITY_CATEGORIES,
+  getEthnicityByValue,
+} from "../../lib/ethnicities";
+
+const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map(
+  (category) => category.label
+);
+const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
 
 export const TOOLS: ToolDefinition[] = [
   {
     id: "generate_image",
     title: "New Image",
-    description: "Generate a new image from scratch (optional reference).",
+    description:
+      "Generate a new image from scratch. You can provide reference images to guide the generation.",
     icon: "M12 4.5v15m7.5-7.5h-15", // Plus icon
     parameters: [
       {
@@ -36,7 +46,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "enhance_drawing",
     title: "Enhance Line Drawing",
     description: "Improve old, low-res line drawings",
-    icon: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z",
+    icon: "M3 18c4-8 8-8 18-12 M3 18h4 M17 6h4",
     parameters: [
       {
         name: "styleId",
@@ -70,8 +80,9 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "change_text",
     title: "Change Text",
-    description: "Replace specific text in the image.",
-    icon: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+    description:
+      "Replace specific text in the image. Use this to localize images that contain text.",
+    icon: "M4 18l4-12 4 12 M5.2 14h5.6 M16 6h6 M16 12h6 M19 6v12",
     parameters: [
       {
         name: "match",
@@ -93,8 +104,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "change_style",
     title: "Change Style",
-    description: "Restyle the selected image with a curated art direction.",
-    icon: "M12 20l9-16M5 15h7",
+    description: "Restyle the selected image.",
+    icon: "M3 21l10-10M11 7l3 3M15 4l5 5M17 2v4M21 4h-4",
     parameters: [
       {
         name: "styleId",
@@ -117,7 +128,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "stylized_title",
     title: "Add Stylized Title",
-    description: "Add a stylized title overlay that matches the illustration.",
+    description:
+      "Add a stylized title overlay that fits well the illustration.",
     icon: "M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z M12 2h3.5a3.5 3.5 0 0 1 3.5 3.5v11.5A3.5 3.5 0 0 1 15.5 22H12V2z",
     parameters: [
       {
@@ -142,23 +154,15 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "ethnicity",
     title: "Change Ethnicity",
-    description: "Modify character ethnicity/style.",
+    description: "Modify character ethnicity.",
     icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
     parameters: [
       {
         name: "ethnicity",
-        label: "Ethnicity/Style",
+        label: "Ethnicity",
         type: "select",
-        options: [
-          "Asian",
-          "Black",
-          "Hispanic",
-          "Caucasian",
-          "Middle Eastern",
-          "South Asian",
-          "Indigenous",
-        ],
-        defaultValue: "Asian",
+        options: ETHNICITY_OPTIONS,
+        defaultValue: DEFAULT_ETHNICITY_OPTION,
       },
       {
         name: "character",
@@ -168,17 +172,30 @@ export const TOOLS: ToolDefinition[] = [
         optional: true,
       },
     ],
-    promptTemplate: (params) =>
-      `Change the ethnicity of ${params.character || "the main character"} to ${
-        params.ethnicity
-      }. Maintain the pose, clothing, and art style.`,
+    promptTemplate: (params) => {
+      const character = params.character?.trim() || "the main character";
+      const selectedEthnicity =
+        getEthnicityByValue(params.ethnicity) ??
+        ETHNICITY_CATEGORIES[0] ??
+        null;
+      const label =
+        selectedEthnicity?.label ||
+        params.ethnicity?.trim() ||
+        "the requested ethnicity";
+      const description = selectedEthnicity?.description?.trim();
+      const ethnicityDetails = description
+        ? `${label}. Appearance cues: ${description}`
+        : label;
+
+      return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style.  Do not put the people traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
+    },
     referenceImages: "0",
   },
   {
     id: "custom",
     title: "Custom Edit",
     description: "Edit the image, optionally with additional reference images.",
-    icon: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z M12 6v6l4 2",
+    icon: "M4 4h8l2 2h6v14H4z M9 13l3 3 4-4",
     parameters: [
       {
         name: "prompt",

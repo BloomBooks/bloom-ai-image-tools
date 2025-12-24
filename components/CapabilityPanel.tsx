@@ -2,6 +2,7 @@ import React from "react";
 import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
 import type { CapabilityName, ModelInfo, ToolCapabilities } from "../types";
+import { formatCapabilityLabel } from "../lib/formatters";
 
 interface CapabilityPanelProps {
   capabilities?: ToolCapabilities;
@@ -13,13 +14,6 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
   selectedModel,
 }) => {
   if (!capabilities || !Object.values(capabilities).some(Boolean)) return null;
-
-  const formatCapabilityLabel = (name: CapabilityName) =>
-    name
-      .split("-")
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
 
   const getModelCapabilityScore = (capability: CapabilityName) => {
     const raw = selectedModel?.capabilities?.[capability];

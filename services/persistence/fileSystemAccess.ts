@@ -27,6 +27,32 @@ type PermissionDescriptor = {
 
 const rwDescriptor: PermissionDescriptor = { mode: "readwrite" };
 
+type PermissionQueryHandle = FileSystemDirectoryHandle & {
+  queryPermission: (
+    descriptor?: PermissionDescriptor
+  ) => Promise<PermissionState>;
+};
+
+type PermissionRequestHandle = FileSystemDirectoryHandle & {
+  requestPermission: (
+    descriptor?: PermissionDescriptor
+  ) => Promise<PermissionState>;
+};
+
+const supportsPermissionQuery = (
+  handle: FileSystemDirectoryHandle
+): handle is PermissionQueryHandle => {
+  return typeof (handle as PermissionQueryHandle).queryPermission === "function";
+};
+
+const supportsPermissionRequest = (
+  handle: FileSystemDirectoryHandle
+): handle is PermissionRequestHandle => {
+  return (
+    typeof (handle as PermissionRequestHandle).requestPermission === "function"
+  );
+};
+
 let handleStore: ReturnType<typeof createStore> | null = null;
 const resolveHandleStore = () => {
   if (typeof window === "undefined") {
@@ -60,7 +86,7 @@ const isNotFoundError = (error: unknown) => {
 const hasReadWritePermission = async (
   handle: FileSystemDirectoryHandle
 ) => {
-  if (!handle.queryPermission) {
+  if (!supportsPermissionQuery(handle)) {
     return true;
   }
   try {
@@ -75,7 +101,7 @@ const hasReadWritePermission = async (
 const requestReadWritePermission = async (
   handle: FileSystemDirectoryHandle
 ) => {
-  if (!handle.requestPermission) {
+  if (!supportsPermissionRequest(handle)) {
     return true;
   }
   try {

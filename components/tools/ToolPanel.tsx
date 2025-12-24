@@ -11,6 +11,10 @@ import { CapabilityPanel } from "../CapabilityPanel";
 import { theme } from "../../themes";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
+import {
+  getReferenceConstraints,
+  toolRequiresEditImage,
+} from "../../lib/toolHelpers";
 
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
@@ -27,12 +31,6 @@ interface ToolPanelProps {
   selectedArtStyleId: string | null;
   onArtStyleChange: (styleId: string) => void;
 }
-
-const requiresAtLeastOneReference = (tool: ToolDefinition) =>
-  tool.referenceImages === "1" || tool.referenceImages === "1+";
-
-const requiresEditImage = (tool: ToolDefinition) => tool.editImage !== false;
-
 export const ToolPanel: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
@@ -237,9 +235,12 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
         {TOOLS.map((tool) => {
           const isActive = resolvedActiveToolId === tool.id;
+          const referenceConstraints = getReferenceConstraints(
+            tool.referenceImages
+          );
           const needsReference =
-            requiresAtLeastOneReference(tool) && referenceImageCount === 0;
-          const needsTarget = requiresEditImage(tool) && !hasTargetImage;
+            referenceConstraints.min > referenceImageCount;
+          const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
           // Tools can always be selected, but authentication is still required
           const isDisabled = !isAuthenticated;
           const disabledReason = !isAuthenticated

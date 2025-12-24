@@ -42,11 +42,14 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     if (!isOpen || !normalizedSelectedId) return;
     const container = scrollAreaRef.current;
     if (!container) return;
-    const selectedButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("[data-style-id]")
-    ).find((element) => element.dataset.styleId === normalizedSelectedId);
-    if (selectedButton) {
-      selectedButton.scrollIntoView({ behavior: "smooth", block: "center" });
+    const buttons = container.querySelectorAll<HTMLButtonElement>(
+      "[data-style-id]"
+    );
+    for (const button of buttons) {
+      if (button.dataset.styleId === normalizedSelectedId) {
+        button.scrollIntoView({ behavior: "smooth", block: "center" });
+        break;
+      }
     }
   }, [isOpen, normalizedSelectedId]);
 

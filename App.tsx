@@ -56,103 +56,21 @@ import {
   supportsFileSystemAccess,
   writeImageFile,
 } from "./services/persistence/fileSystemAccess";
-import { isClearArtStyleId } from "./lib/artStyles";
+import {
+  isClearArtStyleId,
+  getStyleIdFromParams,
+  getStyleIdFromHistoryItem,
+} from "./lib/artStyles";
+import {
+  getImageDimensions,
+  getMimeTypeFromUrl,
+  prepareImageBlob,
+} from "./lib/imageUtils";
+import { getReferenceConstraints, getToolReferenceMode } from "./lib/toolHelpers";
+import { formatCreditsValue, formatSourceSummary } from "./lib/formatters";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
-
-// Helper to extract image dimensions from a data URL
-const getImageDimensions = (
-  dataUrl: string
-): Promise<{ width: number; height: number }> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = () => {
-      resolve({ width: 0, height: 0 });
-    };
-    img.src = dataUrl;
-  });
-};
-
-const getDataUrlMime = (dataUrl: string | null | undefined): string | null => {
-  if (!dataUrl) return null;
-  const match = dataUrl.match(/^data:(image\/[^;]+);/i);
-  return match ? match[1].toLowerCase() : null;
-};
-
-const formatCreditsValue = (value: number | null | undefined): string => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "--";
-  }
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-};
-
-const formatSourceSummary = (
-  editImageCount: number,
-  referenceImageCount: number
-): string | null => {
-  const normalizedEdit = Math.max(0, editImageCount);
-  const normalizedReference = Math.max(0, referenceImageCount);
-  const parts: string[] = [];
-
-  if (normalizedEdit > 0) {
-    const label = normalizedEdit === 1 ? "image" : "images";
-    parts.push(`${normalizedEdit} ${label} to edit`);
-  }
-
-  if (normalizedReference > 0) {
-    const label = normalizedReference === 1 ? "reference image" : "reference images";
-    parts.push(`${normalizedReference} ${label}`);
-  }
-
-  if (!parts.length) {
-    return null;
-  }
-
-  if (parts.length === 1) {
-    return `Included ${parts[0]}.`;
-  }
-
-  const summary = `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return `Included ${summary}.`;
-};
-
-const STYLE_PARAM_KEY = "styleId";
-
-const normalizeStyleIdValue = (value?: string | null): string | null => {
-  if (!value || isClearArtStyleId(value)) {
-    return null;
-  }
-  return value;
-};
-
-const getStyleIdFromParams = (
-  params?: Record<string, string>
-): string | null => {
-  if (!params) return null;
-  const hasKey = Object.prototype.hasOwnProperty.call(params, STYLE_PARAM_KEY);
-  if (!hasKey) {
-    return null;
-  }
-  const raw = (params as Record<string, string | undefined>)[STYLE_PARAM_KEY];
-  return normalizeStyleIdValue(raw ?? null);
-};
-
-const getStyleIdFromHistoryItem = (
-  item?: HistoryItem | null
-): string | null => {
-  if (!item) return null;
-  return (
-    normalizeStyleIdValue(item.sourceStyleId ?? null) ||
-    getStyleIdFromParams(item.parameters)
-  );
-};
 
 // Only use the E2E test key - this should only be set during Playwright tests
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
@@ -321,7 +239,7 @@ export default function App() {
         return item;
       }
       try {
-        const mime = getDataUrlMime(item.imageData) ?? "image/png";
+        const mime = getMimeTypeFromUrl(item.imageData) ?? "image/png";
         const fileName = item.imageFileName
           ? item.imageFileName
           : deriveImageFileName(item.id, mime);
@@ -415,26 +333,6 @@ export default function App() {
     setFsSupported(supportsFileSystemAccess());
   }, []);
 
-  const getReferenceConstraints = (
-    mode: "0" | "0+" | "1" | "1+"
-  ): { min: number; max: number } => {
-    switch (mode) {
-      case "0":
-        return { min: 0, max: 0 };
-      case "0+":
-        return { min: 0, max: Number.POSITIVE_INFINITY };
-      case "1":
-        return { min: 1, max: 1 };
-      case "1+":
-        return { min: 1, max: Number.POSITIVE_INFINITY };
-    }
-  };
-
-  const getToolReferenceMode = (toolId: string | null) => {
-    const tool = toolId ? TOOLS.find((t) => t.id === toolId) : null;
-    return tool?.referenceImages ?? "0";
-  };
-
   const refreshCredits = useCallback(async () => {
     if (creditsRequestAbortControllerRef.current) {
       creditsRequestAbortControllerRef.current.abort();
@@ -519,7 +417,9 @@ export default function App() {
       if (cancelled) {
         return;
       }
-      const updateMap = new Map(updatedItems.map((item) => [item.id, item]));
+      const updateMap = new Map<string, HistoryItem>(
+        updatedItems.map((item) => [item.id, item])
+      );
       setState((prev) => {
         let changed = false;
         const nextHistory = prev.history.map((item) => {
@@ -1004,15 +904,13 @@ export default function App() {
   );
 
   const handleUpload = useCallback(
-    (file: File, targetPanel: "target" | "right") => {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = ev.target?.result as string;
-        const resolution = await getImageDimensions(base64);
+    async (file: File, targetPanel: "target" | "right") => {
+      try {
+        const { dataUrl, dimensions } = await prepareImageBlob(file);
         let newItem: HistoryItem = {
           id: uuid(),
           parentId: null,
-          imageData: base64,
+          imageData: dataUrl,
           toolId: "original",
           parameters: {},
           sourceStyleId: null,
@@ -1021,7 +919,7 @@ export default function App() {
           model: "",
           timestamp: Date.now(),
           promptUsed: "Original Upload",
-          resolution,
+          resolution: dimensions,
         };
 
         if (fsBinding) {
@@ -1040,18 +938,27 @@ export default function App() {
           rightPanelImageId:
             targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
         }));
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Failed to load image", error);
+        setState((prev) => ({
+          ...prev,
+          error: "Could not load image. Please try again.",
+        }));
+      }
     },
     [fsBinding, persistHistoryImage]
   );
 
   const handleUploadTarget = useCallback(
-    (file: File) => handleUpload(file, "target"),
+    (file: File) => {
+      void handleUpload(file, "target");
+    },
     [handleUpload]
   );
   const handleUploadRight = useCallback(
-    (file: File) => handleUpload(file, "right"),
+    (file: File) => {
+      void handleUpload(file, "right");
+    },
     [handleUpload]
   );
 
@@ -1070,22 +977,19 @@ export default function App() {
   }, []);
 
   const handleUploadReference = useCallback(
-    (file: File, slotIndex?: number) => {
+    async (file: File, slotIndex?: number) => {
       const mode = getToolReferenceMode(activeToolId);
       const { max } = getReferenceConstraints(mode);
 
-      // If the active tool doesn't accept references, ignore.
       if (max === 0) return;
 
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = ev.target?.result as string;
-        const resolution = await getImageDimensions(base64);
+      try {
+        const { dataUrl, dimensions } = await prepareImageBlob(file);
 
         let newItem: HistoryItem = {
           id: uuid(),
           parentId: null,
-          imageData: base64,
+          imageData: dataUrl,
           toolId: "original",
           parameters: {},
           sourceStyleId: null,
@@ -1094,7 +998,7 @@ export default function App() {
           model: "",
           timestamp: Date.now(),
           promptUsed: "Original Upload",
-          resolution,
+          resolution: dimensions,
         };
 
         if (fsBinding) {
@@ -1121,8 +1025,13 @@ export default function App() {
             referenceImageIds: nextIds.slice(0, max),
           };
         });
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Failed to load reference image", error);
+        setState((prev) => ({
+          ...prev,
+          error: "Could not load reference image. Please try again.",
+        }));
+      }
     },
     [activeToolId, fsBinding, persistHistoryImage]
   );

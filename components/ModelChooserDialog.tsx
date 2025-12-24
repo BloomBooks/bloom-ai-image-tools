@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { theme } from "../themes";
 import type { ModelInfo } from "../types";
+import { isMacPlatform } from "../lib/platformUtils";
 
 interface ModelChooserDialogProps {
   isOpen: boolean;
@@ -35,10 +36,6 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
       setPendingModelId(selectedModelId);
     }
   }, [isOpen, selectedModelId]);
-
-  const isMacPlatform =
-    typeof navigator !== "undefined" &&
-    /mac/i.test(navigator.userAgent || navigator.platform || "");
 
   const handleConfirm = () => {
     if (!pendingModelId) return;
@@ -79,7 +76,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
       </button>
     );
 
-    return isMacPlatform
+    return isMacPlatform()
       ? [cancelButton, confirmButton]
       : [confirmButton, cancelButton];
   })();

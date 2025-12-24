@@ -1,11 +1,51 @@
 import JSON5 from "json5";
-import type { ArtStyle, ArtStyleDefinition } from "../types";
+import type { ArtStyle, ArtStyleDefinition, HistoryItem } from "../types";
 import artStyleCatalog from "../components/artStyle/art-styles.json5?raw";
 
 export const CLEAR_ART_STYLE_ID = "none";
+export const STYLE_PARAM_KEY = "styleId";
 
 const isClearingStyleId = (id?: string | null): boolean =>
   !id?.length || id === CLEAR_ART_STYLE_ID;
+
+/**
+ * Normalizes a style ID value. Returns null for empty or "none" values.
+ */
+export const normalizeStyleIdValue = (value?: string | null): string | null => {
+  if (!value || isClearingStyleId(value)) {
+    return null;
+  }
+  return value;
+};
+
+/**
+ * Extracts the style ID from a tool parameters object.
+ */
+export const getStyleIdFromParams = (
+  params?: Record<string, string>
+): string | null => {
+  if (!params) return null;
+  const hasKey = Object.prototype.hasOwnProperty.call(params, STYLE_PARAM_KEY);
+  if (!hasKey) {
+    return null;
+  }
+  const raw = (params as Record<string, string | undefined>)[STYLE_PARAM_KEY];
+  return normalizeStyleIdValue(raw ?? null);
+};
+
+/**
+ * Extracts the effective style ID from a HistoryItem.
+ * Checks sourceStyleId first, then falls back to parameters.
+ */
+export const getStyleIdFromHistoryItem = (
+  item?: HistoryItem | null
+): string | null => {
+  if (!item) return null;
+  return (
+    normalizeStyleIdValue(item.sourceStyleId ?? null) ||
+    getStyleIdFromParams(item.parameters)
+  );
+};
 
 const parseCatalog = (): ArtStyleDefinition[] => {
   try {

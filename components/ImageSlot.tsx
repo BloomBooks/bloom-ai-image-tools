@@ -1,10 +1,4 @@
 import React from "react";
-import {
-  convertBlobToPng,
-  copyBlobToClipboard,
-  getBlobFromImageSource,
-  isPngBlob,
-} from "copy-image-clipboard";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { MagnifiableImage } from "./MagnifiableImage";
@@ -20,6 +14,17 @@ import {
   hasInternalImageDragData,
   setInternalImageDragData,
 } from "./dragConstants";
+import {
+  getTypeFromFileName,
+  getTypeFromMime,
+  handleCopy as copyImageToClipboard,
+  handlePaste as pasteImageFromClipboard,
+} from "../lib/clipboardUtils";
+import { getImageDimensions, getMimeTypeFromUrl } from "../lib/imageUtils";
+import {
+  hasImageFilePayload,
+  getImageFileFromDataTransfer,
+} from "../lib/dragUtils";
 
 export type ImageSlotControls = {
   upload?: boolean;
@@ -92,62 +97,6 @@ const getArtStyleIdForImage = (item?: HistoryItem | null): string | null => {
   return null;
 };
 
-const hasImageFilePayload = (dataTransfer: DataTransfer | null): boolean => {
-  if (!dataTransfer) return false;
-
-  if (dataTransfer.items && dataTransfer.items.length > 0) {
-    for (let i = 0; i < dataTransfer.items.length; i += 1) {
-      const item = dataTransfer.items[i];
-      if (!item || item.kind !== "file") continue;
-      if (!item.type || item.type.startsWith("image/")) {
-        return true;
-      }
-    }
-  }
-
-  if (dataTransfer.files && dataTransfer.files.length > 0) {
-    for (let i = 0; i < dataTransfer.files.length; i += 1) {
-      const file = dataTransfer.files[i];
-      if (!file) continue;
-      if (!file.type || file.type.startsWith("image/")) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-};
-
-const getImageFileFromDataTransfer = (
-  dataTransfer: DataTransfer | null
-): File | null => {
-  if (!dataTransfer) return null;
-
-  if (dataTransfer.items && dataTransfer.items.length > 0) {
-    for (let i = 0; i < dataTransfer.items.length; i += 1) {
-      const item = dataTransfer.items[i];
-      if (!item || item.kind !== "file") continue;
-      if (item.type && !item.type.startsWith("image/")) continue;
-      const file = item.getAsFile();
-      if (file) {
-        return file;
-      }
-    }
-  }
-
-  if (dataTransfer.files && dataTransfer.files.length > 0) {
-    for (let i = 0; i < dataTransfer.files.length; i += 1) {
-      const file = dataTransfer.files[i];
-      if (!file) continue;
-      if (!file.type || file.type.startsWith("image/")) {
-        return file;
-      }
-    }
-  }
-
-  return null;
-};
-
 export const ImageSlot: React.FC<ImageSlotProps> = ({
   label,
   image,
@@ -194,78 +143,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     remove: controls?.remove ?? true,
   };
 
-  const getDataUrlMimeType = (dataUrl: string | null | undefined) => {
-    if (!dataUrl) return null;
-    const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
-    return match ? match[1].toLowerCase() : null;
-  };
-
-  const getTypeFromFileName = (fileName: string | null | undefined) => {
-    if (!fileName) return null;
-    const ext = fileName.split(".").pop()?.toLowerCase();
-    if (!ext) return null;
-    switch (ext) {
-      case "jpg":
-      case "jpeg":
-        return "jpeg";
-      default:
-        return ext;
-    }
-  };
-
-  const getBlobFromDataUrl = async (dataUrl: string) => {
-    const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/i);
-    if (!match) {
-      throw new Error("Invalid data URL");
-    }
-
-    const [, mime = "application/octet-stream", base64Indicator, dataPart] =
-      match;
-
-    if (base64Indicator) {
-      const cleaned = dataPart.replace(/\s+/g, "");
-      const binary = atob(cleaned);
-      const length = binary.length;
-      const bytes = new Uint8Array(length);
-      for (let i = 0; i < length; i += 1) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return new Blob([bytes], { type: mime || "application/octet-stream" });
-    }
-
-    const decoded = decodeURIComponent(dataPart);
-    return new Blob([decoded], { type: mime || "application/octet-stream" });
-  };
-
-  const getTypeFromMime = (mime: string | null) => {
-    if (!mime) return null;
-    const lowered = mime.toLowerCase().replace("image/", "");
-    if (lowered === "jpg" || lowered === "pjpeg") {
-      return "jpeg";
-    }
-    if (lowered === "x-png") {
-      return "png";
-    }
-    return lowered;
-  };
-
-  const getNormalizedImageBlob = async (dataUrl: string) => {
-    const blobFromSource = await (dataUrl.startsWith("data:")
-      ? getBlobFromDataUrl(dataUrl)
-      : getBlobFromImageSource(dataUrl));
-    const type =
-      getTypeFromMime(blobFromSource.type) ||
-      getTypeFromMime(getDataUrlMimeType(dataUrl)) ||
-      "png";
-
-    if (blobFromSource.type === type) {
-      return blobFromSource;
-    }
-
-    const buffer = await blobFromSource.arrayBuffer();
-    return new Blob([buffer], { type: type });
-  };
-
   React.useEffect(() => {
     if (!image) {
       setImageMetadata(null);
@@ -273,7 +150,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
 
     const normalizedMime =
-      getTypeFromMime(getDataUrlMimeType(image.imageData)) ||
+      getTypeFromMime(getMimeTypeFromUrl(image.imageData)) ||
       getTypeFromMime(getTypeFromFileName(image.imageFileName)) ||
       null;
 
@@ -291,116 +168,24 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       return;
     }
 
-    if (typeof Image === "undefined") {
-      updateMetadata(null, null);
-      return;
-    }
-
     let isCancelled = false;
-    const loader = new Image();
-    loader.onload = () => {
-      if (isCancelled) return;
-      updateMetadata(loader.naturalWidth, loader.naturalHeight);
-    };
-    loader.onerror = () => {
-      if (isCancelled) return;
-      updateMetadata(null, null);
-    };
-    loader.src = image.imageData;
+    (async () => {
+      try {
+        const { width, height } = await getImageDimensions(image.imageData);
+        if (!isCancelled) {
+          updateMetadata(width, height);
+        }
+      } catch {
+        if (!isCancelled) {
+          updateMetadata(null, null);
+        }
+      }
+    })();
 
     return () => {
       isCancelled = true;
     };
   }, [image]);
-
-  const clipboardSupportsMime = (mime: string) => {
-    if (typeof ClipboardItem === "undefined") return true;
-    if (typeof ClipboardItem.supports === "function") {
-      try {
-        return ClipboardItem.supports(mime);
-      } catch (err) {
-        console.warn("Unable to query ClipboardItem support:", err);
-      }
-    }
-    return true;
-  };
-
-  const shouldRetryWithPng = (error: unknown) => {
-    if (typeof error !== "object" || error === null) return false;
-    const message = String((error as { message?: string }).message || "");
-    return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(
-      message
-    );
-  };
-
-  const convertBlobToPngWithFallback = async (blob: Blob) => {
-    if (isPngBlob(blob)) {
-      return blob;
-    }
-
-    if (
-      typeof window !== "undefined" &&
-      typeof window.createImageBitmap === "function"
-    ) {
-      try {
-        const bitmap = await window.createImageBitmap(blob);
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          const context = canvas.getContext("2d");
-          if (!context) {
-            throw new Error("Canvas context unavailable for PNG conversion");
-          }
-          context.drawImage(bitmap, 0, 0);
-          const pngBlob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob(
-              (result) =>
-                result
-                  ? resolve(result)
-                  : reject(new Error("Canvas toBlob() returned null")),
-              "image/png"
-            );
-          });
-          return pngBlob;
-        } finally {
-          if (typeof bitmap.close === "function") {
-            bitmap.close();
-          }
-        }
-      } catch (error) {
-        console.warn(
-          "Bitmap-based PNG conversion failed, retrying with default method:",
-          error
-        );
-      }
-    }
-
-    return convertBlobToPng(blob);
-  };
-
-  const copyWithFallbackIfNeeded = async (blob: Blob) => {
-    const mime = blob.type || "image/png";
-    const canUseOriginal = clipboardSupportsMime(mime);
-
-    if (canUseOriginal) {
-      try {
-        await copyBlobToClipboard(blob);
-        return;
-      } catch (error) {
-        if (!shouldRetryWithPng(error)) {
-          throw error;
-        }
-      }
-    } else {
-      console.info(
-        `Clipboard does not support ${mime}, attempting PNG fallback.`
-      );
-    }
-
-    const pngBlob = await convertBlobToPngWithFallback(blob);
-    await copyBlobToClipboard(pngBlob);
-  };
 
   const openFilePicker = () => {
     if (!onUpload || disabled) return;
@@ -424,19 +209,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!mergedControls.paste || !onUpload || disabled) return;
 
     try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find((type) => type.startsWith("image/"));
-        if (!imageType) continue;
-
-        const blob = await item.getType(imageType);
-        const extension = imageType.split("/")[1] || "png";
-        const file = new File([blob], `pasted.${extension}`, {
-          type: imageType,
-        });
-        handleUpload(file);
-        return;
-      }
+      await pasteImageFromClipboard(handleUpload);
     } catch (err) {
       console.error("Failed to paste:", err);
     }
@@ -446,8 +219,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!image || !mergedControls.copy) return;
 
     try {
-      const normalizedBlob = await getNormalizedImageBlob(image.imageData);
-      await copyWithFallbackIfNeeded(normalizedBlob);
+      await copyImageToClipboard(image.imageData);
     } catch (err) {
       console.error("Failed to copy image:", err);
     }

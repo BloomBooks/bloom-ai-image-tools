@@ -119,6 +119,7 @@ export interface PersistedImageToolsState {
   auth: AuthState;
   /** When true, the persisted history array is ordered newest -> oldest. */
   historyNewestFirst?: boolean;
+  selectedArtStyleId?: string | null;
 }
 
 export interface ImageToolsStatePersistence {

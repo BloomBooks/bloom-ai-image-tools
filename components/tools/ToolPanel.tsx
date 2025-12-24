@@ -24,6 +24,8 @@ interface ToolPanelProps {
   activeToolId: string | null;
   paramsByTool: ToolParamsById;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
+  selectedArtStyleId: string | null;
+  onArtStyleChange: (styleId: string) => void;
 }
 
 const requiresAtLeastOneReference = (tool: ToolDefinition) =>
@@ -43,6 +45,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   activeToolId,
   paramsByTool,
   onParamChange,
+  selectedArtStyleId,
+  onArtStyleChange,
 }) => {
   const resolvedActiveToolId = activeToolId ?? TOOLS[0]?.id ?? null;
 
@@ -58,7 +62,27 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
     const toolParams = paramsByTool[tool.id] || {};
     return tool.parameters.some((param) => {
-      if (param.optional) return false;
+      if (param.optional) {
+        return false;
+      }
+      if (param.type === "art-style") {
+        const stylesForPicker = getArtStylesByCategories(
+          param.artStyleCategories,
+          { excludeNone: param.excludeNoneStyle }
+        );
+        const candidate =
+          selectedArtStyleId ??
+          toolParams[param.name] ??
+          param.defaultValue ??
+          "";
+        if (!candidate.trim()) {
+          return true;
+        }
+        const hasMatch = stylesForPicker.some(
+          (style) => style.id === candidate
+        );
+        return !hasMatch;
+      }
       return !toolParams[param.name]?.trim();
     });
   };
@@ -69,13 +93,25 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   ) => {
     event.preventDefault();
     if (isProcessing) return;
-    const payload = paramsByTool[tool.id] || {};
+    const payload: Record<string, string> = {
+      ...(paramsByTool[tool.id] || {}),
+    };
+
+    tool.parameters.forEach((param) => {
+      if (param.type === "art-style") {
+        const styleValue =
+          selectedArtStyleId ??
+          payload[param.name] ??
+          param.defaultValue ??
+          "";
+        payload[param.name] = styleValue;
+      }
+    });
+
     onApplyTool(tool.id, payload);
   };
 
   const renderParameterField = (tool: ToolDefinition, param: ToolParameter) => {
-    const value = paramsByTool[tool.id]?.[param.name] ?? "";
-
     const label = (
       <label
         className="block text-xs font-semibold mb-1.5 uppercase tracking-wider"
@@ -84,6 +120,38 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
         {param.label}
       </label>
     );
+
+    if (param.type === "art-style") {
+      const storedValue = paramsByTool[tool.id]?.[param.name] ?? "";
+      const stylesForPicker = getArtStylesByCategories(
+        param.artStyleCategories,
+        { excludeNone: param.excludeNoneStyle }
+      );
+      const pickerValue =
+        selectedArtStyleId ??
+        (storedValue || param.defaultValue || "");
+
+      return (
+        <div key={param.name}>
+          {label}
+          <ArtStylePicker
+            styles={stylesForPicker}
+            value={pickerValue}
+            onChange={(next) => {
+              onArtStyleChange(next);
+            }}
+            disabled={
+              isProcessing ||
+              stylesForPicker.length === 0 ||
+              ART_STYLES.length === 0
+            }
+            data-testid={`input-${param.name}`}
+          />
+        </div>
+      );
+    }
+
+    const value = paramsByTool[tool.id]?.[param.name] ?? "";
 
     if (param.type === "textarea") {
       return (
@@ -131,29 +199,6 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
               </option>
             ))}
           </select>
-        </div>
-      );
-    }
-
-    if (param.type === "art-style") {
-      const stylesForPicker = getArtStylesByCategories(
-        param.artStyleCategories,
-        { excludeNone: param.excludeNoneStyle }
-      );
-      return (
-        <div key={param.name}>
-          {label}
-          <ArtStylePicker
-            styles={stylesForPicker}
-            value={value}
-            onChange={(next) => handleParamChange(tool.id, param.name, next)}
-            disabled={
-              isProcessing ||
-              stylesForPicker.length === 0 ||
-              ART_STYLES.length === 0
-            }
-            data-testid={`input-${param.name}`}
-          />
         </div>
       );
     }

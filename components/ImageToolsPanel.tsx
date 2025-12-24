@@ -17,10 +17,12 @@ interface ImageToolsPanelProps {
   historyItems: HistoryItem[];
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
+  selectedArtStyleId: string | null;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
+  onArtStyleChange: (styleId: string) => void;
   onSetTarget: (id: string) => void;
   onSetReferenceAt: (index: number, id: string) => void;
   onSetRight: (id: string) => void;
@@ -46,10 +48,12 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
   historyItems,
   hasHiddenHistory,
   onRequestHistoryAccess,
+  selectedArtStyleId,
   onApplyTool,
   onCancelProcessing,
   onToolSelect,
   onParamChange,
+  onArtStyleChange,
   onSetTarget,
   onSetReferenceAt,
   onSetRight,
@@ -110,6 +114,8 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
           activeToolId={activeToolId}
           paramsByTool={toolParams}
           onParamChange={onParamChange}
+          selectedArtStyleId={selectedArtStyleId}
+          onArtStyleChange={onArtStyleChange}
         />
 
         <div className="flex-1 flex flex-col min-w-0">

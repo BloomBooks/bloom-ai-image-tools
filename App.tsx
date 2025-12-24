@@ -259,6 +259,9 @@ export default function App() {
   const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
     createToolParamDefaults()
   );
+  const [selectedArtStyleId, setSelectedArtStyleId] = useState<string | null>(
+    null
+  );
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -354,6 +357,57 @@ export default function App() {
       await deleteImageFile(fsBinding, item.imageFileName);
     },
     [fsBinding]
+  );
+
+  const updateAllArtStyleParams = useCallback(
+    (styleId: string) => {
+      setParamsByTool((prev) => {
+        let mutated = false;
+        const next: ToolParamsById = { ...prev };
+
+        TOOLS.forEach((tool) => {
+          const artStyleParams = tool.parameters.filter(
+            (param) => param.type === "art-style"
+          );
+          if (!artStyleParams.length) {
+            return;
+          }
+
+          const currentParams = prev[tool.id] || {};
+          const updatedParams = { ...currentParams };
+          let toolChanged = false;
+
+          artStyleParams.forEach((param) => {
+            if (updatedParams[param.name] !== styleId) {
+              updatedParams[param.name] = styleId;
+              toolChanged = true;
+            }
+          });
+
+          const hadEntry = Object.prototype.hasOwnProperty.call(prev, tool.id);
+          if (toolChanged || !hadEntry) {
+            next[tool.id] = updatedParams;
+            mutated = true;
+          }
+        });
+
+        return mutated ? next : prev;
+      });
+    },
+    [setParamsByTool]
+  );
+
+  const handleArtStyleChange = useCallback(
+    (styleId: string) => {
+      const normalized = styleId.trim();
+      if (!normalized.length) {
+        setSelectedArtStyleId(null);
+        return;
+      }
+      setSelectedArtStyleId(normalized);
+      updateAllArtStyleParams(normalized);
+    },
+    [updateAllArtStyleParams]
   );
 
   useEffect(() => {
@@ -513,14 +567,38 @@ export default function App() {
 
         if (persisted) {
           const sanitized = sanitizePersistedAppState(persisted.appState);
+          if (cancelled) return;
           setState((prev) => ({
             ...prev,
             ...sanitized,
             isProcessing: false,
             error: null,
           }));
-          setParamsByTool(mergeParamsWithDefaults(persisted.paramsByTool));
+
+          const mergedParams = mergeParamsWithDefaults(persisted.paramsByTool);
+          if (cancelled) return;
+          setParamsByTool(mergedParams);
           setActiveToolId(persisted.activeToolId ?? null);
+
+          const persistedStyleId =
+            typeof persisted.selectedArtStyleId === "string" &&
+            persisted.selectedArtStyleId.trim().length
+              ? persisted.selectedArtStyleId
+              : null;
+
+          if (!cancelled) {
+            const fallbackStyleId =
+              Object.values(mergedParams)
+                .map((params) => getStyleIdFromParams(params))
+                .find((styleId): styleId is string => Boolean(styleId)) ||
+              null;
+            const resolvedStyleId = persistedStyleId || fallbackStyleId;
+            if (resolvedStyleId) {
+              setSelectedArtStyleId(resolvedStyleId);
+              updateAllArtStyleParams(resolvedStyleId);
+            }
+          }
+
           if (
             persisted.selectedModelId &&
             MODEL_CATALOG.some(
@@ -546,7 +624,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [persistence, envApiKey]);
+  }, [persistence, envApiKey, updateAllArtStyleParams]);
 
   useEffect(() => {
     if (!isHydrated || apiKey || typeof window === "undefined") {
@@ -593,6 +671,7 @@ export default function App() {
       paramsByTool,
       activeToolId,
       selectedModelId: selectedModelId || null,
+      selectedArtStyleId: selectedArtStyleId ?? null,
       auth: {
         apiKey,
         authMethod,
@@ -607,6 +686,7 @@ export default function App() {
     paramsByTool,
     activeToolId,
     selectedModelId,
+    selectedArtStyleId,
     apiKey,
     authMethod,
   ]);
@@ -1382,6 +1462,8 @@ export default function App() {
         onCancelProcessing={handleCancelProcessing}
         onToolSelect={handleToolSelectWithConstraints}
         onParamChange={handleParamChange}
+        selectedArtStyleId={selectedArtStyleId}
+        onArtStyleChange={handleArtStyleChange}
         onSetTarget={handleSetTargetImage}
         onSetReferenceAt={handleSetReferenceAt}
         onSetRight={handleSetRightPanel}

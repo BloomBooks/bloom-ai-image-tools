@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import { HistoryItem } from "../types";
-import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
@@ -19,7 +18,6 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
   onDragStart,
   onRemove,
 }) => {
-  const tool = TOOLS.find((t) => t.id === item.toolId);
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -51,8 +49,8 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className="
-          relative group flex-shrink-0 w-32 cursor-pointer transition-all duration-200
-          hover:scale-105 opacity-70 hover:opacity-100
+          relative group flex-shrink-0 w-28 cursor-pointer transition-opacity duration-200
+          opacity-80 hover:opacity-100
         "
       >
         {/* Thumbnail Container */}
@@ -88,19 +86,6 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
           >
             <Icon path={Icons.X} className="w-3 h-3" />
           </button>
-
-          {/* Tool Icon Overlay */}
-          {tool && (
-            <div
-              className="absolute bottom-1 right-1 backdrop-blur-sm p-1 rounded"
-              style={{
-                backgroundColor: theme.colors.overlay,
-                color: theme.colors.textPrimary,
-              }}
-            >
-              <Icon path={tool.icon} className="w-3 h-3" />
-            </div>
-          )}
         </div>
       </div>
 

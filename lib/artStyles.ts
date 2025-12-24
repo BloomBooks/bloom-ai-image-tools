@@ -117,22 +117,38 @@ const normalizeCategoryFilter = (categories?: string | string[]): string[] => {
     .filter((value): value is string => Boolean(value?.length));
 };
 
+export interface ArtStyleFilterOptions {
+  categories?: string | string[];
+  excludeNone?: boolean;
+}
+
 export const getArtStylesByCategories = (
-  categories?: string | string[]
+  categories?: string | string[],
+  options?: { excludeNone?: boolean }
 ): ArtStyle[] => {
+  const excludeNone = options?.excludeNone ?? false;
   const normalized = normalizeCategoryFilter(categories);
+
+  let result: ArtStyle[];
+
   if (!normalized.length) {
-    return includeClearStyle(ART_STYLES.slice());
+    result = ART_STYLES.slice();
+  } else {
+    result = ART_STYLES.filter((style) => {
+      const styleCategories = style.categories ?? [];
+      return styleCategories.some((category) =>
+        normalized.includes(category.toLowerCase())
+      );
+    });
   }
 
-  const filtered = ART_STYLES.filter((style) => {
-    const styleCategories = style.categories ?? [];
-    return styleCategories.some((category) =>
-      normalized.includes(category.toLowerCase())
-    );
-  });
+  if (excludeNone) {
+    result = result.filter((style) => style.id !== CLEAR_ART_STYLE_ID);
+  } else {
+    result = includeClearStyle(result);
+  }
 
-  return includeClearStyle(filtered.slice());
+  return result;
 };
 
 export const getArtStyleById = (

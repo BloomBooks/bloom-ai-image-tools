@@ -1,10 +1,8 @@
 import { ToolDefinition } from "../../types";
 import {
   applyArtStyleToPrompt,
-  CLEAR_ART_STYLE_ID,
   DEFAULT_ART_STYLE_ID,
   getArtStyleById,
-  isClearArtStyleId,
 } from "../../lib/artStyles";
 
 export const TOOLS: ToolDefinition[] = [
@@ -44,17 +42,28 @@ export const TOOLS: ToolDefinition[] = [
         name: "styleId",
         label: "New Style",
         type: "art-style",
-        defaultValue: CLEAR_ART_STYLE_ID,
+        defaultValue: "cleanup-line-art",
         artStyleCategories: ["Line Art"],
+        excludeNoneStyle: true,
+      },
+      {
+        name: "extraInstructions",
+        label: "Extra Instructions",
+        type: "textarea",
+        placeholder: "Add any extra instructions...",
+        optional: true,
       },
     ],
     promptTemplate: (params) => {
-      const styleId = params.styleId || CLEAR_ART_STYLE_ID;
-      const cleared = isClearArtStyleId(styleId);
-      const basePrompt = cleared
-        ? "Transform this rough sketch into a high-quality, professional black and white line drawing. Make the lines crisp, smooth, and confident. Remove any sketchiness, eraser marks, or noise so the result is press-ready ink art."
-        : "Transform this sketch into a polished illustration while keeping the exact composition, characters, and perspective. Clean up stray pencil marks, preserve the line work, and render it using the selected art direction.";
-      return applyArtStyleToPrompt(basePrompt, styleId);
+      const styleId = params.styleId || "cleanup-line-art";
+      const extraInstructions = params.extraInstructions?.trim();
+      const basePrompt =
+        "Transform this sketch into a polished illustration while keeping the exact composition, characters, and perspective. Clean up stray pencil marks, preserve the line work, and render it using the selected art direction.";
+      const styledPrompt = applyArtStyleToPrompt(basePrompt, styleId);
+      if (!extraInstructions) {
+        return styledPrompt;
+      }
+      return `${styledPrompt}\n\nExtra instructions: ${extraInstructions}`;
     },
     referenceImages: "0",
   },
@@ -92,20 +101,15 @@ export const TOOLS: ToolDefinition[] = [
         label: "New Style",
         type: "art-style",
         defaultValue: DEFAULT_ART_STYLE_ID,
+        excludeNoneStyle: true,
       },
     ],
     promptTemplate: (params) => {
       const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
-      const cleared = isClearArtStyleId(selectedStyleId);
-      const effectiveStyleId = cleared ? CLEAR_ART_STYLE_ID : selectedStyleId;
-      const styleName = cleared
-        ? "no additional art style"
-        : getArtStyleById(effectiveStyleId)?.name ||
-          "the requested art direction";
-      const base = cleared
-        ? "Re-render this image without applying any new art style. Preserve the exact composition, characters, lighting cues, and rendering approach."
-        : `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
-      return applyArtStyleToPrompt(base, effectiveStyleId);
+      const styleName =
+        getArtStyleById(selectedStyleId)?.name || "the requested art direction";
+      const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
+      return applyArtStyleToPrompt(base, selectedStyleId);
     },
     referenceImages: "0",
   },

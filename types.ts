@@ -7,6 +7,8 @@ export interface ToolParameter {
   defaultValue?: string;
   optional?: boolean;
   artStyleCategories?: string[];
+  /** When true, the "None" art style option is excluded (for art-style type only). */
+  excludeNoneStyle?: boolean;
 }
 
 export type ToolParams = Record<string, string>;
@@ -63,6 +65,7 @@ export interface HistoryItem {
   id: string;
   parentId: string | null;
   imageData: string; // Base64
+  imageFileName?: string | null;
   toolId: string;
   parameters: Record<string, string>;
   durationMs: number;
@@ -104,6 +107,8 @@ export interface PersistedImageToolsState {
   activeToolId: string | null;
   selectedModelId: string | null;
   auth: AuthState;
+  /** When true, the persisted history array is ordered newest -> oldest. */
+  historyNewestFirst?: boolean;
 }
 
 export interface ImageToolsStatePersistence {

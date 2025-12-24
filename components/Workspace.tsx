@@ -42,7 +42,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
   const showTargetPanel =
     (tool ? tool.editImage !== false : true) || !targetImage;
-  const showCustomEditRoles = tool?.id === "custom";
 
   const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
@@ -51,13 +50,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           image,
           slotIndex: i,
           canRemove: true,
-          rolePill: showCustomEditRoles
-            ? {
-                label: "like this",
-                kind: "reference",
-                testId: `reference-role-pill-${i}`,
-              }
-            : undefined,
           dataTestId: `reference-slot-${i}`,
           uploadInputTestId: `reference-upload-input-${i}`,
           dropLabel: "Drop to add",
@@ -67,7 +59,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           image: null,
           slotIndex: referenceImages.length,
           canRemove: false,
-          rolePill: undefined,
           dataTestId: `reference-slot-${referenceImages.length}`,
           uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
           dropLabel: "Drop to add",

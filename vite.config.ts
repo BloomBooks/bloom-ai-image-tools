@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { artStyleThumbnailPlugin } from './vite-plugins/artStyleThumbnailPlugin';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -12,7 +13,7 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
         open: true,
       },
-      plugins: [react()],
+      plugins: [react(), artStyleThumbnailPlugin()],
       define: {
         // Only expose the E2E test key - regular OPENROUTER_API_KEY is not exposed to prevent
         // accidental usage of env keys in development. Users should connect via OAuth or manual key entry.

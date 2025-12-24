@@ -134,9 +134,10 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     }
 
     if (param.type === "art-style") {
-      const stylesForPicker = param.artStyleCategories?.length
-        ? getArtStylesByCategories(param.artStyleCategories)
-        : ART_STYLES;
+      const stylesForPicker = getArtStylesByCategories(
+        param.artStyleCategories,
+        { excludeNone: param.excludeNoneStyle }
+      );
       return (
         <div key={param.name}>
           {label}
@@ -278,7 +279,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
 
               {isActive && (
                 <div
-                  className="px-4 pb-4 pt-3 border-t animate-in slide-in-from-top-2 fade-in duration-200"
+                  className="px-4 pb-4 border-t animate-in slide-in-from-top-2 fade-in duration-200"
                   style={{ borderColor: theme.colors.borderMuted }}
                 >
                   <form

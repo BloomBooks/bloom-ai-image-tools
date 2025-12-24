@@ -25,8 +25,8 @@ export const PanelToolbar: React.FC<PanelToolbarProps> = ({
       style={{
         backgroundColor: theme.colors.overlay,
         color: theme.colors.textPrimary,
-        paddingLeft: "6px",
-        //minHeight: 32,
+        padding: "6px 12px",
+        minHeight: "48px",
         gap: 8,
         boxShadow: theme.colors.panelShadow,
       }}

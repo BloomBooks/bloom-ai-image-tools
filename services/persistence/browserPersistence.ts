@@ -9,6 +9,10 @@ import {
   IMAGE_TOOLS_STATE_VERSION,
   IMAGE_TOOLS_STORE_NAME,
 } from "./constants";
+import {
+  prepareStateForPersistence,
+  restoreStateFromPersistence,
+} from "./stateTransforms";
 
 const createIdbStore = () => {
   if (typeof window === "undefined") {
@@ -31,7 +35,7 @@ export const createBrowserImageToolsPersistence = (): ImageToolsStatePersistence
         await del(IMAGE_TOOLS_STATE_KEY, store);
         return null;
       }
-      return data;
+      return restoreStateFromPersistence(data);
     } catch (error) {
       console.error("Failed to load persisted image tools state", error);
       return null;
@@ -41,7 +45,11 @@ export const createBrowserImageToolsPersistence = (): ImageToolsStatePersistence
   const save = async (state: PersistedImageToolsState) => {
     if (!store) return;
     try {
-      await set(IMAGE_TOOLS_STATE_KEY, state, store);
+      await set(
+        IMAGE_TOOLS_STATE_KEY,
+        prepareStateForPersistence(state),
+        store
+      );
     } catch (error) {
       console.error("Failed to persist image tools state", error);
     }

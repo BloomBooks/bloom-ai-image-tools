@@ -1,7 +1,6 @@
 import React, { useRef } from "react";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
-import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 
@@ -20,7 +19,6 @@ const HistoryCard: React.FC<{
   onDragStart: (e: React.DragEvent) => void;
   onRemove: () => void;
 }> = ({ item, isSelected, onSelect, onDragStart, onRemove }) => {
-  const tool = TOOLS.find((t) => t.id === item.toolId);
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -49,12 +47,8 @@ const HistoryCard: React.FC<{
         onMouseLeave={handleMouseLeave}
         data-testid="history-card"
         className={`
-          relative group flex-shrink-0 w-32 cursor-pointer transition-all duration-200
-          ${
-            isSelected
-              ? "scale-105"
-              : "hover:scale-105 opacity-70 hover:opacity-100"
-          }
+          relative group flex-shrink-0 w-28 cursor-pointer transition-opacity duration-200
+          ${isSelected ? "opacity-100" : "opacity-80 hover:opacity-100"}
         `}
       >
         {/* Thumbnail Container */}
@@ -93,28 +87,6 @@ const HistoryCard: React.FC<{
             <Icon path={Icons.X} className="w-3 h-3" />
           </button>
 
-          {/* Tool Icon Overlay */}
-          {tool && (
-            <div
-              className="absolute bottom-1 right-1 backdrop-blur-sm p-1 rounded"
-              style={{
-                backgroundColor: theme.colors.overlay,
-                color: theme.colors.textPrimary,
-              }}
-            >
-              <Icon path={tool.icon} className="w-3 h-3" />
-            </div>
-          )}
-        </div>
-
-        {/* Metadata */}
-        <div className="mt-2 text-center">
-          <div
-            className="text-xs font-medium truncate"
-            style={{ color: theme.colors.textSecondary }}
-          >
-            {tool?.title || "Original"}
-          </div>
         </div>
       </div>
 
@@ -153,6 +125,9 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
     e.dataTransfer.effectAllowed = "copy";
   };
 
+  // Show newest items closest to the workspace (leftmost slot).
+  const newestFirst = [...items].reverse();
+
   return (
     <div
       className="h-44 border-t flex flex-col flex-shrink-0 z-10 relative"
@@ -161,7 +136,7 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
         borderColor: theme.colors.border,
       }}
     >
-      <div className="px-4 py-2 flex items-center justify-end relative z-0">
+      <div className="px-4 py-1 flex items-center justify-end relative z-0">
         <button
           type="button"
           className="p-1 rounded-full border text-xs hover:opacity-80 transition-opacity"
@@ -176,8 +151,8 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
           <Icon path={Icons.Info} className="w-4 h-4" />
         </button>
       </div>
-      <div className="flex-1 overflow-x-auto overflow-y-clip flex items-center py-4 px-6 gap-4 custom-scrollbar relative pt-6">
-        {items.map((item) => (
+      <div className="flex-1 overflow-x-auto overflow-y-clip flex items-center py-2 px-4 gap-3 custom-scrollbar relative">
+        {newestFirst.map((item) => (
           <HistoryCard
             key={item.id}
             item={item}

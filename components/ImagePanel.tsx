@@ -70,9 +70,6 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       boxShadow: theme.colors.panelShadow,
     };
 
-    const gridTemplateColumns =
-      slots.length <= 1 ? "1fr" : "repeat(auto-fit, minmax(180px, 1fr))";
-
     return (
       <div
         data-testid={panelTestId}
@@ -80,14 +77,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         style={containerStyle}
       >
         <PanelToolbar label={label} />
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <div
-            className="grid gap-3 h-full"
-            style={{
-              gridTemplateColumns: gridTemplateColumns,
-              gridAutoRows: "minmax(0, 1fr)",
-            }}
-          >
+        <div className="flex-1 min-h-0 overflow-auto">
+          <div className="flex flex-wrap gap-3 items-start">
             {slots.map((slot) => {
               const slotControls: ImageSlotControls = slot.controls ?? {
                 upload: true,
@@ -96,6 +87,11 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                 download: true,
                 remove: slot.canRemove,
               };
+
+              const hasImage = !!slot.image;
+              const slotClassName = hasImage
+                ? "p-3 flex-shrink-0 w-fit max-w-full"
+                : "p-3 flex-shrink-0 min-w-[160px] min-h-[160px]";
 
               return (
                 <ImageSlot
@@ -117,6 +113,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                   controls={slotControls}
                   variant="tile"
                   rolePill={slot.rolePill}
+                  className={slotClassName}
                   dropLabel={slot.dropLabel ?? "Drop to add"}
                   dataTestId={slot.dataTestId}
                   uploadInputTestId={slot.uploadInputTestId}
@@ -222,7 +219,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       controls={{
         upload: showUploadControls,
         paste: showUploadControls,
-        copy: showUploadControls,
+        copy: true,
         download: true,
         remove: !!onClear,
       }}

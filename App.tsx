@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   AppState,
   HistoryItem,
+  ImageToolsStatePersistence,
   ModelInfo,
   PersistedAppState,
   ToolParamsById,
@@ -27,6 +28,17 @@ import {
 } from "./lib/authStorage";
 import { createBrowserImageToolsPersistence } from "./services/persistence/browserPersistence";
 import { IMAGE_TOOLS_STATE_VERSION } from "./services/persistence/constants";
+import {
+  FileSystemImageBinding,
+  deleteImageFile,
+  deriveImageFileName,
+  forgetFileSystemImageBinding,
+  readImageFile,
+  requestFileSystemImageBinding,
+  restoreFileSystemImageBinding,
+  supportsFileSystemAccess,
+  writeImageFile,
+} from "./services/persistence/fileSystemAccess";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -45,6 +57,12 @@ const getImageDimensions = (
     };
     img.src = dataUrl;
   });
+};
+
+const getDataUrlMime = (dataUrl: string | null | undefined): string | null => {
+  if (!dataUrl) return null;
+  const match = dataUrl.match(/^data:(image\/[^;]+);/i);
+  return match ? match[1].toLowerCase() : null;
 };
 
 // Only use the E2E test key - this should only be set during Playwright tests
@@ -113,14 +131,82 @@ export default function App() {
   );
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
-  const persistence = useMemo(
+  const browserPersistence = useMemo(
     () => createBrowserImageToolsPersistence(),
     []
+  );
+  const persistence: ImageToolsStatePersistence = browserPersistence;
+  const [fsBinding, setFsBinding] =
+    useState<FileSystemImageBinding | null>(null);
+  const [fsLoading, setFsLoading] = useState(false);
+  const [fsError, setFsError] = useState<string | null>(null);
+  const [fsSupported, setFsSupported] = useState(() =>
+    supportsFileSystemAccess()
   );
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
   const envApiKey = getEnvApiKey();
+  const isFolderPersistenceActive = !!fsBinding;
+  const storageButtonLabel = isFolderPersistenceActive
+    ? `Folder: ${fsBinding?.directoryName || "Linked"}`
+    : "Use Folder Storage";
+  const storageButtonTitle = isFolderPersistenceActive
+    ? "Stop syncing history to this folder"
+    : "Store history in a chosen folder (Chromium only)";
+
+  const persistHistoryImage = useCallback(
+    async (
+      item: HistoryItem,
+      bindingOverride?: FileSystemImageBinding | null
+    ): Promise<HistoryItem> => {
+      const bindingToUse = bindingOverride ?? fsBinding;
+      if (!bindingToUse || !item.imageData) {
+        return item;
+      }
+      try {
+        const mime = getDataUrlMime(item.imageData) ?? "image/png";
+        const fileName = item.imageFileName
+          ? item.imageFileName
+          : deriveImageFileName(item.id, mime);
+        await writeImageFile(bindingToUse, fileName, item.imageData);
+        return { ...item, imageFileName: fileName };
+      } catch (error) {
+        console.error("Failed to save history image", error);
+        setFsError("Could not save image to folder.");
+        return item;
+      }
+    },
+    [fsBinding]
+  );
+
+  const loadHistoryImageFromFolder = useCallback(
+    async (item: HistoryItem): Promise<HistoryItem> => {
+      if (!fsBinding || item.imageData || !item.imageFileName) {
+        return item;
+      }
+      const dataUrl = await readImageFile(fsBinding, item.imageFileName);
+      if (!dataUrl) {
+        return item;
+      }
+      return { ...item, imageData: dataUrl };
+    },
+    [fsBinding]
+  );
+
+  const deleteHistoryImageFromFolder = useCallback(
+    async (item: HistoryItem) => {
+      if (!fsBinding || !item.imageFileName) {
+        return;
+      }
+      await deleteImageFile(fsBinding, item.imageFileName);
+    },
+    [fsBinding]
+  );
+
+  useEffect(() => {
+    setFsSupported(supportsFileSystemAccess());
+  }, []);
 
   const getReferenceConstraints = (
     mode: "0" | "0+" | "1" | "1+"
@@ -148,6 +234,64 @@ export default function App() {
       isAuthenticated: !!(apiKey || envApiKey),
     }));
   }, [apiKey, envApiKey]);
+
+  useEffect(() => {
+    if (!isHydrated || !fsBinding) {
+      return;
+    }
+
+    const itemsNeedingData = state.history.filter(
+      (item) => !item.imageData && !!item.imageFileName
+    );
+    if (itemsNeedingData.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const updatedItems = await Promise.all(
+        itemsNeedingData.map((item) => loadHistoryImageFromFolder(item))
+      );
+      if (cancelled) {
+        return;
+      }
+      const updateMap = new Map(updatedItems.map((item) => [item.id, item]));
+      setState((prev) => {
+        let changed = false;
+        const nextHistory = prev.history.map((item) => {
+          const updated = updateMap.get(item.id);
+          if (updated && updated.imageData && updated !== item) {
+            changed = true;
+            return updated;
+          }
+          return item;
+        });
+        return changed ? { ...prev, history: nextHistory } : prev;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, fsBinding, state.history, loadHistoryImageFromFolder]);
+
+  useEffect(() => {
+    if (!fsSupported) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const binding = await restoreFileSystemImageBinding();
+      if (!cancelled && binding) {
+        setFsBinding(binding);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fsSupported]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,7 +361,12 @@ export default function App() {
         targetImageId: state.targetImageId,
         referenceImageIds: state.referenceImageIds,
         rightPanelImageId: state.rightPanelImageId,
-        history: state.history,
+        history: state.history.map((item) => {
+          if (fsBinding && item.imageFileName) {
+            return { ...item, imageData: "" };
+          }
+          return item;
+        }),
       },
       paramsByTool,
       activeToolId,
@@ -232,6 +381,7 @@ export default function App() {
       state.referenceImageIds,
       state.rightPanelImageId,
       state.history,
+      fsBinding,
       paramsByTool,
       activeToolId,
       selectedModelId,
@@ -241,7 +391,7 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !persistence) return;
     void persistence.save(persistableState);
   }, [persistence, persistableState, isHydrated]);
 
@@ -266,6 +416,72 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  const handleEnableFolderStorage = useCallback(async () => {
+    if (!fsSupported) {
+      return;
+    }
+    setFsLoading(true);
+    setFsError(null);
+    try {
+      const binding = await requestFileSystemImageBinding();
+      if (!binding) {
+        return;
+      }
+      const migratedHistory = await Promise.all(
+        state.history.map((item) => persistHistoryImage(item, binding))
+      );
+      const migratedMap = new Map(
+        migratedHistory.map((item) => [item.id, item] as const)
+      );
+      setFsBinding(binding);
+      setState((prev) => ({
+        ...prev,
+        history: prev.history.map((item) => migratedMap.get(item.id) ?? item),
+      }));
+    } catch (error) {
+      console.error("Failed to enable folder storage", error);
+      setFsError("Could not enable folder storage.");
+    } finally {
+      setFsLoading(false);
+    }
+  }, [fsSupported, state.history, persistHistoryImage]);
+
+  const handleDisableFolderStorage = useCallback(async () => {
+    if (!fsBinding) {
+      return;
+    }
+    setFsLoading(true);
+    setFsError(null);
+    try {
+      const restoredHistory = await Promise.all(
+        state.history.map(async (item) => {
+          if (item.imageData || !item.imageFileName) {
+            return item.imageFileName ? { ...item, imageFileName: null } : item;
+          }
+          const dataUrl = await readImageFile(fsBinding, item.imageFileName);
+          if (dataUrl) {
+            return { ...item, imageData: dataUrl, imageFileName: null };
+          }
+          return { ...item, imageFileName: null };
+        })
+      );
+      const restoredMap = new Map(
+        restoredHistory.map((item) => [item.id, item] as const)
+      );
+      await forgetFileSystemImageBinding();
+      setFsBinding(null);
+      setState((prev) => ({
+        ...prev,
+        history: prev.history.map((item) => restoredMap.get(item.id) ?? item),
+      }));
+    } catch (error) {
+      console.error("Failed to disable folder storage", error);
+      setFsError("Could not disable folder storage.");
+    } finally {
+      setFsLoading(false);
+    }
+  }, [fsBinding, state.history]);
 
   const handleApplyTool = async (
     toolId: string,
@@ -348,7 +564,7 @@ export default function App() {
 
       const resolution = await getImageDimensions(result.imageData);
 
-      const newItem: HistoryItem = {
+      let newItem: HistoryItem = {
         id: uuid(),
         parentId:
           requiresEditImage && targetImage
@@ -364,6 +580,10 @@ export default function App() {
         promptUsed: prompt,
         resolution,
       };
+
+      if (fsBinding) {
+        newItem = await persistHistoryImage(newItem);
+      }
 
       setState((prev) => ({
         ...prev,
@@ -394,40 +614,44 @@ export default function App() {
 
   const handleUpload = useCallback(
     (file: File, targetPanel: "target" | "right") => {
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target?.result as string;
-      const resolution = await getImageDimensions(base64);
-      const newItem: HistoryItem = {
-        id: uuid(),
-        parentId: null,
-        imageData: base64,
-        toolId: "original",
-        parameters: {},
-        durationMs: 0,
-        cost: 0,
-        model: "",
-        timestamp: Date.now(),
-        promptUsed: "Original Upload",
-        resolution,
-      };
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = ev.target?.result as string;
+        const resolution = await getImageDimensions(base64);
+        let newItem: HistoryItem = {
+          id: uuid(),
+          parentId: null,
+          imageData: base64,
+          toolId: "original",
+          parameters: {},
+          durationMs: 0,
+          cost: 0,
+          model: "",
+          timestamp: Date.now(),
+          promptUsed: "Original Upload",
+          resolution,
+        };
 
-      setState((prev) => ({
-        ...prev,
-        history: [...prev.history, newItem],
-        targetImageId:
-          targetPanel === "target" ? newItem.id : prev.targetImageId,
-        referenceImageIds:
-          targetPanel === "target"
-            ? prev.referenceImageIds.filter((id) => id !== newItem.id)
-            : prev.referenceImageIds,
-        rightPanelImageId:
-          targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
-      }));
-    };
-    reader.readAsDataURL(file);
+        if (fsBinding) {
+          newItem = await persistHistoryImage(newItem);
+        }
+
+        setState((prev) => ({
+          ...prev,
+          history: [...prev.history, newItem],
+          targetImageId:
+            targetPanel === "target" ? newItem.id : prev.targetImageId,
+          referenceImageIds:
+            targetPanel === "target"
+              ? prev.referenceImageIds.filter((id) => id !== newItem.id)
+              : prev.referenceImageIds,
+          rightPanelImageId:
+            targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
+        }));
+      };
+      reader.readAsDataURL(file);
     },
-    []
+    [fsBinding, persistHistoryImage]
   );
 
   const handleUploadTarget = useCallback(
@@ -466,7 +690,7 @@ export default function App() {
       const base64 = ev.target?.result as string;
       const resolution = await getImageDimensions(base64);
 
-      const newItem: HistoryItem = {
+      let newItem: HistoryItem = {
         id: uuid(),
         parentId: null,
         imageData: base64,
@@ -479,6 +703,10 @@ export default function App() {
         promptUsed: "Original Upload",
         resolution,
       };
+
+      if (fsBinding) {
+        newItem = await persistHistoryImage(newItem);
+      }
 
       setState((prev) => {
         const nextHistory = [...prev.history, newItem];
@@ -503,7 +731,7 @@ export default function App() {
     };
     reader.readAsDataURL(file);
     },
-    [activeToolId]
+    [activeToolId, fsBinding, persistHistoryImage]
     );
 
   // Global Paste Listener
@@ -619,6 +847,10 @@ export default function App() {
   };
 
   const handleRemoveHistoryItem = (id: string) => {
+    const item = state.history.find((h) => h.id === id);
+    if (item) {
+      void deleteHistoryImageFromFolder(item);
+    }
     setState((prev) => ({
       ...prev,
       history: prev.history.filter((h) => h.id !== id),
@@ -696,30 +928,62 @@ export default function App() {
           </h1>
         </div>
 
-        <div className="flex items-center gap-4">
-          <OpenRouterConnect
-            isAuthenticated={state.isAuthenticated}
-            isLoading={authLoading}
-            usingEnvKey={!!(envApiKey && !apiKey)}
-            authMethod={authMethod}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onProvideKey={handleProvideKey}
-          />
-          {selectedModel && (
-            <button
-              type="button"
-              onClick={() => setIsModelDialogOpen(true)}
-              className="px-5 py-2 rounded-2xl border font-semibold text-sm tracking-wide"
-              style={{
-                borderColor: theme.colors.border,
-                backgroundColor: theme.colors.surfaceAlt,
-                boxShadow: theme.colors.panelShadow,
-                color: theme.colors.textPrimary,
-              }}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-4">
+            <OpenRouterConnect
+              isAuthenticated={state.isAuthenticated}
+              isLoading={authLoading}
+              usingEnvKey={!!(envApiKey && !apiKey)}
+              authMethod={authMethod}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              onProvideKey={handleProvideKey}
+            />
+            {selectedModel && (
+              <button
+                type="button"
+                onClick={() => setIsModelDialogOpen(true)}
+                className="px-5 py-2 rounded-2xl border font-semibold text-sm tracking-wide"
+                style={{
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surfaceAlt,
+                  boxShadow: theme.colors.panelShadow,
+                  color: theme.colors.textPrimary,
+                }}
+              >
+                Model: {selectedModel.name}
+              </button>
+            )}
+            {fsSupported && (
+              <button
+                type="button"
+                onClick={
+                  isFolderPersistenceActive
+                    ? handleDisableFolderStorage
+                    : handleEnableFolderStorage
+                }
+                disabled={fsLoading}
+                className="px-5 py-2 rounded-2xl border font-semibold text-sm tracking-wide disabled:opacity-70"
+                style={{
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surfaceAlt,
+                  boxShadow: theme.colors.panelShadow,
+                  color: theme.colors.textPrimary,
+                }}
+                title={storageButtonTitle}
+              >
+                {fsLoading ? "Working..." : storageButtonLabel}
+              </button>
+            )}
+          </div>
+          {fsError && (
+            <span
+              className="text-xs font-semibold"
+              style={{ color: "#ef4444" }}
+              role="alert"
             >
-              Model: {selectedModel.name}
-            </button>
+              {fsError}
+            </span>
           )}
         </div>
       </header>

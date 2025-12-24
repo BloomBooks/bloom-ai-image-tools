@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      copy-image-clipboard:
+        specifier: ^2.1.2
+        version: 2.1.2
       idb-keyval:
         specifier: ^6.2.2
         version: 6.2.2
@@ -457,6 +460,9 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+
+  copy-image-clipboard@2.1.2:
+    resolution: {integrity: sha512-3VCXVl2IpFfOyD8drv9DozcNlwmqBqxOlsgkEGyVAzadjlPk1go8YNZyy8QmTnwHPxSFpeCR9OdsStEdVK7qDA==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -982,6 +988,8 @@ snapshots:
   caniuse-lite@1.0.30001761: {}
 
   convert-source-map@2.0.0: {}
+
+  copy-image-clipboard@2.1.2: {}
 
   debug@4.4.3:
     dependencies:

@@ -1,9 +1,19 @@
 import React from "react";
+import {
+  convertBlobToPng,
+  copyBlobToClipboard,
+  getBlobFromImageSource,
+  isPngBlob,
+} from "copy-image-clipboard";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { theme } from "../themes";
 import { PanelToolbar } from "./PanelToolbar";
+import {
+  processImageForThumbnail,
+  saveArtStyleThumbnail,
+} from "../lib/imageProcessing";
 
 export type ImageSlotControls = {
   upload?: boolean;
@@ -59,6 +69,62 @@ const VARIANT_CLASSES = {
   },
 } as const;
 
+const hasImageFilePayload = (dataTransfer: DataTransfer | null): boolean => {
+  if (!dataTransfer) return false;
+
+  if (dataTransfer.items && dataTransfer.items.length > 0) {
+    for (let i = 0; i < dataTransfer.items.length; i += 1) {
+      const item = dataTransfer.items[i];
+      if (!item || item.kind !== "file") continue;
+      if (!item.type || item.type.startsWith("image/")) {
+        return true;
+      }
+    }
+  }
+
+  if (dataTransfer.files && dataTransfer.files.length > 0) {
+    for (let i = 0; i < dataTransfer.files.length; i += 1) {
+      const file = dataTransfer.files[i];
+      if (!file) continue;
+      if (!file.type || file.type.startsWith("image/")) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const getImageFileFromDataTransfer = (
+  dataTransfer: DataTransfer | null
+): File | null => {
+  if (!dataTransfer) return null;
+
+  if (dataTransfer.items && dataTransfer.items.length > 0) {
+    for (let i = 0; i < dataTransfer.items.length; i += 1) {
+      const item = dataTransfer.items[i];
+      if (!item || item.kind !== "file") continue;
+      if (item.type && !item.type.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (file) {
+        return file;
+      }
+    }
+  }
+
+  if (dataTransfer.files && dataTransfer.files.length > 0) {
+    for (let i = 0; i < dataTransfer.files.length; i += 1) {
+      const file = dataTransfer.files[i];
+      if (!file) continue;
+      if (!file.type || file.type.startsWith("image/")) {
+        return file;
+      }
+    }
+  }
+
+  return null;
+};
+
 export const ImageSlot: React.FC<ImageSlotProps> = ({
   label,
   image,
@@ -83,6 +149,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
   const [isHovered, setIsHovered] = React.useState(false);
+  const [contextMenu, setContextMenu] = React.useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [thumbnailStatus, setThumbnailStatus] = React.useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
 
   const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
@@ -90,6 +163,148 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     copy: controls?.copy ?? true,
     download: controls?.download ?? true,
     remove: controls?.remove ?? true,
+  };
+
+  const getDataUrlMimeType = (dataUrl: string | null | undefined) => {
+    if (!dataUrl) return null;
+    const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
+    return match ? match[1].toLowerCase() : null;
+  };
+
+  const getBlobFromDataUrl = async (dataUrl: string) => {
+    const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/i);
+    if (!match) {
+      throw new Error("Invalid data URL");
+    }
+
+    const [, mime = "application/octet-stream", base64Indicator, dataPart] =
+      match;
+
+    if (base64Indicator) {
+      const cleaned = dataPart.replace(/\s+/g, "");
+      const binary = atob(cleaned);
+      const length = binary.length;
+      const bytes = new Uint8Array(length);
+      for (let i = 0; i < length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new Blob([bytes], { type: mime || "application/octet-stream" });
+    }
+
+    const decoded = decodeURIComponent(dataPart);
+    return new Blob([decoded], { type: mime || "application/octet-stream" });
+  };
+
+  const normalizeImageMime = (mime: string | null) => {
+    if (!mime) return null;
+    const lowered = mime.toLowerCase();
+    if (lowered === "image/jpg" || lowered === "image/pjpeg") {
+      return "image/jpeg";
+    }
+    if (lowered === "image/x-png") {
+      return "image/png";
+    }
+    return lowered;
+  };
+
+  const getNormalizedImageBlob = async (dataUrl: string) => {
+    const blobFromSource = await (dataUrl.startsWith("data:")
+      ? getBlobFromDataUrl(dataUrl)
+      : getBlobFromImageSource(dataUrl));
+    const normalizedMime =
+      normalizeImageMime(blobFromSource.type) ||
+      normalizeImageMime(getDataUrlMimeType(dataUrl)) ||
+      "image/png";
+
+    if (blobFromSource.type === normalizedMime) {
+      return blobFromSource;
+    }
+
+    const buffer = await blobFromSource.arrayBuffer();
+    return new Blob([buffer], { type: normalizedMime });
+  };
+
+  const clipboardSupportsMime = (mime: string) => {
+    if (typeof ClipboardItem === "undefined") return true;
+    if (typeof ClipboardItem.supports === "function") {
+      try {
+        return ClipboardItem.supports(mime);
+      } catch (err) {
+        console.warn("Unable to query ClipboardItem support:", err);
+      }
+    }
+    return true;
+  };
+
+  const shouldRetryWithPng = (error: unknown) => {
+    if (typeof error !== "object" || error === null) return false;
+    const message = String((error as { message?: string }).message || "");
+    return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(
+      message
+    );
+  };
+
+  const convertBlobToPngWithFallback = async (blob: Blob) => {
+    if (isPngBlob(blob)) {
+      return blob;
+    }
+
+    if (typeof window !== "undefined" && typeof window.createImageBitmap === "function") {
+      try {
+        const bitmap = await window.createImageBitmap(blob);
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            throw new Error("Canvas context unavailable for PNG conversion");
+          }
+          context.drawImage(bitmap, 0, 0);
+          const pngBlob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(
+              (result) =>
+                result
+                  ? resolve(result)
+                  : reject(new Error("Canvas toBlob() returned null")),
+              "image/png"
+            );
+          });
+          return pngBlob;
+        } finally {
+          if (typeof bitmap.close === "function") {
+            bitmap.close();
+          }
+        }
+      } catch (error) {
+        console.warn("Bitmap-based PNG conversion failed, retrying with default method:", error);
+      }
+    }
+
+    return convertBlobToPng(blob);
+  };
+
+  const copyWithFallbackIfNeeded = async (blob: Blob) => {
+    const mime = blob.type || "image/png";
+    const canUseOriginal = clipboardSupportsMime(mime);
+
+    if (canUseOriginal) {
+      try {
+        await copyBlobToClipboard(blob);
+        return;
+      } catch (error) {
+        if (!shouldRetryWithPng(error)) {
+          throw error;
+        }
+      }
+    } else {
+      console.info(
+        `Clipboard does not support ${mime}, attempting PNG fallback.`
+      );
+    }
+
+    const pngBlob = await convertBlobToPngWithFallback(blob);
+    await copyBlobToClipboard(pngBlob);
   };
 
   const openFilePicker = () => {
@@ -132,18 +347,15 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!image || !mergedControls.copy) return;
 
-    navigator.clipboard
-      .write([
-        new ClipboardItem({
-          "image/png": fetch(image.imageData).then((response) =>
-            response.blob()
-          ),
-        }),
-      ])
-      .catch((err) => console.error("Failed to copy image:", err));
+    try {
+      const normalizedBlob = await getNormalizedImageBlob(image.imageData);
+      await copyWithFallbackIfNeeded(normalizedBlob);
+    } catch (err) {
+      console.error("Failed to copy image:", err);
+    }
   };
 
   const handleDownload = () => {
@@ -173,6 +385,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault();
     if (!isDropZone || disabled) return;
+    if (event.dataTransfer) {
+      const hasFiles = hasImageFilePayload(event.dataTransfer);
+      if (hasFiles && onUpload) {
+        event.dataTransfer.dropEffect = "copy";
+      } else {
+        event.dataTransfer.dropEffect = "move";
+      }
+    }
     setIsDragOver(true);
   };
 
@@ -190,6 +410,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
     dragDepthRef.current = 0;
     setIsDragOver(false);
+
+    const droppedFile = onUpload
+      ? getImageFileFromDataTransfer(event.dataTransfer)
+      : null;
+    if (droppedFile) {
+      handleUpload(droppedFile);
+      return;
+    }
 
     const imageId = event.dataTransfer.getData("text/plain");
     if (imageId && onDrop) {
@@ -210,6 +438,47 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const handleMouseLeave = () => {
     setIsHovered(false);
   };
+
+  // Get the art style ID from the image's metadata (parameters)
+  const imageArtStyleId = image?.parameters?.styleId || null;
+  const hasValidArtStyle = imageArtStyleId && imageArtStyleId !== "none";
+
+  const handleContextMenu = (event: React.MouseEvent) => {
+    // Only show context menu if we have an image with an art style in its metadata
+    if (!image || !hasValidArtStyle) return;
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const handleSetThumbnail = async () => {
+    if (!image || !hasValidArtStyle || !imageArtStyleId) return;
+    setContextMenu(null);
+    setThumbnailStatus("saving");
+
+    try {
+      const processedImage = await processImageForThumbnail(image.imageData);
+      await saveArtStyleThumbnail(imageArtStyleId, processedImage);
+      setThumbnailStatus("success");
+      // Reset status after a brief delay
+      setTimeout(() => setThumbnailStatus("idle"), 2000);
+    } catch (error) {
+      console.error("Failed to set thumbnail:", error);
+      setThumbnailStatus("error");
+      setTimeout(() => setThumbnailStatus("idle"), 3000);
+    }
+  };
+
+  // Close context menu when clicking outside
+  React.useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = () => setContextMenu(null);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [contextMenu]);
 
   const variantClasses = VARIANT_CLASSES[variant];
   const containerClasses = [variantClasses.container, className]
@@ -389,6 +658,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       onDrop={handleDrop}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onContextMenu={handleContextMenu}
     >
       {variant === "panel" && (label || actionsNode) && (
         <PanelToolbar label={label || ""} actions={actionsNode} />
@@ -480,6 +750,62 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         data-testid={uploadInputTestId}
         onChange={handleInputChange}
       />
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          data-testid="image-slot-context-menu"
+          className="fixed z-50 rounded-lg shadow-xl border py-1 min-w-[160px]"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+            backgroundColor: theme.colors.surfaceRaised,
+            borderColor: theme.colors.border,
+            boxShadow: theme.colors.panelShadow,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            data-testid="context-menu-set-thumbnail"
+            className="w-full px-4 py-2 text-left text-sm transition-colors"
+            style={{
+              color: theme.colors.textPrimary,
+              backgroundColor: "transparent",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme.colors.surfaceAlt;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
+            onClick={handleSetThumbnail}
+          >
+            Set thumbnail
+          </button>
+        </div>
+      )}
+
+      {/* Thumbnail Status Indicator */}
+      {thumbnailStatus !== "idle" && (
+        <div
+          data-testid="thumbnail-status"
+          className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium z-40"
+          style={{
+            backgroundColor:
+              thumbnailStatus === "saving"
+                ? theme.colors.accent
+                : thumbnailStatus === "success"
+                ? "#22c55e"
+                : "#ef4444",
+            color: "white",
+          }}
+        >
+          {thumbnailStatus === "saving" && "Saving..."}
+          {thumbnailStatus === "success" && "Thumbnail saved!"}
+          {thumbnailStatus === "error" && "Failed to save"}
+        </div>
+      )}
     </div>
   );
 };

@@ -20,12 +20,14 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = React.useState(false);
 
   useEffect(() => {
     popoverRef.current?.hidePopover();
   }, []);
 
   const handleMouseEnter = () => {
+    setIsHovered(true);
     if (popoverRef.current && cardRef.current) {
       const rect = cardRef.current.getBoundingClientRect();
       // Position the popover above the card, centered
@@ -36,6 +38,7 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
   };
 
   const handleMouseLeave = () => {
+    setIsHovered(false);
     popoverRef.current?.hidePopover();
   };
 
@@ -48,25 +51,47 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
         onDragStart={onDragStart}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className="
-          relative group flex-shrink-0 w-28 cursor-pointer transition-opacity duration-200
-          opacity-80 hover:opacity-100
-        "
+        style={{
+          position: "relative",
+          flexShrink: 0,
+          width: 112,
+          cursor: "pointer",
+          opacity: isHovered ? 1 : 0.8,
+          transition: "opacity 150ms ease",
+        }}
       >
         {/* Thumbnail Container */}
-        <div className="relative w-full aspect-square">
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            aspectRatio: "1 / 1",
+          }}
+        >
           <div
-            className="relative rounded-lg border-2 w-full h-full"
             style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              borderRadius: 12,
+              borderWidth: 2,
+              borderStyle: "solid",
               borderColor: theme.colors.border,
               boxShadow: "none",
             }}
           >
-            <div className="w-full h-full rounded-[inherit] overflow-hidden">
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: "inherit",
+                overflow: "hidden",
+              }}
+            >
               <img
                 src={item.imageData}
                 alt="History item"
-                className="w-full h-full object-cover"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             </div>
           </div>
@@ -77,14 +102,23 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
               e.stopPropagation();
               onRemove();
             }}
-            className="absolute top-1 right-1 backdrop-blur-sm p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
             style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              padding: 4,
+              borderRadius: 8,
               backgroundColor: theme.colors.overlay,
               color: theme.colors.textPrimary,
+              border: "none",
+              opacity: isHovered ? 1 : 0,
+              transition: "opacity 120ms ease",
+              backdropFilter: "blur(4px)",
+              zIndex: 10,
             }}
             title="Remove from history"
           >
-            <Icon path={Icons.X} className="w-3 h-3" />
+            <Icon path={Icons.X} width={12} height={12} />
           </button>
         </div>
       </div>
@@ -93,12 +127,14 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
       <div
         ref={popoverRef}
         popover="manual"
-        className="border text-xs rounded-lg shadow-2xl p-4 m-0"
         style={{
+          border: `1px solid ${theme.colors.border}`,
+          fontSize: "0.75rem",
+          borderRadius: 12,
+          padding: 16,
           position: "fixed",
           transform: "translate(-50%, -100%)",
           backgroundColor: theme.colors.surfaceRaised,
-          borderColor: theme.colors.border,
           color: theme.colors.textPrimary,
           width: "max-content",
           maxWidth: "calc(100vw - 32px)",
@@ -108,8 +144,17 @@ export const HistoryCard: React.FC<HistoryCardProps> = ({
         <ImageInfoPanel item={item} />
         {/* Arrow */}
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-4 border-transparent"
-          style={{ borderTopColor: theme.colors.surfaceRaised }}
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translate(-50%, -100%)",
+            width: 0,
+            height: 0,
+            borderLeft: "4px solid transparent",
+            borderRight: "4px solid transparent",
+            borderTop: `4px solid ${theme.colors.surfaceRaised}`,
+          }}
         />
       </div>
     </>

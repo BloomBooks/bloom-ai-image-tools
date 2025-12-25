@@ -1,12 +1,13 @@
 import React from "react";
+import { Box, IconButton, Stack, Typography } from "@mui/material";
 import { AppState, HistoryItem, ModelInfo, ToolParamsById } from "../types";
-import { ToolPanel } from "./tools/ToolPanel";
+import { ImageTool } from "./tools/ImageTool";
 import { Workspace } from "./Workspace";
 import { HistoryStrip } from "./HistoryStrip";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 
-interface ImageToolsPanelProps {
+interface ImageToolsPanelBar {
   appState: AppState;
   selectedModel: ModelInfo | null;
   targetImage: HistoryItem | null;
@@ -37,7 +38,7 @@ interface ImageToolsPanelProps {
   onDismissError: () => void;
 }
 
-export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
+export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   appState,
   selectedModel,
   targetImage,
@@ -70,39 +71,50 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
   const hasTargetImage = !!targetImage;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <Box
+      sx={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        minHeight: 0,
+      }}
+    >
       {appState.error && (
-        <div
+        <Stack
           data-testid="error-banner"
           role="alert"
-          className="mx-4 my-3 px-4 py-3 flex items-start gap-3 border rounded-2xl shadow-lg"
-          style={{
+          direction="row"
+          spacing={2}
+          alignItems="flex-start"
+          sx={{
+            mx: 4,
+            my: 3,
+            px: 4,
+            py: 3,
+            borderRadius: 4,
+            border: `1px solid ${theme.colors.accent}`,
+            boxShadow: theme.colors.accentShadow,
             backgroundColor: "#ffffff",
             color: "#0f172a",
-            borderColor: theme.colors.accent,
-            boxShadow: theme.colors.accentShadow,
           }}
         >
-          <div className="flex-1 leading-relaxed">
-            <span>{appState.error}</span>
-          </div>
-          <button
+          <Typography component="span" sx={{ flex: 1, lineHeight: 1.6 }}>
+            {appState.error}
+          </Typography>
+          <IconButton
             onClick={onDismissError}
-            className="ml-4 px-2 py-0 text-lg font-semibold"
-            style={{
-              backgroundColor: "transparent",
-              border: "none",
-              color: theme.colors.accent,
-            }}
             aria-label="Dismiss message"
+            size="small"
+            sx={{ color: theme.colors.accent }}
           >
-            ×
-          </button>
-        </div>
+            <Icon path={Icons.X} width={16} height={16} />
+          </IconButton>
+        </Stack>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
-        <ToolPanel
+      <Box sx={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+        <ImageTool
           onApplyTool={onApplyTool}
           isProcessing={appState.isProcessing}
           onCancelProcessing={onCancelProcessing}
@@ -118,7 +130,15 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
           onArtStyleChange={onArtStyleChange}
         />
 
-        <div className="flex-1 flex flex-col min-w-0">
+        <Box
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
           <Workspace
             targetImage={targetImage}
             referenceImages={referenceImages}
@@ -144,8 +164,8 @@ export const ImageToolsPanel: React.FC<ImageToolsPanelProps> = ({
             hasHiddenHistory={hasHiddenHistory}
             onRequestHistoryAccess={onRequestHistoryAccess}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };

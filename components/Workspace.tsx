@@ -1,4 +1,5 @@
 import React from "react";
+import { Box } from "@mui/material";
 import { HistoryItem } from "../types";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
@@ -69,18 +70,40 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const referenceLabel = "Reference Images";
 
   return (
-    <div
-      className="flex-1 flex overflow-hidden relative"
-      style={{ backgroundColor: theme.colors.surface }}
+    <Box
+      sx={{
+        flex: 1,
+        display: "flex",
+        overflow: "hidden",
+        position: "relative",
+        backgroundColor: "transparent",
+        minHeight: 0,
+      }}
     >
-      <div className="flex w-full h-full gap-[10px]">
-        {/* Left Column: Target + References */}
-        <div className="flex-1 flex flex-col gap-4 min-h-0">
+      <Box
+        sx={{
+          display: "flex",
+          width: "100%",
+          height: "100%",
+          gap: "10px",
+          minHeight: 0,
+        }}
+      >
+        <Box
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            minHeight: 0,
+          }}
+        >
           {showTargetPanel && (
-            <div
-              className="relative flex-1 min-h-0"
-              style={{
+            <Box
+              sx={{
+                position: "relative",
                 flex: showReferencePanel ? "1 1 0%" : "1 1 auto",
+                minHeight: 0,
               }}
             >
               <ImagePanel
@@ -94,11 +117,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 draggableImageId={targetImage?.id || undefined}
                 uploadInputTestId="target-upload-input"
               />
-            </div>
+            </Box>
           )}
 
           {showReferencePanel && (
-            <div className="flex-1 relative min-h-0">
+            <Box sx={{ flex: 1, position: "relative", minHeight: 0 }}>
               <ImagePanel
                 label={referenceLabel}
                 layout="grid"
@@ -113,12 +136,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 }
                 onSlotRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
               />
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
 
-        {/* Right Panel - Result */}
-        <div className="flex-1 relative min-h-0">
+        <Box sx={{ flex: 1, position: "relative", minHeight: 0 }}>
           <ImagePanel
             image={rightImage}
             label="Result"
@@ -131,8 +153,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             draggableImageId={rightImage?.id || undefined}
             isLoading={isProcessing}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };

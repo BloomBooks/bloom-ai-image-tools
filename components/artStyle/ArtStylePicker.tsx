@@ -1,8 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Stack, Typography, Button } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
-import { CLEAR_ART_STYLE_ID } from "../../lib/artStyles";
-import { ArtStyleChooserDialog } from "./ArtStyleChooserDialog";
+import {
+  CLEAR_ART_STYLE_ID,
+  loadArtStylePreviewUrl,
+} from "../../lib/artStyles";
+
+const LazyArtStyleChooserDialog = React.lazy(async () => {
+  const module = await import("./ArtStyleChooserDialog");
+  return { default: module.ArtStyleChooserDialog };
+});
 
 interface ArtStylePickerProps {
   styles: ArtStyle[];
@@ -22,7 +30,11 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
   "data-testid": dataTestId,
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [hasOpenedDialog, setHasOpenedDialog] = useState(false);
   const frozenPreviewCacheRef = useRef<Map<string, string>>(new Map());
+  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(
+    null
+  );
   const [frozenPreview, setFrozenPreview] = useState<string | null>(null);
   const [freezeState, setFreezeState] = useState<FreezeState>("idle");
   const hasNoneOption = styles.some((style) => style.id === CLEAR_ART_STYLE_ID);
@@ -39,6 +51,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
 
   const handleOpen = () => {
     if (disabled) return;
+    setHasOpenedDialog(true);
     setIsDialogOpen(true);
   };
 
@@ -48,8 +61,33 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
     onChange(styleId);
   };
 
-  const preview = selected?.previewUrl;
-  const supportingText = selected?.description || selected?.promptDetail;
+  useEffect(() => {
+    let cancelled = false;
+    if (!selected) {
+      setSelectedPreviewUrl(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    loadArtStylePreviewUrl(selected)
+      .then((url) => {
+        if (!cancelled) {
+          setSelectedPreviewUrl(url ?? null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSelectedPreviewUrl(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const preview = selectedPreviewUrl;
   const shouldFreezePreview = isGifUrl(preview);
 
   useEffect(() => {
@@ -129,63 +167,74 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
 
   return (
     <>
-      <div className="flex items-center gap-3">
-        <button
+      <Stack direction="row" spacing={3} alignItems="center">
+        <Button
           type="button"
-          className="flex-1 rounded-2xl border p-3 flex items-center gap-3 text-left"
           onClick={handleOpen}
           disabled={disabled}
           data-testid={dataTestId}
-          style={{
+          variant="outlined"
+          sx={{
+            flex: 1,
+            borderRadius: 3,
             borderColor: theme.colors.border,
             backgroundColor: theme.colors.surfaceAlt,
+            textTransform: "none",
+            justifyContent: "flex-start",
+            gap: 3,
+            p: "10px",
             opacity: disabled ? 0.4 : 1,
             cursor: disabled ? "not-allowed" : "pointer",
+            color: theme.colors.textPrimary,
+            "&:hover": {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
           }}
         >
-          <div
-            className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border"
-            style={{ borderColor: theme.colors.borderMuted }}
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 2,
+              overflow: "hidden",
+              border: `1px solid ${theme.colors.borderMuted}`,
+              flexShrink: 0,
+            }}
           >
             {displayPreview && (
-              <img
+              <Box
+                component="img"
                 src={displayPreview}
                 alt={
                   selected ? `${selected.name} preview` : "Art style preview"
                 }
-                className="w-full h-full object-cover"
+                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             )}
-          </div>
-          <div className="flex-1">
-            {/* <p
-              className="text-xs uppercase tracking-[0.3em] mb-1"
-              style={{ color: theme.colors.textMuted }}
-            >
-              Style
-            </p> */}
-            <p
-              className="font-semibold"
-              style={{ color: theme.colors.textPrimary }}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography
+              variant="subtitle1"
+              fontWeight={600}
+              color={theme.colors.textPrimary}
             >
               {selected ? selected.name : "Choose an art style"}
-            </p>
-            <p
-              className="text-xs"
-              style={{ color: theme.colors.textSecondary }}
-            >
-              {/* {supportingText || "Set the vibe for this image."} */}
-            </p>
-          </div>
-        </button>
-      </div>
-      <ArtStyleChooserDialog
-        isOpen={isDialogOpen}
-        styles={styles}
-        selectedId={value}
-        onSelect={handleSelect}
-        onClose={handleClose}
-      />
+            </Typography>
+          </Box>
+        </Button>
+      </Stack>
+      {hasOpenedDialog && (
+        <Suspense fallback={null}>
+          <LazyArtStyleChooserDialog
+            isOpen={isDialogOpen}
+            styles={styles}
+            selectedId={value}
+            onSelect={handleSelect}
+            onClose={handleClose}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

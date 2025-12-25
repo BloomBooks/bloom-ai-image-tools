@@ -1,8 +1,16 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Box, Button, Stack, Typography } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
-import { CLEAR_ART_STYLE_ID } from "../../lib/artStyles";
+import {
+  CLEAR_ART_STYLE_ID,
+  loadArtStylePreviewUrl,
+} from "../../lib/artStyles";
+
+const DIALOG_MAX_WIDTH = "min(1000px, 92vw)";
+const DIALOG_MAX_HEIGHT = "min(900px, 90vh)";
+const SELECTED_CARD_BACKGROUND = "rgba(29, 148, 164, 0.16)";
 
 interface ArtStyleChooserDialogProps {
   isOpen: boolean;
@@ -19,6 +27,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   onSelect,
   onClose,
 }) => {
+  // Keep the "None" option pinned to the top of the list for quick access.
   const displayStyles = useMemo(() => {
     if (!styles.length) return styles;
     const noneStyle = styles.find((style) => style.id === CLEAR_ART_STYLE_ID);
@@ -37,14 +46,56 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     : undefined;
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const previewCacheRef = useRef<Map<string, string>>(new Map());
+  const [, setPreviewCacheVersion] = useState(0);
+
+  // Resolve previews lazily: local assets are only imported when the dialog opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const pending: ArtStyle[] = [];
+    let hasSyncUpdates = false;
+
+    displayStyles.forEach((style) => {
+      if (previewCacheRef.current.has(style.id)) {
+        return;
+      }
+      if (style.previewUrl) {
+        previewCacheRef.current.set(style.id, style.previewUrl);
+        hasSyncUpdates = true;
+        return;
+      }
+      pending.push(style);
+    });
+
+    if (hasSyncUpdates) {
+      setPreviewCacheVersion((value) => value + 1);
+    }
+
+    pending.forEach((style) => {
+      loadArtStylePreviewUrl(style)
+        .then((url) => {
+          if (!cancelled && url) {
+            previewCacheRef.current.set(style.id, url);
+            setPreviewCacheVersion((value) => value + 1);
+          }
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, displayStyles]);
 
   useEffect(() => {
     if (!isOpen || !normalizedSelectedId) return;
     const container = scrollAreaRef.current;
     if (!container) return;
-    const buttons = container.querySelectorAll<HTMLButtonElement>(
-      "[data-style-id]"
-    );
+    const buttons =
+      container.querySelectorAll<HTMLButtonElement>("[data-style-id]");
     for (const button of buttons) {
       if (button.dataset.styleId === normalizedSelectedId) {
         button.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -61,144 +112,209 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   };
 
   const dialogContent = (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4 sm:p-8">
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: theme.colors.overlayStrong }}
+    <Box
+      sx={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 80,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflowY: "auto",
+        p: { xs: 2, sm: 4 },
+      }}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundColor: theme.colors.overlayStrong,
+        }}
         onClick={onClose}
-      ></div>
-      <div
-        className="relative mx-4"
-        style={{
-          width: "min(1000px, 92vw)",
-          maxHeight: "min(900px, 90vh)",
+      />
+      <Box
+        sx={{
+          position: "relative",
+          mx: 2,
+          width: DIALOG_MAX_WIDTH,
+          maxHeight: DIALOG_MAX_HEIGHT,
           backgroundColor: theme.colors.surface,
+          borderRadius: 4,
+          overflow: "hidden",
+          border: `1px solid ${theme.colors.border}`,
+          boxShadow: theme.colors.panelShadow,
         }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="art-style-dialog-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div
-          className="flex flex-col h-full rounded-3xl border shadow-2xl overflow-hidden"
-          style={{
-            borderColor: theme.colors.border,
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            maxHeight: DIALOG_MAX_HEIGHT,
+            minHeight: 0,
             background: "linear-gradient(135deg, #0e1729, #111c31)",
-            boxShadow: theme.colors.panelShadow,
-            maxHeight: "min(900px, 90vh)",
+            color: theme.colors.textPrimary,
           }}
         >
-          <header
-            className="p-6 border-b"
-            style={{ borderColor: theme.colors.border }}
+          <Box
+            component="header"
+            sx={{
+              p: 4,
+              borderBottom: `1px solid ${theme.colors.border}`,
+            }}
           >
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2
-                  id="art-style-dialog-title"
-                  className="text-2xl font-semibold mt-2"
-                >
-                  Choose an Art Style
-                </h2>
-              </div>
-              <button
-                type="button"
+            <Stack
+              direction="row"
+              spacing={2}
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography
+                id="art-style-dialog-title"
+                variant="h5"
+                sx={{ fontWeight: 600, mt: 1, color: theme.colors.textPrimary }}
+              >
+                Choose an Art Style
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
                 onClick={onClose}
-                className="px-4 py-2 rounded-full text-sm font-semibold"
-                style={{
-                  border: `1px solid ${theme.colors.border}`,
-                  color: theme.colors.textSecondary,
-                  backgroundColor: theme.colors.surfaceAlt,
-                }}
+                sx={{ borderRadius: "999px" }}
               >
                 Close
-              </button>
-            </div>
-          </header>
-          <div className="flex-1 min-h-0 overflow-y-auto p-6" ref={scrollAreaRef}>
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              </Button>
+            </Stack>
+          </Box>
+          <Box
+            sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 4 }}
+            ref={scrollAreaRef}
+          >
+            <Box
+              sx={{
+                display: "grid",
+                gap: 3,
+                gridTemplateColumns: {
+                  xs: "repeat(2, minmax(0, 1fr))",
+                  md: "repeat(3, minmax(0, 1fr))",
+                  xl: "repeat(4, minmax(0, 1fr))",
+                },
+              }}
+            >
               {displayStyles.map((style) => {
                 const isSelected = normalizedSelectedId
                   ? style.id === normalizedSelectedId
                   : false;
+                const previewSrc = previewCacheRef.current.get(style.id);
+                const hasPreviewSource = Boolean(
+                  style.previewUrl || style.previewAssetKey
+                );
                 return (
-                  <button
+                  <Box
                     key={style.id}
                     data-style-id={style.id}
                     onClick={() => handleSelect(style.id)}
-                    className="flex flex-col rounded-2xl border text-left overflow-hidden transition focus:outline-none"
-                    style={{
-                      borderColor: isSelected
-                        ? theme.colors.accent
-                        : theme.colors.border,
+                    component="button"
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      textAlign: "left",
+                      borderRadius: 3,
+                      border: `3px solid ${
+                        isSelected ? theme.colors.accent : theme.colors.border
+                      }`,
+                      overflow: "hidden",
                       backgroundColor: isSelected
-                        ? "rgba(29, 148, 164, 0.16)"
+                        ? SELECTED_CARD_BACKGROUND
                         : theme.colors.surfaceAlt,
-                      boxShadow: isSelected
-                        ? theme.colors.accentShadow
-                        : "none",
+                      p: "5px",
+                      transition: "transform 120ms ease",
+                      cursor: "pointer",
+                      color: theme.colors.textPrimary,
+                      "&:hover": {
+                        backgroundColor: SELECTED_CARD_BACKGROUND,
+                      },
                     }}
                   >
-                    <div
-                      className="relative w-full"
-                      style={{ paddingBottom: "65%" }}
+                    <Box
+                      sx={{
+                        position: "relative",
+                        width: "100%",
+                        paddingBottom: "100%",
+                        borderRadius: 2,
+                        overflow: "hidden",
+                      }}
                     >
-                      {style.previewUrl ? (
+                      {/* Preview image resolves once the dialog is visible to avoid eager network requests. */}
+                      {previewSrc ? (
                         <img
-                          src={style.previewUrl}
+                          src={previewSrc}
                           alt={`${style.name} preview`}
-                          className="absolute inset-0 h-full w-full object-cover"
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            borderRadius: "inherit",
+                          }}
                           loading="lazy"
                         />
                       ) : (
-                        <div
-                          className="absolute inset-0 flex items-center justify-center text-xs"
-                          style={{ color: theme.colors.textSecondary }}
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "0.75rem",
+                            color: theme.colors.textSecondary,
+                          }}
                         >
-                          No preview
-                        </div>
+                          {hasPreviewSource ? "Loading preview" : "No preview"}
+                        </Box>
                       )}
-                      <div
-                        className="absolute inset-0"
-                        style={{
-                          boxShadow: isSelected
-                            ? `inset 0 0 0 2px ${theme.colors.accent}`
-                            : "none",
-                        }}
-                      ></div>
-                    </div>
-                    <div className="p-4 flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-semibold flex-1">
+                    </Box>
+                    <Box
+                      sx={{
+                        p: 3,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 1.5,
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography
+                          variant="subtitle1"
+                          fontWeight={600}
+                          flex={1}
+                        >
                           {style.name}
-                        </h3>
-                        {isSelected && (
-                          <span
-                            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: theme.colors.accent,
-                              color: theme.colors.textPrimary,
-                            }}
-                          >
-                            Selected
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        className="text-sm leading-relaxed"
-                        style={{ color: theme.colors.textSecondary }}
+                        </Typography>
+                      </Stack>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: theme.colors.textSecondary,
+                          lineHeight: 1.4,
+                        }}
                       >
                         {style.description || style.promptDetail}
-                      </p>
-                    </div>
-                  </button>
+                      </Typography>
+                    </Box>
+                  </Box>
                 );
               })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 
   if (typeof document === "undefined") {

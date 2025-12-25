@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Box, Button, Stack, TextField, Typography } from "@mui/material";
 import { theme } from "../themes";
 
 type ConnectionMode = "disconnected" | "apiKey" | "oauth";
@@ -66,6 +67,17 @@ export function OpenRouterConnect({
     }
   };
 
+  const visuallyHiddenStyles: React.CSSProperties = {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    clip: "rect(0, 0, 0, 0)",
+    border: 0,
+  };
+
   const renderOptionCard = (
     value: ConnectionMode,
     labels: OptionText,
@@ -74,12 +86,14 @@ export function OpenRouterConnect({
     testId: string,
     containerStyle: React.CSSProperties = {}
   ) => (
-    <div
+    <Box
       key={value}
-      className="rounded-2xl border p-4 flex flex-col gap-3"
-      style={{
-        borderColor:
-          connectionMode === value ? theme.colors.accent : theme.colors.border,
+      sx={{
+        borderRadius: 3,
+        p: 2.5,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
         backgroundColor:
           connectionMode === value
             ? theme.colors.surfaceAlt
@@ -87,7 +101,7 @@ export function OpenRouterConnect({
         ...containerStyle,
       }}
     >
-      <div className="flex items-start gap-3">
+      <Stack direction="row" spacing={2} alignItems="flex-start">
         <input
           type="radio"
           name="openrouter-connection-mode"
@@ -95,28 +109,38 @@ export function OpenRouterConnect({
           checked={connectionMode === value}
           readOnly
           data-testid={testId}
-          className="sr-only"
-          style={{ accentColor: theme.colors.accent }}
+          style={{ ...visuallyHiddenStyles, accentColor: theme.colors.accent }}
         />
-        <div>
-          <label
+        <Box>
+          <Typography
+            component="label"
             htmlFor={`openrouter-${value}`}
-            className="font-semibold"
-            style={{ color: theme.colors.textPrimary }}
+            sx={{
+              fontWeight: 600,
+              color: theme.colors.textPrimary,
+              display: "block",
+            }}
           >
             {connectionMode === value ? labels.active : labels.inactive}
-          </label>
-          <p className="text-xs" style={{ color: theme.colors.textSecondary }}>
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              color: theme.colors.textSecondary,
+              display: "block",
+              mt: 0.5,
+            }}
+          >
             {connectionMode === value
               ? description.active
               : description.inactive}
-          </p>
-        </div>
-      </div>
-      <div className="pl-7 text-sm" style={{ color: theme.colors.textPrimary }}>
+          </Typography>
+        </Box>
+      </Stack>
+      <Box sx={{ pl: 4, fontSize: "0.9rem", color: theme.colors.textPrimary }}>
         {content}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 
   const oauthButtonLabel =
@@ -144,15 +168,17 @@ export function OpenRouterConnect({
   };
 
   return (
-    <fieldset
-      className="flex flex-col gap-4"
+    <Stack
+      component="fieldset"
+      spacing={3}
       aria-label="OpenRouter connection"
+      sx={{ border: "none", p: 0, m: 0, minInlineSize: 0 }}
     >
-      <div>
+      <Typography variant="body2">
         OpenRouter credits are how you pre-pay for use of the AI Image Tools
         from Google and others. Once you have an OpenRouter account, you can
         either connect to it via login or paste in an API key.
-      </div>
+      </Typography>
 
       {renderOptionCard(
         "apiKey",
@@ -161,9 +187,13 @@ export function OpenRouterConnect({
           inactive: "Connect with OpenRouter API key",
         },
         apiKeyDescriptions,
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
-            <input
+        <Stack spacing={1.5}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            alignItems={{ xs: "stretch", sm: "flex-start" }}
+          >
+            <TextField
               type="text"
               data-testid="openrouter-api-key-input"
               value={keyValue}
@@ -171,43 +201,38 @@ export function OpenRouterConnect({
               onBlur={handleKeyBlur}
               placeholder="Paste OpenRouter key"
               disabled={usingEnvKey || connectionMode === "oauth"}
-              className="px-3 py-2 rounded-lg text-sm outline-none flex-1"
-              style={{
-                backgroundColor: theme.colors.surface,
-                border: `1px solid ${theme.colors.border}`,
-                color: theme.colors.textPrimary,
-                minWidth: "220px",
+              size="small"
+              fullWidth
+              sx={{
+                minWidth: 220,
+                flex: 1,
+                bgcolor: theme.colors.surface,
               }}
             />
             {hasManualKey && !usingEnvKey && (
-              <button
+              <Button
                 type="button"
                 data-testid="openrouter-clear-key"
                 onClick={handleDisconnect}
                 disabled={connectionMode === "oauth"}
-                className="px-4 py-2 rounded-lg text-sm font-semibold border"
-                style={{
-                  borderColor: theme.colors.border,
-                  color: theme.colors.textPrimary,
-                  backgroundColor: theme.colors.surface,
+                variant="outlined"
+                sx={{
+                  minWidth: 120,
                   opacity: connectionMode === "oauth" ? 0.5 : 1,
                 }}
               >
                 Clear key
-              </button>
+              </Button>
             )}
-          </div>
+          </Stack>
 
           {usingEnvKey && (
-            <p
-              className="text-xs"
-              style={{ color: theme.colors.textSecondary }}
-            >
+            <Typography variant="caption" color="text.secondary">
               This key is provided by the environment and cannot be changed in
               this interface.
-            </p>
+            </Typography>
           )}
-        </div>,
+        </Stack>,
         "openrouter-option-api-key",
         connectionMode === "oauth"
           ? { opacity: 0.3, pointerEvents: "none" }
@@ -221,22 +246,29 @@ export function OpenRouterConnect({
           inactive: "Connect with OpenRouter login",
         },
         oauthDescriptions,
-        <button
+        <Button
           type="button"
           data-testid={oauthButtonTestId}
           onClick={oauthButtonAction}
           disabled={isLoading}
-          className="px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{
+          variant="contained"
+          sx={{
+            borderRadius: 2,
+            fontWeight: 600,
+            px: 3,
             backgroundColor: theme.colors.accent,
             color: theme.colors.textPrimary,
             opacity: isLoading ? 0.6 : 1,
+            "&:hover": {
+              backgroundColor: theme.colors.accent,
+              opacity: 0.9,
+            },
           }}
         >
           {isLoading ? "Working..." : oauthButtonLabel}
-        </button>,
+        </Button>,
         "openrouter-option-oauth"
       )}
-    </fieldset>
+    </Stack>
   );
 }

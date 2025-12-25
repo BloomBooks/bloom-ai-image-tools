@@ -1,6 +1,6 @@
 import JSON5 from "json5";
 import type { EthnicityCategory } from "../types";
-import ethnicityCatalog from "../data/ethnicities.json5?raw";
+import ethnicityCatalog from "../data/ethnicities.json5";
 
 const FALLBACK_CATEGORIES: EthnicityCategory[] = [
   {

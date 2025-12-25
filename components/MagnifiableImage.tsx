@@ -9,7 +9,6 @@ export type MagnifiableImageProps =
     zoom?: number;
     lensSize?: number;
     lensBorderColor?: string;
-    wrapperClassName?: string;
   };
 
 type LensStyleState = {
@@ -30,11 +29,13 @@ export const MagnifiableImage = React.forwardRef<
     zoom = 2.25,
     lensSize = 160,
     lensBorderColor = "rgba(255,255,255,0.55)",
-    wrapperClassName,
-    className,
     src,
+    className: _unusedClassName,
     ...restImgProps
   } = props;
+
+  // Ignore incoming className to keep styling controlled within this component.
+  void _unusedClassName;
 
   const imageRef = React.useRef<HTMLImageElement | null>(null);
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
@@ -138,21 +139,24 @@ export const MagnifiableImage = React.forwardRef<
     setLensVisible(false);
   };
 
-  const wrapperClasses = [
-    "relative flex h-full w-full items-center justify-center",
-    wrapperClassName,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const baseWrapperStyle: React.CSSProperties = {
+    position: "relative",
+    display: "flex",
+    height: "100%",
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  };
 
-  const imageClasses = ["block select-none", className]
-    .filter(Boolean)
-    .join(" ");
+  const baseImageStyle: React.CSSProperties = {
+    display: "block",
+    userSelect: "none",
+  };
 
   return (
     <div
       ref={wrapperRef}
-      className={wrapperClasses}
+      style={baseWrapperStyle}
       onPointerEnter={handlePointerEnter}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
@@ -162,14 +166,19 @@ export const MagnifiableImage = React.forwardRef<
         {...restImgProps}
         ref={mergedRefs}
         src={src}
-        className={imageClasses || undefined}
+        style={{
+          ...baseImageStyle,
+          ...(restImgProps.style ?? {}),
+        }}
       />
 
       {lensVisible && src && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute rounded-full shadow-2xl"
           style={{
+            pointerEvents: "none",
+            position: "absolute",
+            borderRadius: "50%",
             width: lensSize,
             height: lensSize,
             left: lensStyles.left,

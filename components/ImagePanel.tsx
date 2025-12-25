@@ -1,8 +1,9 @@
 import React from "react";
+import { Box } from "@mui/material";
 import { HistoryItem } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
-import { PanelToolbar } from "./PanelToolbar";
+import { ImageSlotHeader } from "./ImageSlotHeader";
 
 export type ImagePanelSlot = {
   slotIndex: number;
@@ -62,7 +63,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     } = props;
 
     const containerStyle: React.CSSProperties = {
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: "transparent",
       opacity: disabled ? 0.25 : 1,
       pointerEvents: disabled ? "none" : "auto",
       filter: disabled ? "grayscale(1)" : "none",
@@ -70,28 +71,44 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       boxShadow: theme.colors.panelShadow,
     };
 
+    const gapPx = 16;
     const slotCount = Math.max(1, slots.length);
     const columns = Math.max(1, Math.ceil(Math.sqrt(slotCount)));
-    const minSlotWidth = 100;
-    const maxSlotWidth = 320;
-    const gapPx = 12;
+    const minSlotWidth = 140;
+    const maxSlotWidth = 180;
     const preferredWidthPercent = columns
       ? `calc((100% - ${(columns - 1) * gapPx}px) / ${columns})`
       : "100%";
-    const slotSize = `clamp(${minSlotWidth}px, ${preferredWidthPercent}, ${maxSlotWidth}px)`;
-    const slotAspectRatio = "3 / 4";
+    const slotWidth = `clamp(${minSlotWidth}px, ${preferredWidthPercent}, ${maxSlotWidth}px)`;
+    const slotAspectRatio = "1 / 1";
 
     return (
-      <div
+      <Box
         data-testid={panelTestId}
-        className="flex flex-col h-full relative group transition-colors duration-200 rounded-3xl border p-4 gap-3"
-        style={containerStyle}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          position: "relative",
+          borderRadius: "24px",
+          border: `1px solid ${theme.colors.panelBorder}`,
+          p: 4,
+          gap: "10px",
+          transition: "color 150ms ease",
+          padding: "20px",
+          paddingTop: "5px",
+          ...containerStyle,
+        }}
       >
-        <PanelToolbar label={label} />
-        <div className="flex-1 min-h-0 overflow-auto">
-          <div
-            className="flex flex-wrap gap-3 items-start"
-            style={{ alignContent: "flex-start" }}
+        <ImageSlotHeader label={label} />
+        <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: `${gapPx}px`,
+              alignContent: "flex-start",
+            }}
           >
             {slots.map((slot) => {
               const slotControls: ImageSlotControls = slot.controls ?? {
@@ -103,14 +120,18 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
               };
 
               return (
-                <div
+                <Box
                   key={slot.slotIndex}
-                  className="flex"
-                  style={{
-                    flex: `0 1 ${slotSize}`,
-                    maxWidth: slotSize,
-                    minWidth: minSlotWidth,
+                  sx={{
+                    display: "flex",
+                    flex: "0 1 auto",
+                    flexBasis: slotWidth,
+                    width: slotWidth,
+                    maxWidth: slotWidth,
+                    minWidth: `${minSlotWidth}px`,
                     aspectRatio: slotAspectRatio,
+                    flexDirection: "column",
+                    minHeight: 0,
                   }}
                 >
                   <ImageSlot
@@ -131,7 +152,6 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                     controls={slotControls}
                     variant="tile"
                     rolePill={slot.rolePill}
-                    className="w-full h-full"
                     dropLabel={slot.dropLabel ?? "Drop to add"}
                     dataTestId={slot.dataTestId}
                     uploadInputTestId={slot.uploadInputTestId}
@@ -141,12 +161,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                       }
                     }
                   />
-                </div>
+                </Box>
               );
             })}
-          </div>
-        </div>
-      </div>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
@@ -176,48 +196,74 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
   }) => {
     if (dropZone && !holderDisabled) {
       return (
-        <button
+        <Box
+          component="button"
           type="button"
-          className="flex flex-col items-center justify-center h-full w-full min-h-0"
-          style={{ color: theme.colors.textMuted }}
           onClick={showUploadControls ? openFilePicker : undefined}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            width: "100%",
+            minHeight: 0,
+            color: theme.colors.textMuted,
+            background: "none",
+            border: "none",
+            cursor: showUploadControls ? "pointer" : "default",
+          }}
         >
-          <img
+          <Box
+            component="img"
             src="/assets/image_placeholder.svg"
             alt="Placeholder"
-            className="max-h-[60%] max-w-[220px] w-full h-auto mb-3 mx-auto object-contain"
-            style={{ opacity: 0.3 }}
+            sx={{
+              maxHeight: "60%",
+              maxWidth: "220px",
+              width: "100%",
+              height: "auto",
+              mb: 3,
+              mx: "auto",
+              objectFit: "contain",
+              opacity: 0.3,
+            }}
           />
-          {/* {showUploadControls && (
-            <span className="text-xs font-medium opacity-70">
-              Drop, paste, or upload
-            </span>
-          )} */}
-        </button>
+        </Box>
       );
     }
 
     if (holderDisabled) {
       return (
-        <div className="text-center p-6">
-          <img
+        <Box sx={{ textAlign: "center", p: 3 }}>
+          <Box
+            component="img"
             src="/assets/image_placeholder.svg"
             alt="Placeholder"
-            className="w-12 h-12 mb-3 mx-auto"
-            style={{ opacity: 0.3 }}
+            sx={{ width: 48, height: 48, mb: 1.5, mx: "auto", opacity: 0.3 }}
           />
-          <p className="text-sm font-medium">Panel Disabled</p>
-          <p className="text-xs opacity-50 mt-1">
+          <Box component="p" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>
+            Panel Disabled
+          </Box>
+          <Box
+            component="p"
+            sx={{ fontSize: "0.75rem", opacity: 0.7, mt: 0.5 }}
+          >
             Creating new image from scratch
-          </p>
-        </div>
+          </Box>
+        </Box>
       );
     }
 
     return (
-      <div className="text-center p-6">
-        <p className="text-sm font-medium opacity-50">Empty</p>
-      </div>
+      <Box sx={{ textAlign: "center", p: 3 }}>
+        <Box
+          component="p"
+          sx={{ fontSize: "0.85rem", opacity: 0.6, fontWeight: 600 }}
+        >
+          Empty
+        </Box>
+      </Box>
     );
   };
 

@@ -17,7 +17,7 @@ import {
 import { ThemeProvider } from "@mui/material/styles";
 import type { ModelInfo } from "../types";
 import { isMacPlatform } from "../lib/platformUtils";
-import { lightTheme } from "./materialUITheme";
+import { darkTheme, lightTheme } from "./materialUITheme";
 
 interface ModelChooserDialogProps {
   isOpen: boolean;
@@ -86,7 +86,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <ThemeProvider theme={lightTheme}>
+    <ThemeProvider theme={darkTheme}>
       <Dialog
         open={isOpen}
         onClose={onClose}
@@ -98,12 +98,32 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
             borderRadius: 4,
             maxHeight: "90vh",
             display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           },
         }}
       >
         <DialogTitle id="model-chooser-title">Choose an AI Engine</DialogTitle>
-        <DialogContent dividers sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-          <Box sx={{ flex: 1, overflowY: "auto", pr: 1 }}>
+        <DialogContent
+          dividers
+          sx={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              height: "100%",
+              overflowY: "auto",
+              pr: 1,
+            }}
+          >
             <Grid container spacing={2}>
               {models.map((model) => {
                 const isSelected = model.id === pendingModelId;
@@ -116,19 +136,41 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                         borderColor: isSelected ? "primary.main" : "divider",
                         boxShadow: isSelected ? 6 : "none",
                         transition: (themeInstance) =>
-                          themeInstance.transitions.create(["border-color", "box-shadow"], {
-                            duration: themeInstance.transitions.duration.short,
-                          }),
+                          themeInstance.transitions.create(
+                            ["border-color", "box-shadow"],
+                            {
+                              duration:
+                                themeInstance.transitions.duration.short,
+                            }
+                          ),
                       }}
                     >
-                      <CardActionArea onClick={() => setPendingModelId(model.id)} sx={{ height: "100%" }}>
+                      <CardActionArea
+                        onClick={() => setPendingModelId(model.id)}
+                        sx={{ height: "100%" }}
+                      >
                         <CardContent>
-                          <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-                            {isSelected && <Chip color="primary" size="small" label="Selected" />}
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            spacing={1}
+                            mb={2}
+                          >
+                            {isSelected && (
+                              <Chip
+                                color="primary"
+                                size="small"
+                                label="Selected"
+                              />
+                            )}
                             {(model.badge || "").trim().length > 0 && (
                               <Typography
                                 variant="caption"
-                                sx={{ letterSpacing: "0.3em", textTransform: "uppercase", color: "text.secondary" }}
+                                sx={{
+                                  letterSpacing: "0.3em",
+                                  textTransform: "uppercase",
+                                  color: "text.secondary",
+                                }}
                               >
                                 {model.badge}
                               </Typography>
@@ -137,7 +179,11 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                           <Typography variant="h6" component="h3" gutterBottom>
                             {model.name}
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mb: 3 }}
+                          >
                             {model.description}
                           </Typography>
                           <Box
@@ -149,7 +195,9 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                               bgcolor: "background.default",
                             }}
                           >
-                            <Typography variant="body2">{model.pricing}</Typography>
+                            <Typography variant="body2">
+                              {model.pricing}
+                            </Typography>
                           </Box>
                         </CardContent>
                       </CardActionArea>
@@ -160,7 +208,9 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
             </Grid>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, gap: 1.5, flexWrap: "wrap" }}>{actionButtons}</DialogActions>
+        <DialogActions sx={{ px: 3, py: 2, gap: 1.5, flexWrap: "wrap" }}>
+          {actionButtons}
+        </DialogActions>
       </Dialog>
     </ThemeProvider>
   );

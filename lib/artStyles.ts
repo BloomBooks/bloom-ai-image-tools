@@ -1,6 +1,6 @@
 import JSON5 from "json5";
 import type { ArtStyle, ArtStyleDefinition, HistoryItem } from "../types";
-import artStyleCatalog from "../components/artStyle/art-styles.json5?raw";
+import artStyleCatalog from "../components/artStyle/art-styles.json5";
 
 export const CLEAR_ART_STYLE_ID = "none";
 export const STYLE_PARAM_KEY = "styleId";
@@ -59,10 +59,10 @@ const parseCatalog = (): ArtStyleDefinition[] => {
 
 const styleDefinitions = parseCatalog();
 
-const previewModules = import.meta.glob("../assets/art-styles/*", {
-  eager: true,
-  as: "url",
-}) as Record<string, string>;
+const previewModules = import.meta.glob<string>("../assets/art-styles/*", {
+  eager: false,
+  import: "default",
+});
 
 const normalizeAssetPath = (value?: string | null): string | null => {
   if (!value) return null;
@@ -76,47 +76,56 @@ const normalizeAssetPath = (value?: string | null): string | null => {
   return normalized.length ? normalized : null;
 };
 
-const assetIndex = Object.entries(previewModules).reduce<{
-  byId: Record<string, string>;
-  byPath: Record<string, string>;
-}>(
-  (acc, [path, url]) => {
-    const normalized = normalizeAssetPath(path);
-    if (normalized) {
-      acc.byPath[normalized] = url;
-      acc.byPath[`assets/${normalized}`] = url;
-      const fileName = normalized.split("/").pop() || "";
-      if (fileName) {
-        const id = fileName.replace(/\.[^.]+$/, "");
-        acc.byId[id] = url;
-      }
+const previewModuleIndex = Object.keys(previewModules).reduce<
+  Map<string, string>
+>((acc, rawKey) => {
+  const normalized = normalizeAssetPath(rawKey);
+  if (normalized) {
+    acc.set(normalized, rawKey);
+    acc.set(`assets/${normalized}`, rawKey);
+    const fileName = normalized.split("/").pop() || "";
+    if (fileName) {
+      const id = fileName.replace(/\.[^.]+$/, "");
+      acc.set(id, rawKey);
     }
-    return acc;
-  },
-  {
-    byId: {},
-    byPath: {},
   }
-);
+  return acc;
+}, new Map<string, string>());
+
+const previewUrlCache = new Map<string, string>();
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
-const resolvePreviewUrl = (style: ArtStyleDefinition): string | null => {
+const getModuleKeyForPath = (value?: string | null): string | null => {
+  if (!value) return null;
+  const normalized = normalizeAssetPath(value);
+  if (!normalized) return null;
+  return (
+    previewModuleIndex.get(normalized) ??
+    previewModuleIndex.get(`assets/${normalized}`) ??
+    null
+  );
+};
+
+const resolvePreviewSource = (
+  style: ArtStyleDefinition
+): { previewUrl: string | null; previewAssetKey: string | null } => {
   const candidate = style.sampleImageUrl;
   if (candidate) {
     if (isHttpUrl(candidate)) {
-      return candidate;
+      return { previewUrl: candidate, previewAssetKey: null };
     }
-    const normalized = normalizeAssetPath(candidate);
-    if (normalized) {
-      return (
-        assetIndex.byPath[normalized] ||
-        assetIndex.byPath[`assets/${normalized}`] ||
-        null
-      );
+    const moduleKey = getModuleKeyForPath(candidate);
+    if (moduleKey) {
+      return { previewUrl: null, previewAssetKey: moduleKey };
     }
   }
-  return assetIndex.byId[style.id] || null;
+
+  const fallbackKey =
+    previewModuleIndex.get(style.id) ??
+    getModuleKeyForPath(`art-styles/${style.id}.png`) ??
+    null;
+  return { previewUrl: null, previewAssetKey: fallbackKey };
 };
 
 const normalizeCategoryList = (values?: string[]): string[] =>
@@ -124,11 +133,37 @@ const normalizeCategoryList = (values?: string[]): string[] =>
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value?.length));
 
-export const ART_STYLES: ArtStyle[] = styleDefinitions.map((style) => ({
-  ...style,
-  categories: normalizeCategoryList(style.categories),
-  previewUrl: resolvePreviewUrl(style),
-}));
+export const ART_STYLES: ArtStyle[] = styleDefinitions.map((style) => {
+  const previewSource = resolvePreviewSource(style);
+  return {
+    ...style,
+    categories: normalizeCategoryList(style.categories),
+    previewUrl: previewSource.previewUrl,
+    previewAssetKey: previewSource.previewAssetKey,
+  };
+});
+
+export const loadArtStylePreviewUrl = async (
+  style: ArtStyle
+): Promise<string | null> => {
+  if (style.previewUrl) {
+    return style.previewUrl;
+  }
+  const assetKey = style.previewAssetKey;
+  if (!assetKey) {
+    return null;
+  }
+  if (previewUrlCache.has(assetKey)) {
+    return previewUrlCache.get(assetKey) ?? null;
+  }
+  const loader = previewModules[assetKey];
+  if (!loader) {
+    return null;
+  }
+  const url = await loader();
+  previewUrlCache.set(assetKey, url);
+  return url;
+};
 
 const includeClearStyle = (styles: ArtStyle[]): ArtStyle[] => {
   const hasClear = styles.some((style) => style.id === CLEAR_ART_STYLE_ID);

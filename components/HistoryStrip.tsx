@@ -24,8 +24,10 @@ const HistoryCard: React.FC<{
 }> = ({ item, isSelected, onSelect, onDragStart, onRemove }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = React.useState(false);
 
   const handleMouseEnter = () => {
+    setIsHovered(true);
     if (popoverRef.current && cardRef.current) {
       const rect = cardRef.current.getBoundingClientRect();
       // Position the popover above the card, centered
@@ -36,6 +38,7 @@ const HistoryCard: React.FC<{
   };
 
   const handleMouseLeave = () => {
+    setIsHovered(false);
     popoverRef.current?.hidePopover();
   };
 
@@ -49,27 +52,49 @@ const HistoryCard: React.FC<{
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         data-testid="history-card"
-        className={`
-          relative group flex-shrink-0 w-28 cursor-pointer transition-opacity duration-200
-          ${isSelected ? "opacity-100" : "opacity-80 hover:opacity-100"}
-        `}
+        style={{
+          position: "relative",
+          flexShrink: 0,
+          width: 112,
+          cursor: "pointer",
+          opacity: isSelected ? 1 : isHovered ? 1 : 0.85,
+          transition: "opacity 150ms ease",
+        }}
       >
         {/* Thumbnail Container */}
-        <div className="relative w-full aspect-square">
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            aspectRatio: "1 / 1",
+          }}
+        >
           <div
-            className="relative rounded-lg border-2 w-full h-full"
             style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              borderRadius: 12,
+              borderWidth: 2,
+              borderStyle: "solid",
               borderColor: isSelected
                 ? theme.colors.accent
                 : theme.colors.border,
               boxShadow: isSelected ? theme.colors.accentShadow : "none",
             }}
           >
-            <div className="w-full h-full rounded-[inherit] overflow-hidden">
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: "inherit",
+                overflow: "hidden",
+              }}
+            >
               <img
                 src={item.imageData}
                 alt="History item"
-                className="w-full h-full object-cover"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             </div>
           </div>
@@ -80,16 +105,24 @@ const HistoryCard: React.FC<{
               e.stopPropagation();
               onRemove();
             }}
-            className="absolute top-1 right-1 backdrop-blur-sm p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
             style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              padding: 4,
+              borderRadius: 8,
               backgroundColor: theme.colors.overlay,
               color: theme.colors.textPrimary,
+              border: "none",
+              opacity: isHovered ? 1 : 0,
+              transition: "opacity 120ms ease",
+              backdropFilter: "blur(4px)",
+              zIndex: 10,
             }}
             title="Remove from history"
           >
-            <Icon path={Icons.X} className="w-3 h-3" />
+            <Icon path={Icons.X} width={12} height={12} />
           </button>
-
         </div>
       </div>
 
@@ -97,20 +130,32 @@ const HistoryCard: React.FC<{
       <div
         ref={popoverRef}
         popover="manual"
-        className="w-56 border text-xs rounded-lg shadow-2xl p-4 m-0"
         style={{
+          width: 224,
+          border: `1px solid ${theme.colors.border}`,
+          fontSize: "0.75rem",
+          borderRadius: 12,
+          padding: 16,
           position: "fixed",
           transform: "translate(-50%, -100%)",
           backgroundColor: theme.colors.surfaceRaised,
-          borderColor: theme.colors.border,
           color: theme.colors.textPrimary,
         }}
       >
         <ImageInfoPanel item={item} />
         {/* Arrow */}
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 -mt-[1px] border-4 border-transparent"
-          style={{ borderTopColor: theme.colors.surfaceRaised }}
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translate(-50%, -100%)",
+            width: 0,
+            height: 0,
+            borderLeft: "4px solid transparent",
+            borderRight: "4px solid transparent",
+            borderTop: `4px solid ${theme.colors.surfaceRaised}`,
+          }}
         />
       </div>
     </>
@@ -137,28 +182,56 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
 
   return (
     <div
-      className="h-44 border-t flex flex-col flex-shrink-0 z-10 relative"
       style={{
+        height: 176,
+        borderTop: `1px solid ${theme.colors.border}`,
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        position: "relative",
+        zIndex: 10,
         backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.border,
       }}
     >
-      <div className="px-4 py-1 flex items-center justify-end relative z-0">
+      <div
+        style={{
+          padding: "4px 16px",
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          position: "relative",
+          zIndex: 0,
+        }}
+      >
         <button
           type="button"
-          className="p-1 rounded-full border text-xs hover:opacity-80 transition-opacity"
           style={{
-            color: theme.colors.textMuted,
-            borderColor: theme.colors.border,
+            padding: 6,
+            borderRadius: "50%",
+            border: `1px solid ${theme.colors.border}`,
             backgroundColor: "transparent",
+            color: theme.colors.textMuted,
+            fontSize: "0.75rem",
+            transition: "opacity 120ms ease",
           }}
           title="You can drag these items to the above panels."
           aria-label="History strip drag instructions"
         >
-          <Icon path={Icons.Info} className="w-4 h-4" />
+          <Icon path={Icons.Info} width={16} height={16} />
         </button>
       </div>
-      <div className="flex-1 overflow-x-auto overflow-y-clip flex items-center py-2 px-4 gap-3 custom-scrollbar relative">
+      <div
+        style={{
+          flex: 1,
+          overflowX: "auto",
+          overflowY: "hidden",
+          display: "flex",
+          alignItems: "center",
+          padding: "8px 16px",
+          gap: 12,
+          position: "relative",
+        }}
+      >
         {newestFirst.map((item) => (
           <HistoryCard
             key={item.id}
@@ -173,25 +246,32 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
           <button
             type="button"
             onClick={onRequestHistoryAccess}
-            className="flex flex-col justify-between items-start flex-shrink-0 w-44 h-36 border-2 border-dashed rounded-xl p-4 text-left hover:opacity-90 transition-opacity"
             style={{
-              borderColor: theme.colors.border,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              flexShrink: 0,
+              width: 176,
+              height: 144,
+              borderRadius: 16,
+              border: `2px dashed ${theme.colors.border}`,
+              padding: 16,
+              textAlign: "left",
               backgroundColor: theme.colors.surfaceAlt,
               color: theme.colors.textPrimary,
               boxShadow: theme.colors.panelShadow,
+              transition: "opacity 150ms ease",
             }}
           >
-            <span className="text-sm font-semibold">
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
               More history available
             </span>
-            <span className="text-xs text-left opacity-80">
+            <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
               Connect to a folder on your computer for more history.
             </span>
-            <span
-              className="mt-2 inline-flex items-center gap-2 text-xs font-semibold"
-              style={{ color: theme.colors.accent }}
-            >
-              <Icon path={Icons.Refresh} className="w-3.5 h-3.5" />
+            <span style={{ color: theme.colors.accent }}>
+              <Icon path={Icons.Refresh} width={14} height={14} />
               Reconnect folder
             </span>
           </button>

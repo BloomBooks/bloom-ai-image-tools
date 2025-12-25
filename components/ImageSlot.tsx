@@ -1,9 +1,10 @@
 import React from "react";
+import { CircularProgress } from "@mui/material";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { kBloomBlue, theme } from "../themes";
-import { PanelToolbar } from "./PanelToolbar";
+import { ImageSlotHeader } from "./ImageSlotHeader";
 import {
   processImageForThumbnail,
   saveArtStyleThumbnail,
@@ -55,7 +56,6 @@ export interface ImageSlotProps {
   uploadInputTestId?: string;
   controls?: ImageSlotControls;
   variant?: "panel" | "tile";
-  className?: string;
   rolePill?: { label: string; kind?: RoleKind; testId?: string };
   renderEmptyState?: (args: RenderEmptyStateArgs) => React.ReactNode;
   dropLabel?: string;
@@ -63,34 +63,99 @@ export interface ImageSlotProps {
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
 }
 
-const VARIANT_CLASSES = {
+const VARIANT_LAYOUT_STYLES: Record<
+  NonNullable<ImageSlotProps["variant"]>,
+  {
+    container: React.CSSProperties;
+    contentWrapper: React.CSSProperties;
+    innerWrapper: React.CSSProperties;
+  }
+> = {
   panel: {
-    container:
-      "flex flex-col h-full relative group transition-colors duration-200 rounded-3xl border p-4 gap-4",
-    contentWrapper: "flex-1 flex items-center justify-center min-h-0",
-    innerWrapper:
-      "relative rounded-2xl overflow-hidden w-full h-full flex items-center justify-center",
+    container: {
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      position: "relative",
+      borderRadius: "24px",
+      borderWidth: 1,
+      borderStyle: "solid",
+      padding: 16,
+      gap: 16,
+      transition: "color 150ms ease",
+    },
+    contentWrapper: {
+      display: "flex",
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 0,
+    },
+    innerWrapper: {
+      position: "relative",
+      borderRadius: "18px",
+      overflow: "hidden",
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 0,
+    },
   },
   tile: {
-    container:
-      "relative flex flex-col rounded-2xl border transition-colors duration-200 overflow-hidden min-h-0",
-    contentWrapper: "flex-1 flex items-center justify-center min-h-0",
-    innerWrapper:
-      "relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden min-h-0",
+    container: {
+      position: "relative",
+      display: "flex",
+      flexDirection: "column",
+      borderRadius: "18px",
+      borderWidth: 1,
+      borderStyle: "solid",
+      minHeight: 0,
+      overflow: "hidden",
+      transition: "color 150ms ease",
+      width: "100%",
+      height: "100%",
+    },
+    contentWrapper: {
+      display: "flex",
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: 0,
+    },
+    innerWrapper: {
+      position: "relative",
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "18px",
+      overflow: "hidden",
+      minHeight: 0,
+    },
   },
-} as const;
+};
 
 const TRANSPARENCY_TILE_SIZE = 16;
-const TRANSPARENCY_TILE_HALF = TRANSPARENCY_TILE_SIZE / 2;
 const TRANSPARENCY_BLOOM_BLUE = "#8ecad2"; // 50% blend of Bloom blue + white
+const TRANSPARENCY_PATTERN_SIZE = TRANSPARENCY_TILE_SIZE * 2;
+const TRANSPARENCY_CHECKERBOARD_IMAGE = (() => {
+  const tile = TRANSPARENCY_TILE_SIZE;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${
+    tile * 2
+  }" height="${
+    tile * 2
+  }" shape-rendering="crispEdges"><rect width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/><rect x="${tile}" y="${tile}" width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+})();
+
 const TRANSPARENCY_BACKGROUND_STYLE: React.CSSProperties = {
   // Classic checkerboard of Bloom blue and white for transparent regions
   backgroundColor: "#ffffff",
-  backgroundImage:
-    `linear-gradient(45deg, ${TRANSPARENCY_BLOOM_BLUE} 25%, transparent 25%, transparent 75%, ${TRANSPARENCY_BLOOM_BLUE} 75%, ${TRANSPARENCY_BLOOM_BLUE}),` +
-    `linear-gradient(45deg, ${TRANSPARENCY_BLOOM_BLUE} 25%, transparent 25%, transparent 75%, ${TRANSPARENCY_BLOOM_BLUE} 75%, ${TRANSPARENCY_BLOOM_BLUE})`,
-  backgroundSize: `${TRANSPARENCY_TILE_SIZE}px ${TRANSPARENCY_TILE_SIZE}px`,
-  backgroundPosition: `0 0, ${TRANSPARENCY_TILE_HALF}px ${TRANSPARENCY_TILE_HALF}px`,
+  backgroundImage: TRANSPARENCY_CHECKERBOARD_IMAGE,
+  backgroundSize: `${TRANSPARENCY_PATTERN_SIZE}px ${TRANSPARENCY_PATTERN_SIZE}px`,
 };
 
 const getArtStyleIdForImage = (item?: HistoryItem | null): string | null => {
@@ -123,7 +188,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   uploadInputTestId,
   controls,
   variant = "panel",
-  className,
   rolePill,
   renderEmptyState,
   dropLabel = "Drop image",
@@ -370,10 +434,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     return () => document.removeEventListener("click", handleClick);
   }, [contextMenu]);
 
-  const variantClasses = VARIANT_CLASSES[variant];
-  const containerClasses = [variantClasses.container, className]
-    .filter(Boolean)
-    .join(" ");
+  const variantStyles = VARIANT_LAYOUT_STYLES[variant];
+
+  // Panel slots stay transparent until hovered or dragged for a lighter touch.
+  const baseBackgroundColor =
+    variant === "panel" ? "transparent" : theme.colors.surface;
+  const hoverBackgroundColor =
+    variant === "panel" ? theme.colors.surfaceAlt : baseBackgroundColor;
 
   const defaultActionLabels: Record<keyof ImageSlotControls, string> = {
     upload: "Upload",
@@ -444,21 +511,33 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
     if (variant === "panel") {
       return (
-        <div className="flex gap-2">
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            justifyContent: "flex-start",
+          }}
+        >
           {orderedActionButtons.map((action) => (
             <button
               key={action.key}
               type="button"
               onClick={action.onClick}
-              className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
               style={{
+                padding: 8,
+                borderRadius: "50%",
+                border: `1px solid ${theme.colors.panelBorder}`,
                 backgroundColor: theme.colors.overlay,
                 color: theme.colors.textPrimary,
+                boxShadow: theme.colors.panelShadow,
+                backdropFilter: "blur(6px)",
+                transition: "background-color 120ms ease",
               }}
               title={action.title}
               aria-label={action.title}
             >
-              <Icon path={action.icon} className="w-4 h-4" />
+              <Icon path={action.icon} width={16} height={16} />
             </button>
           ))}
         </div>
@@ -467,23 +546,36 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
     return (
       <div
-        className="absolute top-2 right-2 flex flex-col gap-1 z-20"
-        style={{ pointerEvents: disabled ? "none" : "auto" }}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          zIndex: 20,
+          pointerEvents: disabled ? "none" : "auto",
+        }}
       >
         {orderedActionButtons.map((action) => (
           <button
             key={action.key}
             type="button"
             onClick={action.onClick}
-            className="backdrop-blur-md p-2 rounded-full transition-colors shadow-lg"
             style={{
+              padding: 8,
+              borderRadius: "50%",
+              border: `1px solid ${theme.colors.panelBorder}`,
               backgroundColor: theme.colors.overlay,
               color: theme.colors.textPrimary,
+              boxShadow: theme.colors.panelShadow,
+              backdropFilter: "blur(6px)",
+              transition: "background-color 120ms ease",
             }}
             title={action.title}
             aria-label={action.title}
           >
-            <Icon path={action.icon} className="w-4 h-4" />
+            <Icon path={action.icon} width={16} height={16} />
           </button>
         ))}
       </div>
@@ -493,9 +585,17 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const defaultEmptyState = (
     <button
       type="button"
-      className="w-full h-full flex flex-col items-center justify-center gap-2"
       style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
         color: theme.colors.textMuted,
+        background: "none",
+        border: "none",
         cursor:
           mergedControls.upload && onUpload && !disabled
             ? "pointer"
@@ -510,10 +610,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       <img
         src="/assets/image_placeholder.svg"
         alt="Placeholder"
-        className="w-12 h-12"
-        style={{ opacity: 0.3 }}
+        style={{ width: 48, height: 48, opacity: 0.3 }}
       />
-      {/* <span className="text-xs font-medium opacity-70">Drop or upload</span> */}
+      {/* Drop/upload helper text intentionally omitted for cleaner UI */}
     </button>
   );
 
@@ -535,18 +634,17 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         mime: activeMetadata.mime || "Unknown type",
       }
     : null;
-  const innerWrapperStyle = image ? TRANSPARENCY_BACKGROUND_STYLE : undefined;
 
   return (
     <div
       data-testid={dataTestId}
-      className={containerClasses}
       style={{
+        ...variantStyles.container,
         backgroundColor: isDragOver
           ? theme.colors.dropZone
-          : variant === "panel"
-          ? theme.colors.surfaceAlt
-          : theme.colors.surface,
+          : isHovered
+          ? hoverBackgroundColor
+          : baseBackgroundColor,
         opacity: disabled ? 0.4 : 1,
         pointerEvents: disabled ? "none" : "auto",
         filter: disabled ? "grayscale(1)" : "none",
@@ -565,22 +663,33 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       onContextMenu={handleContextMenu}
     >
       {variant === "panel" && (label || actionsNode) && (
-        <PanelToolbar label={label || ""} actions={actionsNode} />
+        <ImageSlotHeader label={label || ""} actions={actionsNode} />
       )}
 
-      <div className={variantClasses.contentWrapper}>
-        <div
-          className={variantClasses.innerWrapper}
-          style={innerWrapperStyle}
-        >
+      <div style={variantStyles.contentWrapper}>
+        <div style={variantStyles.innerWrapper}>
           {image ? (
-            <MagnifiableImage
-              src={image.imageData}
-              alt={label || "Reference"}
-              className="max-h-full max-w-full object-contain"
-              draggable={!!draggableImageId}
-              onDragStart={handleImageDragStart}
-            />
+            <div
+              style={{
+                display: "flex",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                ...TRANSPARENCY_BACKGROUND_STYLE,
+              }}
+            >
+              <MagnifiableImage
+                src={image.imageData}
+                alt={label || "Reference"}
+                style={{
+                  maxHeight: "100%",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                }}
+                draggable={!!draggableImageId}
+                onDragStart={handleImageDragStart}
+              />
+            </div>
           ) : (
             emptyStateContent
           )}
@@ -590,8 +699,16 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           {rolePill && (
             <div
               data-testid={rolePill.testId}
-              className="absolute top-2 left-2 px-2 py-1 rounded-full text-[10px] font-semibold tracking-wide select-none"
               style={{
+                position: "absolute",
+                top: 8,
+                left: 8,
+                padding: "4px 8px",
+                borderRadius: "999px",
+                fontSize: "10px",
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                userSelect: "none",
                 zIndex: 10,
                 backgroundColor:
                   rolePill.kind === "target"
@@ -608,8 +725,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
           {image && metadataLabels && isHovered && (
             <div
-              className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 text-[10px] font-semibold px-3 py-1 rounded-full"
               style={{
+                position: "absolute",
+                left: 12,
+                right: 12,
+                bottom: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                fontSize: "10px",
+                fontWeight: 600,
+                padding: "6px 12px",
+                borderRadius: "999px",
                 zIndex: 15,
                 backgroundColor: theme.colors.overlay,
                 color: theme.colors.textPrimary,
@@ -624,16 +752,27 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
           {isDragOver && (
             <div
-              className="absolute inset-0 backdrop-blur-[1px] flex items-center justify-center z-20 rounded-2xl"
               style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 20,
+                borderRadius: "18px",
                 backgroundColor: theme.colors.dropZone,
                 border: `2px dashed ${theme.colors.dropZoneBorder}`,
                 pointerEvents: "none",
+                backdropFilter: "blur(1px)",
               }}
             >
               <span
-                className="font-bold text-sm drop-shadow-md"
-                style={{ color: theme.colors.textPrimary }}
+                style={{
+                  fontWeight: 700,
+                  fontSize: "0.9rem",
+                  color: theme.colors.textPrimary,
+                  textShadow: theme.colors.panelShadow,
+                }}
               >
                 {dropLabel}
               </span>
@@ -642,22 +781,28 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
           {isLoading && (
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center z-30 gap-4 rounded-2xl"
               style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+                zIndex: 30,
+                borderRadius: "18px",
                 backgroundColor: theme.colors.overlayStrong,
                 backdropFilter: "blur(4px)",
               }}
             >
-              <div
-                className="w-12 h-12 rounded-full border-4 border-solid animate-spin"
-                style={{
-                  borderColor: theme.colors.overlay,
-                  borderTopColor: theme.colors.accent,
-                }}
-              ></div>
+              <CircularProgress size={40} sx={{ color: theme.colors.accent }} />
               <span
-                className="text-sm font-semibold tracking-wide"
-                style={{ color: theme.colors.textPrimary }}
+                style={{
+                  fontSize: "0.9rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  color: theme.colors.textPrimary,
+                }}
               >
                 Generating...
               </span>
@@ -669,7 +814,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       <input
         type="file"
         ref={fileInputRef}
-        className="hidden"
+        style={{ display: "none" }}
         accept="image/*"
         data-testid={uploadInputTestId}
         onChange={handleInputChange}
@@ -679,10 +824,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       {contextMenu && (
         <div
           data-testid="image-slot-context-menu"
-          className="fixed z-50 rounded-lg shadow-xl border py-1 min-w-[160px]"
           style={{
+            position: "fixed",
             left: contextMenu.x,
             top: contextMenu.y,
+            zIndex: 50,
+            borderRadius: 12,
+            padding: 4,
+            minWidth: 160,
             backgroundColor: theme.colors.surfaceRaised,
             borderColor: theme.colors.border,
             boxShadow: theme.colors.panelShadow,
@@ -692,10 +841,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           <button
             type="button"
             data-testid="context-menu-set-thumbnail"
-            className="w-full px-4 py-2 text-left text-sm transition-colors"
             style={{
+              width: "100%",
+              padding: "8px 16px",
+              textAlign: "left",
+              fontSize: "0.85rem",
               color: theme.colors.textPrimary,
               backgroundColor: "transparent",
+              border: "none",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = theme.colors.surfaceAlt;
@@ -714,8 +867,15 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       {thumbnailStatus !== "idle" && (
         <div
           data-testid="thumbnail-status"
-          className="absolute bottom-2 left-2 px-3 py-1 rounded-full text-xs font-medium z-40"
           style={{
+            position: "absolute",
+            bottom: 8,
+            left: 8,
+            padding: "4px 12px",
+            borderRadius: "999px",
+            fontSize: "0.75rem",
+            fontWeight: 500,
+            zIndex: 40,
             backgroundColor:
               thumbnailStatus === "saving"
                 ? theme.colors.accent

@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
+import type { ElementType, ReactNode } from "react";
 
 export interface ToolParameter {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea" | "art-style";
+  type: "text" | "select" | "textarea" | "art-style" | "shape" | "size";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
@@ -49,13 +49,15 @@ export interface ArtStyleDefinition {
 
 export interface ArtStyle extends ArtStyleDefinition {
   previewUrl?: string | null;
+  /** Internal asset key used to lazily resolve local preview files. */
+  previewAssetKey?: string | null;
 }
 
 export interface ToolDefinition {
   id: string;
   title: string;
   description: string;
-  icon: string; // SVG path d
+  icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
   referenceImages: "0" | "0+" | "1" | "1+";

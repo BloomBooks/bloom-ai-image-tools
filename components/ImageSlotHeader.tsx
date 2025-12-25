@@ -1,23 +1,17 @@
 import React from "react";
-import { Paper, Stack, Typography } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { Box, Stack, Typography } from "@mui/material";
 
-interface PanelToolbarProps {
+interface ImageSlotHeaderProps {
   label: string;
   actions?: React.ReactNode;
 }
 
-export const PanelToolbar: React.FC<PanelToolbarProps> = ({
+export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
   label,
   actions,
 }) => {
-  const muiTheme = useTheme();
-  const background = alpha(muiTheme.palette.background.paper, 0.9);
-
   return (
-    <Paper
-      elevation={6}
-      square={false}
+    <Box
       sx={{
         display: "flex",
         alignItems: "center",
@@ -30,8 +24,7 @@ export const PanelToolbar: React.FC<PanelToolbarProps> = ({
         gap: 1,
         bgcolor: "transparent",
         border: "none",
-        color: muiTheme.palette.text.primary,
-        //backdropFilter: "blur(12px)",
+        color: "text.primary",
       }}
     >
       <Typography
@@ -56,6 +49,6 @@ export const PanelToolbar: React.FC<PanelToolbarProps> = ({
           {actions}
         </Stack>
       ) : null}
-    </Paper>
+    </Box>
   );
 };

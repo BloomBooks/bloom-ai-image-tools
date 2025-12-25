@@ -5,8 +5,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bloom AI Image Tools</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    body {
+      background-color: #1a1a1a;
+      color: #d2d2d2;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
     /* Custom scrollbar for dark mode aesthetics */
     ::-webkit-scrollbar {
       width: 8px;
@@ -39,7 +45,7 @@
   <link rel="stylesheet" href="/index.css">
 </head>
 
-<body class="antialiased overflow-hidden" style="background-color: #1a1a1a; color: #d2d2d2;">
+<body>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

@@ -31,12 +31,13 @@ import { Icon, Icons } from "../Icons";
 import { CapabilityPanel } from "../CapabilityPanel";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
+import { ShapePicker } from "./ShapePicker";
 import {
   getReferenceConstraints,
   toolRequiresEditImage,
 } from "../../lib/toolHelpers";
 
-interface ToolPanelProps {
+interface ImageToolProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
   onCancelProcessing: () => void;
@@ -112,7 +113,7 @@ const LazyArtStylePicker: React.FC<LazyArtStylePickerProps> = (props) => {
   return <ArtStylePicker {...props} />;
 };
 
-export const ToolPanel: React.FC<ToolPanelProps> = ({
+export const ImageTool: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
   onCancelProcessing,
@@ -169,6 +170,26 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
       }
       selectionTimingRef.current = null;
     }
+  }, [resolvedActiveToolId]);
+
+  // Focus first text field when a tool is selected
+  useEffect(() => {
+    if (!resolvedActiveToolId) return;
+    // Use a small delay to ensure the form is rendered
+    const timeoutId = setTimeout(() => {
+      const toolPanel = document.querySelector(
+        `[data-tool-id="${resolvedActiveToolId}"]`
+      );
+      if (toolPanel) {
+        const firstInput = toolPanel.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+          'input:not([type="hidden"]), textarea'
+        );
+        if (firstInput) {
+          firstInput.focus();
+        }
+      }
+    }, 50);
+    return () => clearTimeout(timeoutId);
   }, [resolvedActiveToolId]);
 
   const handleParamChange = useCallback(
@@ -287,6 +308,61 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
         );
       }
 
+      if (param.type === "shape") {
+        const shapeValue = value || param.defaultValue || "";
+        return (
+          <ShapePicker
+            key={param.name}
+            options={param.options || []}
+            value={shapeValue}
+            onChange={(newValue) =>
+              handleParamChange(tool.id, param.name, newValue)
+            }
+            disabled={isProcessing}
+            label={param.label}
+          />
+        );
+      }
+
+      if (param.type === "size") {
+        const sizeValue = value || param.defaultValue || "";
+        return (
+          <Stack key={param.name} spacing={1}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: muiTheme.palette.text.secondary,
+              }}
+            >
+              {param.label}
+            </Typography>
+            <TextField
+              select
+              value={sizeValue}
+              onChange={(event) =>
+                handleParamChange(tool.id, param.name, event.target.value)
+              }
+              size="small"
+              disabled={isProcessing}
+              inputProps={{ "data-testid": inputTestId }}
+              SelectProps={{
+                MenuProps: { disablePortal: false },
+                displayEmpty: false,
+              }}
+            >
+              {param.options?.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        );
+      }
+
       if (param.type === "select") {
         return (
           <TextField
@@ -364,11 +440,18 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
           display: "flex",
           flexDirection: "column",
           gap: 2,
+          "&::-webkit-scrollbar": { width: 8 },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: alpha(muiTheme.palette.text.primary, 0.2),
+            borderRadius: 999,
+          },
+          "&::-webkit-scrollbar-track": {
+            backgroundColor: alpha(muiTheme.palette.background.paper, 0.4),
+          },
         }}
-        className="custom-scrollbar"
       >
         {TOOLS.map((tool) => {
-          const isActive = resolvedActiveToolId === tool.id;
+          const isSelected = resolvedActiveToolId === tool.id;
           const referenceConstraints = getReferenceConstraints(
             tool.referenceImages
           );
@@ -391,7 +474,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
           const isSubmitDisabled =
             isProcessing || needsTarget || needsReference || missingRequired;
 
-          const effectiveCapabilities = isActive
+          const effectiveCapabilities = isSelected
             ? tool.referenceImages === "1+" && referenceImageCount > 1
               ? {
                   ...(tool.capabilities ?? {}),
@@ -402,23 +485,26 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
 
           const cardBackground = isDisabled
             ? alpha(muiTheme.palette.background.paper, 0.4)
-            : isActive
-            ? alpha(muiTheme.palette.primary.main, 0.05)
+            : isSelected
+            ? "transparent"
             : muiTheme.palette.background.paper;
-          const cardBorder = isActive
+          const cardBorderColor = isSelected
             ? muiTheme.palette.primary.main
             : muiTheme.palette.divider;
+          const cardBorderWidth = isSelected ? 2 : 1;
+          const ToolIcon = tool.icon;
 
           return (
             <Paper
               key={tool.id}
+              data-tool-id={tool.id}
               variant="outlined"
               sx={{
                 borderRadius: 3,
-                borderColor: cardBorder,
+                border: `${cardBorderWidth}px solid ${cardBorderColor}`,
                 bgcolor: cardBackground,
                 opacity: isDisabled ? 0.6 : 1,
-                boxShadow: isActive ? muiTheme.shadows[8] : "none",
+                boxShadow: "none",
                 transition: "all 0.2s ease",
               }}
             >
@@ -431,35 +517,40 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   width: "100%",
                   textAlign: "left",
                   p: 2,
-                  display: "flex",
-                  gap: 2,
-                  alignItems: "flex-start",
+                  display: "grid",
+                  gridTemplateColumns: "48px 1fr",
+                  columnGap: 2,
+                  alignItems: "center",
                   borderRadius: 3,
                 }}
               >
                 <Box
                   sx={{
-                    p: 1.25,
+                    width: 48,
+                    height: 48,
                     borderRadius: 2,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     bgcolor: alpha(muiTheme.palette.background.default, 0.7),
                     color: muiTheme.palette.text.secondary,
                   }}
                 >
-                  <Icon path={tool.icon} style={{ width: 20, height: 20 }} />
+                  <ToolIcon sx={{ fontSize: 26 }} />
                 </Box>
-                <Box>
+                <Box
+                  sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}
+                >
                   <Typography
                     variant="subtitle1"
                     sx={{
                       fontWeight: 600,
-                      color: isActive
-                        ? muiTheme.palette.text.primary
-                        : muiTheme.palette.text.secondary,
+                      color: alpha(muiTheme.palette.text.primary, 0.75),
                     }}
                   >
                     {tool.title}
                   </Typography>
-                  {isActive && tool.description && (
+                  {isSelected && tool.description && (
                     <Typography
                       variant="body2"
                       sx={{ mt: 0.5, color: muiTheme.palette.text.secondary }}
@@ -470,7 +561,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                 </Box>
               </ButtonBase>
 
-              {isActive && (
+              {isSelected && (
                 <Box
                   component="form"
                   onSubmit={(event) => handleSubmit(event, tool)}
@@ -482,9 +573,43 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
                   }}
                 >
                   <Stack spacing={2} mt={2}>
-                    {tool.parameters.map((param) =>
-                      renderParameterField(tool, param)
-                    )}
+                    {(() => {
+                      const params = tool.parameters;
+                      const elements: React.ReactNode[] = [];
+                      let i = 0;
+                      while (i < params.length) {
+                        const param = params[i];
+                        const nextParam = params[i + 1];
+                        // Group shape and size parameters in the same row
+                        if (
+                          param.name === "shape" &&
+                          nextParam?.name === "size"
+                        ) {
+                          elements.push(
+                            <Box
+                              key="shape-size-row"
+                              sx={{
+                                display: "flex",
+                                gap: 2,
+                                alignItems: "flex-start",
+                              }}
+                            >
+                              <Box sx={{ flex: 1 }}>
+                                {renderParameterField(tool, param)}
+                              </Box>
+                              <Box sx={{ width: 80, flexShrink: 0 }}>
+                                {renderParameterField(tool, nextParam)}
+                              </Box>
+                            </Box>
+                          );
+                          i += 2;
+                        } else {
+                          elements.push(renderParameterField(tool, param));
+                          i += 1;
+                        }
+                      }
+                      return elements;
+                    })()}
 
                     <CapabilityPanel
                       capabilities={effectiveCapabilities}

@@ -17,7 +17,8 @@ import { IMAGE_TOOLS_FS_IMAGES_DIR } from "../services/persistence/constants";
 import openRouterIcon from "../assets/openrouter.svg";
 import { Icon, Icons } from "./Icons";
 import { OpenRouterConnect } from "./OpenRouterConnect";
-import { lightTheme } from "./materialUITheme";
+import { darkTheme } from "./materialUITheme";
+import { theme as appTheme } from "../themes";
 
 interface OpenRouterSectionProps {
   isAuthenticated: boolean;
@@ -54,6 +55,34 @@ const folderPathFromName = (name: string | null) => {
   return `${name}/${IMAGE_TOOLS_FS_IMAGES_DIR}`;
 };
 
+const sectionCardStyles = {
+  p: 3,
+  borderRadius: 3,
+  backgroundColor: "transparent",
+  boxShadow: "none",
+};
+
+const nestedCardStyles = {
+  p: 2,
+  borderRadius: 2,
+  backgroundColor: "transparent",
+};
+
+const primaryContainedButtonStyles = {
+  borderRadius: 999,
+  fontWeight: 600,
+  px: 3,
+  boxShadow: appTheme.colors.accentShadow,
+  backgroundColor: appTheme.colors.accent,
+  color: appTheme.colors.textPrimary,
+  "&:hover": {
+    backgroundColor: appTheme.colors.accentHover,
+    boxShadow: appTheme.colors.accentShadow,
+  },
+};
+
+const dialogBackground = "#000";
+
 export const AIImageToolsSettingsDialog: React.FC<
   AIImageToolsSettingsDialogProps
 > = ({ isOpen, onClose, openRouter, history }) => {
@@ -65,13 +94,21 @@ export const AIImageToolsSettingsDialog: React.FC<
   const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
 
   return (
-    <ThemeProvider theme={lightTheme}>
+    <ThemeProvider theme={darkTheme}>
       <Dialog
         open
         onClose={onClose}
         fullWidth
         maxWidth="md"
         aria-labelledby="ai-settings-title"
+        PaperProps={{
+          sx: {
+            backgroundColor: dialogBackground,
+            backgroundImage: "none",
+            borderRadius: 3,
+            color: appTheme.colors.textPrimary,
+          },
+        }}
       >
         <DialogTitle
           id="ai-settings-title"
@@ -82,6 +119,7 @@ export const AIImageToolsSettingsDialog: React.FC<
             justifyContent: "space-between",
             pr: 1,
             gap: 2,
+            backgroundColor: dialogBackground,
           }}
         >
           <Stack direction="row" spacing={2} alignItems="center">
@@ -89,25 +127,44 @@ export const AIImageToolsSettingsDialog: React.FC<
               sx={{
                 p: 1.5,
                 borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
                 display: "inline-flex",
+                backgroundColor: appTheme.colors.surface,
               }}
             >
-              <Icon path={Icons.Gear} className="w-5 h-5" />
+              <Icon path={Icons.Gear} width={20} height={20} />
             </Box>
             <Typography variant="h6" component="p" fontWeight={600}>
               AI Image Tools settings
             </Typography>
           </Stack>
-          <IconButton onClick={onClose} aria-label="Close settings dialog" size="small">
-            <Icon path={Icons.X} className="w-4 h-4" />
+          <IconButton
+            onClick={onClose}
+            aria-label="Close settings dialog"
+            size="small"
+            sx={{
+              color: appTheme.colors.textSecondary,
+              "&:hover": {
+                color: appTheme.colors.textPrimary,
+                backgroundColor: "transparent",
+              },
+            }}
+          >
+            <Icon path={Icons.X} width={16} height={16} />
           </IconButton>
         </DialogTitle>
 
-        <DialogContent dividers>
+        <DialogContent
+          sx={{
+            backgroundColor: dialogBackground,
+          }}
+        >
           <Stack spacing={3}>
-            <Paper variant="outlined" sx={{ p: 3 }} aria-labelledby="openrouter-section-title">
+            <Paper
+              elevation={0}
+              square
+              sx={sectionCardStyles}
+              aria-labelledby="openrouter-section-title"
+            >
               <Stack spacing={2}>
                 <Stack direction="row" spacing={2} alignItems="center">
                   <Box
@@ -116,12 +173,16 @@ export const AIImageToolsSettingsDialog: React.FC<
                     alt="OpenRouter"
                     sx={{ width: 24, height: 24 }}
                   />
-                  <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
+                  <Typography
+                    id="openrouter-section-title"
+                    variant="subtitle1"
+                    fontWeight={600}
+                  >
                     OpenRouter connection
                   </Typography>
                 </Stack>
 
-                <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={nestedCardStyles}>
                   <Stack spacing={2}>
                     <OpenRouterConnect
                       isAuthenticated={openRouter.isAuthenticated}
@@ -135,25 +196,35 @@ export const AIImageToolsSettingsDialog: React.FC<
                     />
                     {openRouter.usingEnvKey && (
                       <Typography variant="caption" color="text.secondary">
-                        This environment-provided key cannot be edited here. Restart the session to switch
-                        accounts.
+                        This environment-provided key cannot be edited here.
+                        Restart the session to switch accounts.
                       </Typography>
                     )}
                   </Stack>
-                </Paper>
+                </Box>
               </Stack>
             </Paper>
 
-            <Paper variant="outlined" sx={{ p: 3 }} aria-labelledby="history-section-title">
+            <Paper
+              elevation={0}
+              square
+              sx={sectionCardStyles}
+              aria-labelledby="history-section-title"
+            >
               <Stack spacing={2}>
                 <Stack direction="row" spacing={2} alignItems="flex-start">
-                  <Icon path={Icons.History} className="w-5 h-5" />
+                  <Icon path={Icons.History} width={20} height={20} />
                   <Box>
-                    <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
+                    <Typography
+                      id="history-section-title"
+                      variant="subtitle1"
+                      fontWeight={600}
+                    >
                       History storage
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Keep more than the recent few entries by using a folder on your computer.
+                      Keep more than the recent few entries by using a folder on
+                      your computer.
                     </Typography>
                   </Box>
                 </Stack>
@@ -163,7 +234,11 @@ export const AIImageToolsSettingsDialog: React.FC<
                     severity="warning"
                     icon={
                       <Box component="span" sx={{ display: "inline-flex" }}>
-                        <Icon path={Icons.AlertTriangle} className="w-5 h-5" />
+                        <Icon
+                          path={Icons.AlertTriangle}
+                          width={20}
+                          height={20}
+                        />
                       </Box>
                     }
                   >
@@ -171,37 +246,56 @@ export const AIImageToolsSettingsDialog: React.FC<
                       Local folders need Chromium-based browsers
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed history.
+                      Try Chrome, Edge, Arc, or another Chromium browser to
+                      unlock folder-backed history.
                     </Typography>
                   </Alert>
                 )}
 
                 {history.isFolderPersistenceActive ? (
-                  <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Box sx={nestedCardStyles}>
                     <Typography variant="body2" color="text.secondary">
                       Images are written to{" "}
-                      <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                      <Box
+                        component="span"
+                        sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                      >
                         {folderPath || "your folder"}
                       </Box>
                       .
                     </Typography>
                     <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
                       <Button
-                        variant="outlined"
+                        variant="contained"
                         color="primary"
                         onClick={() => void history.onDisableFolder()}
                         disabled={history.isLoading}
+                        sx={{
+                          borderRadius: 999,
+                          fontWeight: 600,
+                          px: 3,
+                          backgroundColor: appTheme.colors.surfaceAlt,
+                          color: appTheme.colors.textPrimary,
+                          "&:hover": {
+                            backgroundColor: appTheme.colors.surface,
+                          },
+                        }}
                       >
-                        {historyLoadingLabel || "Stop storing history in folder"}
+                        {historyLoadingLabel ||
+                          "Stop storing history in folder"}
                       </Button>
                     </Stack>
-                  </Paper>
+                  </Box>
                 ) : (
                   <Button
                     variant="contained"
                     color="primary"
                     onClick={() => void history.onEnableFolder()}
                     disabled={history.isLoading || !history.isSupported}
+                    sx={{
+                      ...primaryContainedButtonStyles,
+                      alignSelf: "flex-start",
+                    }}
                   >
                     {historyLoadingLabel || "Choose folder"}
                   </Button>
@@ -217,8 +311,14 @@ export const AIImageToolsSettingsDialog: React.FC<
           </Stack>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button variant="outlined" onClick={onClose}>
+        <DialogActions
+          sx={{
+            px: 3,
+            py: 2,
+            backgroundColor: dialogBackground,
+          }}
+        >
+          <Button onClick={onClose} color="primary">
             Close
           </Button>
         </DialogActions>

@@ -66,7 +66,6 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   const rows: Array<{
     label: string;
     value: React.ReactNode | null;
-    className?: string;
     style?: React.CSSProperties;
     testId?: string;
   }> = [
@@ -88,9 +87,9 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     {
       label: "Cost",
       value: tool ? `$${item.cost.toFixed(4)}` : null,
-      className: "font-mono",
       style: {
         color: tool ? theme.colors.success : theme.colors.textSecondary,
+        fontFamily: '"Roboto Mono", "SFMono-Regular", monospace',
       },
       testId: "history-cost",
     },
@@ -103,10 +102,21 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   ];
 
   return (
-    <div className="inline-flex flex-col space-y-1.5">
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: "6px",
+      }}
+    >
       <div style={rowStyle}>
         <span style={{ color: theme.colors.textMuted }}>Tool:</span>
-        <span style={{ ...valueStyle }} className="font-medium">
+        <span
+          style={{
+            ...valueStyle,
+            fontWeight: 600,
+          }}
+        >
           {tool?.title || "Import"}
         </span>
       </div>
@@ -116,7 +126,6 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           <div style={rowStyle} key={row.label}>
             <span style={{ color: theme.colors.textMuted }}>{row.label}:</span>
             <span
-              className={row.className}
               style={{ ...valueStyle, ...row.style }}
               data-testid={row.testId}
             >
@@ -127,12 +136,18 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
 
       {item.sourceSummary && (
         <div
-          className="mt-2 pt-2 border-t"
-          style={{ borderColor: theme.colors.border }}
+          style={{
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: `1px solid ${theme.colors.border}`,
+          }}
         >
           <span
-            className="block mb-1"
-            style={{ color: theme.colors.textMuted }}
+            style={{
+              display: "block",
+              marginBottom: 4,
+              color: theme.colors.textMuted,
+            }}
           >
             Sources:
           </span>
@@ -143,10 +158,19 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       )}
 
       <div
-        className="mt-2 pt-2 border-t"
-        style={{ borderColor: theme.colors.border }}
+        style={{
+          marginTop: 8,
+          paddingTop: 8,
+          borderTop: `1px solid ${theme.colors.border}`,
+        }}
       >
-        <span className="block mb-1" style={{ color: theme.colors.textMuted }}>
+        <span
+          style={{
+            display: "block",
+            marginBottom: 4,
+            color: theme.colors.textMuted,
+          }}
+        >
           Full Prompt:
         </span>
         <div
@@ -163,19 +187,22 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
 
       {displayedParameters.length > 0 && (
         <div
-          className="mt-2 pt-2 border-t"
-          style={{ borderColor: theme.colors.border }}
+          style={{
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: `1px solid ${theme.colors.border}`,
+          }}
         >
           <span
-            className="block mb-1"
-            style={{ color: theme.colors.textMuted }}
+            style={{
+              display: "block",
+              marginBottom: 4,
+              color: theme.colors.textMuted,
+            }}
           >
             Parameters:
           </span>
-          <div
-            className="italic text-[10px] break-words"
-            style={{ color: theme.colors.textSecondary }}
-          >
+          <div style={{ color: theme.colors.textSecondary }}>
             {displayedParameters.map(([k, v]) => (
               <div key={k}>
                 {k}: {v}

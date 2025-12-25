@@ -1,3 +1,12 @@
+import AddPhotoAlternateOutlinedIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
+import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import BrushOutlinedIcon from "@mui/icons-material/BrushOutlined";
+import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
+import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
+import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
+import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
+import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { ToolDefinition } from "../../types";
 import {
   applyArtStyleToPrompt,
@@ -21,10 +30,8 @@ const SHAPE_OPTIONS = [
 const DEFAULT_SHAPE = SHAPE_OPTIONS[0];
 const SHAPE_HINTS: Record<string, string> = {
   Square: "Use a square composition (equal width and height).",
-  "Portrait Rectangle":
-    "Use a tall portrait rectangle, roughly a 3:4 aspect ratio.",
-  "Landscape Rectangle":
-    "Use a wide landscape rectangle, roughly a 4:3 aspect ratio.",
+  "Portrait Rectangle": "Use a tall portrait rectangle, a 9:16 aspect ratio.",
+  "Landscape Rectangle": "Use a wide landscape rectangle, a 16:9 aspect ratio.",
 };
 
 const SIZE_OPTIONS = ["1k", "2k", "4k"] as const;
@@ -39,9 +46,8 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "generate_image",
     title: "Create an Image",
-    description:
-      "Generate a new image from scratch. You can provide reference images to guide the generation.",
-    icon: "M12 4.5v15m7.5-7.5h-15", // Plus icon
+    description: "",
+    icon: AddPhotoAlternateOutlinedIcon,
     parameters: [
       {
         name: "prompt",
@@ -60,14 +66,14 @@ export const TOOLS: ToolDefinition[] = [
       {
         name: "shape",
         label: "Shape",
-        type: "select",
+        type: "shape",
         options: [...SHAPE_OPTIONS],
         defaultValue: DEFAULT_SHAPE,
       },
       {
         name: "size",
         label: "Size",
-        type: "select",
+        type: "size",
         options: [...SIZE_OPTIONS],
         defaultValue: DEFAULT_SIZE,
       },
@@ -93,7 +99,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "enhance_drawing",
     title: "Enhance Line Drawing",
     description: "Improve old, low-res line drawings",
-    icon: "M3 18c4-8 8-8 18-12 M3 18h4 M17 6h4",
+    icon: AutoFixHighOutlinedIcon,
     parameters: [
       {
         name: "styleId",
@@ -129,7 +135,7 @@ export const TOOLS: ToolDefinition[] = [
     title: "Change Text",
     description:
       "Replace specific text in the image. Use this to localize images that contain text.",
-    icon: "M4 18l4-12 4 12 M5.2 14h5.6 M16 6h6 M16 12h6 M19 6v12",
+    icon: TextFieldsOutlinedIcon,
     parameters: [
       {
         name: "match",
@@ -152,7 +158,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "change_style",
     title: "Change Style",
     description: "Restyle the selected image.",
-    icon: "M3 21l10-10M11 7l3 3M15 4l5 5M17 2v4M21 4h-4",
+    icon: BrushOutlinedIcon,
     parameters: [
       {
         name: "styleId",
@@ -177,7 +183,7 @@ export const TOOLS: ToolDefinition[] = [
     title: "Add Stylized Title",
     description:
       "Add a stylized title overlay that fits well the illustration.",
-    icon: "M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z M12 2h3.5a3.5 3.5 0 0 1 3.5 3.5v11.5A3.5 3.5 0 0 1 15.5 22H12V2z",
+    icon: TitleOutlinedIcon,
     parameters: [
       {
         name: "title",
@@ -202,7 +208,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "ethnicity",
     title: "Change Ethnicity",
     description: "Modify character ethnicity.",
-    icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
+    icon: Diversity3OutlinedIcon,
     parameters: [
       {
         name: "ethnicity",
@@ -242,7 +248,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "custom",
     title: "Custom Edit",
     description: "Edit the image, optionally with additional reference images.",
-    icon: "M4 4h8l2 2h6v14H4z M9 13l3 3 4-4",
+    icon: TuneOutlinedIcon,
     parameters: [
       {
         name: "prompt",
@@ -258,7 +264,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "remove_object",
     title: "Remove Object",
     description: "Remove unwanted objects or artifacts.",
-    icon: "M20 20.5l-3.2-3.2 M15.5 10l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M5 16l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z M9.5 4l-1 5 4.5-1.5 3.5 2.5-1.5-4.5 2.5-3.5-5 1z",
+    icon: ContentCutOutlinedIcon,
     parameters: [
       {
         name: "target",
@@ -275,7 +281,7 @@ export const TOOLS: ToolDefinition[] = [
     id: "remove_background",
     title: "Remove Background",
     description: "Isolate the subject on a transparent background.",
-    icon: "M15 4V2m0 18v2M4 15H2m18 0h2 M6.3 7.7L3.5 4.9m15.6 15.6l-2.8-2.8 M6.3 17.7L3.5 20.5m15.6-15.6l-2.8 2.8 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", // Dashed circleish
+    icon: CropFreeOutlinedIcon,
     parameters: [],
     promptTemplate: () =>
       `Replace the background with a perfectly flat chroma key green screen (#00FF66) while keeping the subject, lighting, and shadows untouched. Ensure the background is a solid, even fill with no checkerboard or transparency.`,

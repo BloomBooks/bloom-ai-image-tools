@@ -166,6 +166,7 @@ export const darkTheme = createTheme(lightTheme, {
       styleOverrides: {
         root: {
           backgroundImage: "none",
+          backgroundColor: appTheme.colors.surface,
           border: `1px solid ${appTheme.colors.borderMuted}`,
           boxShadow: appTheme.colors.panelShadow,
         },

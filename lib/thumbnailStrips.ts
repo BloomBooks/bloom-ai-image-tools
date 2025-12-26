@@ -55,6 +55,29 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<
   },
 };
 
+export const resolveThumbnailStripConfigs = (
+  overrides?: Partial<
+    Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
+  >
+): Record<ThumbnailStripId, ThumbnailStripConfig> => {
+  if (!overrides) {
+    return THUMBNAIL_STRIP_CONFIGS;
+  }
+
+  const resolved: Partial<Record<ThumbnailStripId, ThumbnailStripConfig>> = {};
+  THUMBNAIL_STRIP_ORDER.forEach((stripId) => {
+    const base = THUMBNAIL_STRIP_CONFIGS[stripId];
+    const override = overrides[stripId];
+    resolved[stripId] = {
+      ...base,
+      ...(override || {}),
+      id: stripId,
+    };
+  });
+
+  return resolved as Record<ThumbnailStripId, ThumbnailStripConfig>;
+};
+
 const cloneStripArrays = (
   snapshot: ThumbnailStripsSnapshot
 ): Record<ThumbnailStripId, string[]> => {

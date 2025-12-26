@@ -1,5 +1,6 @@
 import React from "react";
 import { Box } from "@mui/material";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
@@ -16,6 +17,8 @@ export type ImagePanelSlot = {
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   controls?: ImageSlotControls;
   draggableImageId?: string;
+  dndDropId?: string;
+  dndDragId?: string;
 };
 
 type SingleImagePanelProps = {
@@ -33,6 +36,8 @@ type SingleImagePanelProps = {
   isLoading?: boolean;
   uploadInputTestId?: string;
   onToggleStar?: () => void;
+  dndDropId?: string;
+  dndDragId?: string;
 };
 
 type GridImagePanelProps = {
@@ -136,34 +141,42 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                     minHeight: 0,
                   }}
                 >
-                  <ImageSlot
-                    image={slot.image}
+                  <DndImageSlotWrapper
+                    droppableId={slot.dndDropId}
+                    draggableId={slot.image ? slot.dndDragId : undefined}
+                    draggableImageId={slot.image?.id}
                     disabled={disabled}
-                    isDropZone={!disabled}
-                    onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
-                    onUpload={
-                      disabled
-                        ? undefined
-                        : (file) => onSlotUpload(file, slot.slotIndex)
-                    }
-                    onRemove={
-                      slot.canRemove && !disabled
-                        ? () => onSlotRemove(slot.slotIndex)
-                        : undefined
-                    }
-                    controls={slotControls}
-                    variant="tile"
-                    rolePill={slot.rolePill}
-                    dropLabel={slot.dropLabel ?? "Drop to add"}
-                    dataTestId={slot.dataTestId}
-                    uploadInputTestId={slot.uploadInputTestId}
-                    actionLabels={
-                      slot.actionLabels ?? {
-                        remove: "Remove reference",
+                  >
+                    <ImageSlot
+                      image={slot.image}
+                      disabled={disabled}
+                      isDropZone={!disabled}
+                      onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
+                      onUpload={
+                        disabled
+                          ? undefined
+                          : (file) => onSlotUpload(file, slot.slotIndex)
                       }
-                    }
-                    draggableImageId={slot.draggableImageId}
-                  />
+                      onRemove={
+                        slot.canRemove && !disabled
+                          ? () => onSlotRemove(slot.slotIndex)
+                          : undefined
+                      }
+                      controls={slotControls}
+                      variant="tile"
+                      rolePill={slot.rolePill}
+                      dropLabel={slot.dropLabel ?? "Drop to add"}
+                      dataTestId={slot.dataTestId}
+                      uploadInputTestId={slot.uploadInputTestId}
+                      actionLabels={
+                        slot.actionLabels ?? {
+                          remove: "Remove reference",
+                        }
+                      }
+                      // dnd-kit handles internal drags; keep native drag only when explicit.
+                      draggableImageId={undefined}
+                    />
+                  </DndImageSlotWrapper>
                 </Box>
               );
             })}
@@ -187,6 +200,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     uploadInputTestId,
     panelTestId,
     onToggleStar,
+    dndDropId,
+    dndDragId,
   } = props;
 
   const starState =
@@ -277,35 +292,92 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
   };
 
   return (
-    <ImageSlot
-      dataTestId={panelTestId}
-      label={label}
-      image={image}
+    <DndImageSlotWrapper
+      droppableId={dndDropId}
+      draggableId={image ? dndDragId : undefined}
+      draggableImageId={image?.id}
       disabled={disabled}
-      isDropZone={isDropZone}
-      onDrop={onDrop}
-      onUpload={showUploadControls ? onUpload : undefined}
-      onRemove={onClear}
-      draggableImageId={draggableImageId}
-      isLoading={isLoading}
-      uploadInputTestId={uploadInputTestId}
-      dropLabel={isDropZone ? "Drop to set as Source" : ""}
-      controls={{
-        upload: showUploadControls,
-        paste: showUploadControls,
-        copy: true,
-        download: true,
-        remove: !!onClear,
+    >
+      <ImageSlot
+        dataTestId={panelTestId}
+        label={label}
+        image={image}
+        disabled={disabled}
+        isDropZone={isDropZone}
+        onDrop={onDrop}
+        onUpload={showUploadControls ? onUpload : undefined}
+        onRemove={onClear}
+        draggableImageId={undefined}
+        isLoading={isLoading}
+        uploadInputTestId={uploadInputTestId}
+        dropLabel={isDropZone ? "Drop to set as Source" : ""}
+        controls={{
+          upload: showUploadControls,
+          paste: showUploadControls,
+          copy: true,
+          download: true,
+          remove: !!onClear,
+        }}
+        renderEmptyState={renderEmptyState}
+        actionLabels={
+          onClear
+            ? {
+                remove: "Clear Image",
+              }
+            : undefined
+        }
+        starState={starState}
+      />
+    </DndImageSlotWrapper>
+  );
+};
+
+const DndImageSlotWrapper: React.FC<{
+  droppableId?: string;
+  draggableId?: string;
+  draggableImageId?: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}> = ({ droppableId, draggableId, draggableImageId, disabled, children }) => {
+  const droppable = useDroppable({
+    id: droppableId || "__drop_disabled__",
+    disabled: !droppableId || !!disabled,
+  });
+  const draggable = useDraggable({
+    id: draggableId || "__drag_disabled__",
+    disabled: !draggableId || !!disabled,
+    data: draggableImageId
+      ? {
+          kind: "image",
+          imageId: draggableImageId,
+        }
+      : undefined,
+  });
+
+  const setRef = (node: HTMLElement | null) => {
+    droppable.setNodeRef(node);
+    draggable.setNodeRef(node);
+  };
+
+  return (
+    <div
+      ref={setRef}
+      {...draggable.attributes}
+      {...draggable.listeners}
+      onPointerDownCapture={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button")) {
+          event.stopPropagation();
+        }
       }}
-      renderEmptyState={renderEmptyState}
-      actionLabels={
-        onClear
-          ? {
-              remove: "Clear Image",
-            }
-          : undefined
-      }
-      starState={starState}
-    />
+      style={{
+        height: "100%",
+        width: "100%",
+        // Subtle feedback only; avoid borders over images.
+        boxShadow: droppable.isOver ? theme.colors.accentShadow : undefined,
+      }}
+    >
+      {children}
+    </div>
   );
 };

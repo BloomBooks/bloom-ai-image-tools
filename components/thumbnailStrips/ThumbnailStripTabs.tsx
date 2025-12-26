@@ -13,6 +13,7 @@ import { ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   THUMBNAIL_STRIP_ORDER,
   THUMBNAIL_STRIP_CONFIGS,
+  ThumbnailStripConfig,
 } from "../../lib/thumbnailStrips";
 import { theme } from "../../themes";
 import {
@@ -50,6 +51,7 @@ interface ThumbnailStripTabsProps {
   snapshot: ThumbnailStripsSnapshot;
   stripIds?: ThumbnailStripId[];
   activeStripId?: ThumbnailStripId | null;
+  stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
   onActivate: (stripId: ThumbnailStripId) => void;
   onTogglePin: (stripId: ThumbnailStripId) => void;
   onDragActivate: (stripId: ThumbnailStripId) => void;
@@ -59,6 +61,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   snapshot,
   stripIds = THUMBNAIL_STRIP_ORDER,
   activeStripId,
+  stripConfigs,
   onActivate,
   onTogglePin,
   onDragActivate,
@@ -66,6 +69,8 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   if (!stripIds.length) {
     return null;
   }
+
+  const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
 
   const resolvedActiveId =
     activeStripId !== undefined ? activeStripId : snapshot.activeStripId;
@@ -105,8 +110,8 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
       title={isPinned ? "Unpin strip" : "Pin strip"}
       aria-label={
         isPinned
-          ? `Unpin ${THUMBNAIL_STRIP_CONFIGS[stripId].label}`
-          : `Pin ${THUMBNAIL_STRIP_CONFIGS[stripId].label}`
+          ? `Unpin ${resolvedStripConfigs[stripId].label}`
+          : `Pin ${resolvedStripConfigs[stripId].label}`
       }
       data-testid={`thumbnail-tab-pin-${stripId}`}
       sx={{
@@ -127,7 +132,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     const isPinned = snapshot.pinnedStripIds.includes(stripId);
     const isActive = resolvedActiveId === stripId;
     const tabId = `thumbnail-tab-${stripId}`;
-    const label = THUMBNAIL_STRIP_CONFIGS[stripId].label;
+    const label = resolvedStripConfigs[stripId].label;
 
     return (
       <Tooltip title={label} placement="left" arrow>

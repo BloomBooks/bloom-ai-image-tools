@@ -93,6 +93,8 @@ import {
   setStripPinState,
   THUMBNAIL_STRIP_CONFIGS,
   THUMBNAIL_STRIP_ORDER,
+  resolveThumbnailStripConfigs,
+  ThumbnailStripConfig,
 } from "../lib/thumbnailStrips";
 
 // Helper to create UUIDs
@@ -220,12 +222,18 @@ export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
   environmentImageUrls?: string[];
+  environmentStripMode?: "host" | "editable";
+  thumbnailStripConfigOverrides?: Partial<
+    Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
+  >;
 }
 
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
   environmentImageUrls = [],
+  environmentStripMode = "host",
+  thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
   const [state, setState] = useState<AppState>({
     targetImageId: null,
@@ -240,6 +248,11 @@ export function ImageToolsWorkspace({
     useState<ThumbnailStripsSnapshot>(() =>
       createDefaultThumbnailStripsSnapshot()
     );
+
+  const resolvedThumbnailStripConfigs = useMemo(
+    () => resolveThumbnailStripConfigs(thumbnailStripConfigOverrides),
+    [thumbnailStripConfigOverrides]
+  );
 
   const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
     createToolParamDefaults()
@@ -432,32 +445,68 @@ export function ImageToolsWorkspace({
   }, []);
 
   useEffect(() => {
-    if (!resolvedEnvironmentEntries.length) {
-      setThumbnailStrips((prev) => replaceStripItems(prev, "environment", []));
+    const resolvedIds = resolvedEnvironmentEntries.map((entry) => entry.id);
+
+    if (environmentStripMode === "host") {
+      if (!resolvedEnvironmentEntries.length) {
+        setThumbnailStrips((prev) =>
+          replaceStripItems(prev, "environment", [])
+        );
+        return;
+      }
+
+      setState((prev) => {
+        const existingIds = new Set(prev.history.map((item) => item.id));
+        const nextHistory = [...prev.history];
+        let mutated = false;
+        resolvedEnvironmentEntries.forEach((entry) => {
+          if (!existingIds.has(entry.id)) {
+            nextHistory.push(entry);
+            mutated = true;
+          }
+        });
+        return mutated ? { ...prev, history: nextHistory } : prev;
+      });
+
+      setThumbnailStrips((prev) =>
+        replaceStripItems(prev, "environment", resolvedIds)
+      );
+
       return;
     }
 
-    setState((prev) => {
-      const existingIds = new Set(prev.history.map((item) => item.id));
-      const nextHistory = [...prev.history];
-      let mutated = false;
-      resolvedEnvironmentEntries.forEach((entry) => {
-        if (!existingIds.has(entry.id)) {
-          nextHistory.push(entry);
-          mutated = true;
-        }
-      });
-      return mutated ? { ...prev, history: nextHistory } : prev;
-    });
+    // editable mode: ensure host-provided items exist in history, but don't
+    // overwrite the strip ordering/removals once the user starts editing.
+    if (!isHydrated) {
+      return;
+    }
 
-    setThumbnailStrips((prev) =>
-      replaceStripItems(
-        prev,
-        "environment",
-        resolvedEnvironmentEntries.map((entry) => entry.id)
-      )
-    );
-  }, [resolvedEnvironmentEntries]);
+    if (resolvedEnvironmentEntries.length) {
+      setState((prev) => {
+        const existingIds = new Set(prev.history.map((item) => item.id));
+        const nextHistory = [...prev.history];
+        let mutated = false;
+        resolvedEnvironmentEntries.forEach((entry) => {
+          if (!existingIds.has(entry.id)) {
+            nextHistory.push(entry);
+            mutated = true;
+          }
+        });
+        return mutated ? { ...prev, history: nextHistory } : prev;
+      });
+    }
+
+    // Seed once if the strip has no items yet.
+    if (resolvedIds.length) {
+      setThumbnailStrips((prev) => {
+        const current = prev.itemIdsByStrip.environment || [];
+        if (current.length) {
+          return prev;
+        }
+        return replaceStripItems(prev, "environment", resolvedIds);
+      });
+    }
+  }, [resolvedEnvironmentEntries, environmentStripMode, isHydrated]);
 
   useEffect(() => {
     const referencedIds = new Set<string>();
@@ -1388,7 +1437,7 @@ export function ImageToolsWorkspace({
       if (!draggedId) {
         return;
       }
-      const config = THUMBNAIL_STRIP_CONFIGS[stripId];
+      const config = resolvedThumbnailStripConfigs[stripId];
       if (!config.allowDrop) {
         return;
       }
@@ -1407,7 +1456,7 @@ export function ImageToolsWorkspace({
         return addItemToStrip(prev, stripId, draggedId, dropIndex);
       });
     },
-    [state.history]
+    [state.history, resolvedThumbnailStripConfigs]
   );
 
   const handleStripPinToggle = useCallback((stripId: ThumbnailStripId) => {
@@ -1425,7 +1474,8 @@ export function ImageToolsWorkspace({
 
   const handleStripRemoveItem = useCallback(
     (stripId: ThumbnailStripId, imageId: string) => {
-      if (stripId === "environment") {
+      const config = resolvedThumbnailStripConfigs[stripId];
+      if (!config.allowRemove) {
         return;
       }
       if (stripId === "starred") {
@@ -1438,7 +1488,7 @@ export function ImageToolsWorkspace({
 
       setThumbnailStrips((prev) => removeItemFromStrip(prev, stripId, imageId));
     },
-    [handleToggleHistoryStar, state.history]
+    [handleToggleHistoryStar, state.history, resolvedThumbnailStripConfigs]
   );
 
   const handleDismissError = () => {
@@ -1808,6 +1858,7 @@ export function ImageToolsWorkspace({
               void handleEnableFolderStorage();
             }}
             thumbnailStrips={thumbnailStrips}
+            thumbnailStripConfigs={resolvedThumbnailStripConfigs}
             onStripItemDrop={handleStripItemDrop}
             onStripRemoveItem={handleStripRemoveItem}
             onStripPinToggle={handleStripPinToggle}

@@ -146,9 +146,22 @@ test.describe("thumbnail strips", () => {
   }) => {
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
     const starredStrip = page.getByTestId("thumbnail-strip-starred").first();
-    const historyThumb = historyStrip.getByTestId("history-card").first();
+    const historyThumb = historyStrip
+      .getByTestId("thumbnail-strip-item-history")
+      .first();
 
-    await historyThumb.dragTo(starredStrip);
+    const from = await historyThumb.boundingBox();
+    const to = await starredStrip.boundingBox();
+    expect(from).toBeTruthy();
+    expect(to).toBeTruthy();
+    if (!from || !to) return;
+
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
 
     await expect(starredStrip.getByTestId("history-card")).toHaveCount(1);
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(1);
@@ -185,5 +198,112 @@ test.describe("thumbnail strips", () => {
     await expect(firstHistoryThumbImg).toBeVisible();
     const firstThumbSrc = await firstHistoryThumbImg.getAttribute("src");
     expect(firstThumbSrc).toEqual(updatedTargetSrc);
+  });
+
+  test("environment strip is editable for sample app (Book pages)", async ({
+    page,
+  }) => {
+    // Verify the tab label via tooltip.
+    const envTab = page.getByTestId("thumbnail-tab-environment");
+    await envTab.hover();
+    await expect(page.getByRole("tooltip").last()).toContainText("Book pages");
+
+    // Switch to the environment strip.
+    await envTab.click();
+    const envStrip = page.getByTestId("thumbnail-strip-environment");
+    await expect(envStrip).toHaveAttribute("data-active", "true");
+
+    // Environment strip starts with seeded items.
+    const initialCount = await envStrip.getByTestId("history-card").count();
+    expect(initialCount).toBeGreaterThan(0);
+
+    // Add: drag a history item into Book pages.
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyThumb = historyStrip
+      .getByTestId("thumbnail-strip-item-history")
+      .first();
+
+    const fromBox = await historyThumb.boundingBox();
+    const toBox = await envStrip.boundingBox();
+    expect(fromBox).toBeTruthy();
+    expect(toBox).toBeTruthy();
+    if (!fromBox || !toBox) return;
+
+    await page.mouse.move(
+      fromBox.x + fromBox.width / 2,
+      fromBox.y + fromBox.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+    await expect(envStrip.getByTestId("history-card")).toHaveCount(
+      initialCount + 1
+    );
+
+    // Remove: remove the first book page.
+    const firstCardForRemove = envStrip.getByTestId("history-card").first();
+    await firstCardForRemove.hover();
+    await firstCardForRemove.getByRole("button", { name: "Remove image" }).click();
+    await expect(envStrip.getByTestId("history-card")).toHaveCount(
+      initialCount
+    );
+
+    // Reorder: move first thumbnail after the second (sortable behavior).
+    const firstImg = envStrip
+      .getByTestId("history-card")
+      .nth(0)
+      .locator("img")
+      .first();
+    const secondImg = envStrip
+      .getByTestId("history-card")
+      .nth(1)
+      .locator("img")
+      .first();
+
+    const firstSrcBefore = await firstImg.getAttribute("src");
+    const secondSrcBefore = await secondImg.getAttribute("src");
+    expect(firstSrcBefore).toBeTruthy();
+    expect(secondSrcBefore).toBeTruthy();
+
+    const firstSortableCard = envStrip
+      .getByTestId("thumbnail-strip-item-environment")
+      .nth(0);
+    const secondSortableCard = envStrip
+      .getByTestId("thumbnail-strip-item-environment")
+      .nth(1);
+
+    const fromReorderBox = await firstSortableCard.boundingBox();
+    const toReorderBox = await secondSortableCard.boundingBox();
+    expect(fromReorderBox).toBeTruthy();
+    expect(toReorderBox).toBeTruthy();
+    if (!fromReorderBox || !toReorderBox) return;
+
+    await page.mouse.move(
+      fromReorderBox.x + fromReorderBox.width / 2,
+      fromReorderBox.y + fromReorderBox.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      toReorderBox.x + toReorderBox.width / 2,
+      toReorderBox.y + toReorderBox.height / 2,
+      {
+      steps: 10,
+      }
+    );
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => {
+        const firstSrcAfter = await envStrip
+          .getByTestId("history-card")
+          .nth(0)
+          .locator("img")
+          .first()
+          .getAttribute("src");
+        return firstSrcAfter;
+      })
+      .not.toEqual(firstSrcBefore);
   });
 });

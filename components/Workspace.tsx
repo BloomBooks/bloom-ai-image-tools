@@ -166,7 +166,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           image,
           slotIndex: i,
           canRemove: true,
-          draggableImageId: image.id,
+          dndDropId: `panel:reference:${i}`,
+          dndDragId: `panelItem:reference:${i}:${image.id}`,
           dataTestId: `reference-slot-${i}`,
           uploadInputTestId: `reference-upload-input-${i}`,
           dropLabel: "Drop to add",
@@ -176,6 +177,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           image: null,
           slotIndex: referenceImages.length,
           canRemove: false,
+          dndDropId: `panel:reference:${referenceImages.length}`,
           dataTestId: `reference-slot-${referenceImages.length}`,
           uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
           dropLabel: "Drop to add",
@@ -364,7 +366,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   isDropZone={true}
                   onDrop={onSetTarget}
                   onClear={onClearTarget}
-                  draggableImageId={targetImage?.id || undefined}
+                  draggableImageId={undefined}
+                  dndDropId="panel:target"
+                  dndDragId={
+                    targetImage ? `panelItem:target:${targetImage.id}` : undefined
+                  }
                   uploadInputTestId="target-upload-input"
                   onToggleStar={
                     targetImage
@@ -440,7 +446,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             onDrop={onSetRight}
             showUploadControls={false}
             onClear={onClearRight}
-            draggableImageId={rightImage?.id || undefined}
+            draggableImageId={undefined}
+            dndDropId="panel:result"
+            dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
             isLoading={isProcessing}
             onToggleStar={
               rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined

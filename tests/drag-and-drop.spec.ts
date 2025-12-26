@@ -15,7 +15,9 @@ test.describe("history drag-and-drop", () => {
     await uploadSampleImageToTarget(page);
 
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
-    const historyThumb = historyStrip.getByTestId("history-card").first();
+    const historyThumb = historyStrip
+      .getByTestId("thumbnail-strip-item-history")
+      .first();
     await expect(historyThumb).toBeVisible();
     const initialHistoryThumbCount = await historyStrip
       .getByTestId("history-card")
@@ -29,17 +31,40 @@ test.describe("history drag-and-drop", () => {
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(0);
 
-    await historyThumb.dragTo(targetPanel, {
-      sourcePosition: { x: 56, y: 70 },
-    });
+    {
+      const from = await historyThumb.boundingBox();
+      const to = await targetPanel.boundingBox();
+      expect(from).toBeTruthy();
+      expect(to).toBeTruthy();
+      if (!from || !to) return;
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+        steps: 12,
+      });
+      await page.mouse.up();
+    }
     await expect(
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(1);
 
     const resultPanel = page.getByTestId("result-panel");
-    await page.getByTestId("history-card").first().dragTo(resultPanel, {
-      sourcePosition: { x: 56, y: 70 },
-    });
+    {
+      const from = await historyStrip
+        .getByTestId("thumbnail-strip-item-history")
+        .first()
+        .boundingBox();
+      const to = await resultPanel.boundingBox();
+      expect(from).toBeTruthy();
+      expect(to).toBeTruthy();
+      if (!from || !to) return;
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+        steps: 12,
+      });
+      await page.mouse.up();
+    }
     await expect(
       page.getByRole("img", { name: "Result" })
     ).toBeVisible();

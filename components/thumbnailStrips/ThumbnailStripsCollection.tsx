@@ -5,8 +5,9 @@ import {
   ThumbnailStripsSnapshot,
 } from "../../types";
 import {
-  THUMBNAIL_STRIP_CONFIGS,
   THUMBNAIL_STRIP_ORDER,
+  ThumbnailStripConfig,
+  THUMBNAIL_STRIP_CONFIGS,
 } from "../../lib/thumbnailStrips";
 import { ThumbnailStrip } from "./ThumbnailStrip";
 import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
@@ -21,6 +22,7 @@ interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
   entries: ImageRecord[];
   selectedId: string | null;
+  stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
   onSelect: (id: string) => void;
@@ -30,7 +32,7 @@ interface ThumbnailStripsCollectionProps {
     stripId: ThumbnailStripId,
     dropIndex: number,
     draggedId: string | null,
-    event: React.DragEvent
+    event?: React.DragEvent | null
   ) => void;
   onActivateStrip: (stripId: ThumbnailStripId) => void;
   onTogglePin: (stripId: ThumbnailStripId) => void;
@@ -43,6 +45,7 @@ export const ThumbnailStripsCollection: React.FC<
   snapshot,
   entries,
   selectedId,
+  stripConfigs,
   hasHiddenHistory,
   onRequestHistoryAccess,
   onSelect,
@@ -53,6 +56,8 @@ export const ThumbnailStripsCollection: React.FC<
   onTogglePin,
   onDragActivateStrip,
 }) => {
+  const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
+
   const entriesById = useMemo(() => {
     const map: Record<string, ImageRecord> = {};
     for (const entry of entries) {
@@ -76,8 +81,13 @@ export const ThumbnailStripsCollection: React.FC<
     : null;
 
   const renderStrip = (stripId: ThumbnailStripId, activeOverride?: boolean) => {
-    const config = THUMBNAIL_STRIP_CONFIGS[stripId];
+    const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
+    const emptyStateMessage =
+      stripId === "environment" && config.allowDrop
+        ? "Drag images here to add book pages."
+        : EMPTY_MESSAGES[stripId];
+
     return (
       <ThumbnailStrip
         key={stripId}
@@ -94,7 +104,7 @@ export const ThumbnailStripsCollection: React.FC<
         onRequestHistoryAccess={
           stripId === "history" ? onRequestHistoryAccess : undefined
         }
-        emptyStateMessage={EMPTY_MESSAGES[stripId]}
+        emptyStateMessage={emptyStateMessage}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
@@ -137,6 +147,7 @@ export const ThumbnailStripsCollection: React.FC<
             onActivate={onActivateStrip}
             onTogglePin={onTogglePin}
             onDragActivate={onDragActivateStrip}
+            stripConfigs={resolvedStripConfigs}
           />
         </div>
       ))}
@@ -162,6 +173,7 @@ export const ThumbnailStripsCollection: React.FC<
             onActivate={onActivateStrip}
             onTogglePin={onTogglePin}
             onDragActivate={onDragActivateStrip}
+            stripConfigs={resolvedStripConfigs}
           />
         </div>
       )}

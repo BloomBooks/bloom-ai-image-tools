@@ -33,6 +33,15 @@ export default function App() {
       persistence={persistence}
       envApiKey={envApiKey}
       environmentImageUrls={environmentImages}
+      environmentStripMode="editable"
+      thumbnailStripConfigOverrides={{
+        environment: {
+          label: "Book pages",
+          allowDrop: true,
+          allowRemove: true,
+          allowReorder: true,
+        },
+      }}
     />
   );
 }

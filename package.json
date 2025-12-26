@@ -23,6 +23,7 @@
     "build": "pnpm build:lib && pnpm build:demo",
     "build:demo": "vite build",
     "build:lib": "tsup",
+    "test": "vitest run",
     "release": "pnpm build:lib && pnpm publish --access public",
     "changeset": "changeset",
     "preview": "vite preview",
@@ -54,7 +55,8 @@
     "@vitejs/plugin-react": "^5.1.2",
     "tsup": "^8.3.5",
     "typescript": "~5.8.2",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "vitest": "^4.0.16"
   },
   "volta": {
     "node": "24.12.0"

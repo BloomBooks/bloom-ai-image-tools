@@ -37,7 +37,7 @@ import {
   toolRequiresEditImage,
 } from "../../lib/toolHelpers";
 
-interface ImageToolProps {
+interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
   onCancelProcessing: () => void;
@@ -113,7 +113,94 @@ const LazyArtStylePicker: React.FC<LazyArtStylePickerProps> = (props) => {
   return <ArtStylePicker {...props} />;
 };
 
-export const ImageTool: React.FC<ToolPanelProps> = ({
+// No debounce - only commit on blur to avoid re-render cascade during typing
+
+interface ParamTextInputProps {
+  name: string;
+  label: string;
+  placeholder?: string;
+  value: string;
+  disabled: boolean;
+  multiline?: boolean;
+  rows?: number;
+  inputTestId: string;
+  onCommit: (value: string) => void;
+}
+
+const ParamTextInput = React.memo(function ParamTextInputComponent({
+  name,
+  label,
+  placeholder,
+  value,
+  disabled,
+  multiline,
+  rows,
+  inputTestId,
+  onCommit,
+}: ParamTextInputProps) {
+  const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value);
+  const commitRef = useRef(onCommit);
+
+  useEffect(() => {
+    commitRef.current = onCommit;
+  }, [onCommit]);
+
+  // Sync external value changes to draft (e.g., when loading persisted state)
+  useEffect(() => {
+    if (value !== draftRef.current) {
+      draftRef.current = value;
+      setDraft(value);
+    }
+  }, [value]);
+
+  // Commit on unmount if there are uncommitted changes
+  useEffect(() => {
+    return () => {
+      if (draftRef.current !== value) {
+        commitRef.current(draftRef.current);
+      }
+    };
+  }, [value]);
+
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const nextValue = event.target.value;
+      draftRef.current = nextValue;
+      setDraft(nextValue);
+      // Don't commit on change - only on blur to avoid re-render cascade
+    },
+    []
+  );
+
+  const handleBlur = useCallback(
+    (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const nextValue = event.target.value;
+      draftRef.current = nextValue;
+      commitRef.current(nextValue);
+    },
+    []
+  );
+
+  return (
+    <TextField
+      name={name}
+      label={label}
+      placeholder={placeholder}
+      value={draft}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      multiline={multiline}
+      rows={rows}
+      fullWidth
+      size="small"
+      disabled={disabled}
+      inputProps={{ "data-testid": inputTestId }}
+    />
+  );
+});
+
+const ImageToolComponent: React.FC<ToolPanelProps> = ({
   onApplyTool,
   isProcessing,
   onCancelProcessing,
@@ -128,6 +215,7 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
   selectedArtStyleId,
   onArtStyleChange,
 }) => {
+
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId ?? TOOLS[0]?.id ?? null;
@@ -237,6 +325,11 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
       ...(paramsByTool[tool.id] || {}),
     };
 
+    const formData = new FormData(event.currentTarget);
+    formData.forEach((formValue, key) => {
+      payload[key] = String(formValue);
+    });
+
     tool.parameters.forEach((param) => {
       if (param.type === "art-style") {
         const styleValue =
@@ -249,12 +342,11 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
   };
 
   const renderParameterField = useCallback(
-    (tool: ToolDefinition, param: ToolParameter) => {
-      const value = paramsByTool[tool.id]?.[param.name] ?? "";
+    (tool: ToolDefinition, param: ToolParameter, value: string) => {
       const inputTestId = `input-${param.name}`;
 
       if (param.type === "art-style") {
-        const storedValue = paramsByTool[tool.id]?.[param.name] ?? "";
+        const storedValue = value;
         const cacheKey = `${tool.id}:${param.name}`;
         const stylesForPicker = artStyleOptionsByParam.get(cacheKey) ?? [];
         const pickerValue =
@@ -290,20 +382,19 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
 
       if (param.type === "textarea") {
         return (
-          <TextField
+          <ParamTextInput
             key={param.name}
+            name={param.name}
             label={param.label}
             placeholder={param.placeholder}
             value={value}
-            onChange={(event) =>
-              handleParamChange(tool.id, param.name, event.target.value)
-            }
-            multiline
-            rows={3}
-            fullWidth
-            size="small"
             disabled={isProcessing}
-            inputProps={{ "data-testid": inputTestId }}
+            multiline
+            rows={6}
+            inputTestId={inputTestId}
+            onCommit={(nextValue) =>
+              handleParamChange(tool.id, param.name, nextValue)
+            }
           />
         );
       }
@@ -345,6 +436,7 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
               onChange={(event) =>
                 handleParamChange(tool.id, param.name, event.target.value)
               }
+              name={param.name}
               size="small"
               disabled={isProcessing}
               inputProps={{ "data-testid": inputTestId }}
@@ -373,6 +465,7 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
             onChange={(event) =>
               handleParamChange(tool.id, param.name, event.target.value)
             }
+            name={param.name}
             fullWidth
             size="small"
             disabled={isProcessing}
@@ -392,18 +485,17 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
       }
 
       return (
-        <TextField
+        <ParamTextInput
           key={param.name}
+          name={param.name}
           label={param.label}
           placeholder={param.placeholder}
           value={value}
-          onChange={(event) =>
-            handleParamChange(tool.id, param.name, event.target.value)
-          }
-          fullWidth
-          size="small"
           disabled={isProcessing}
-          inputProps={{ "data-testid": inputTestId }}
+          inputTestId={inputTestId}
+          onCommit={(nextValue) =>
+            handleParamChange(tool.id, param.name, nextValue)
+          }
         />
       );
     },
@@ -412,7 +504,6 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
       isProcessing,
       muiTheme.palette.text.secondary,
       onArtStyleChange,
-      paramsByTool,
       selectedArtStyleId,
       handleParamChange,
     ]
@@ -575,16 +666,19 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
                   <Stack spacing={2} mt={2}>
                     {(() => {
                       const params = tool.parameters;
+                      const toolParams = paramsByTool[tool.id] || {};
                       const elements: React.ReactNode[] = [];
                       let i = 0;
                       while (i < params.length) {
                         const param = params[i];
                         const nextParam = params[i + 1];
+                        const paramValue = toolParams[param.name] ?? "";
                         // Group shape and size parameters in the same row
                         if (
                           param.name === "shape" &&
                           nextParam?.name === "size"
                         ) {
+                          const nextParamValue = toolParams[nextParam.name] ?? "";
                           elements.push(
                             <Box
                               key="shape-size-row"
@@ -595,16 +689,16 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
                               }}
                             >
                               <Box sx={{ flex: 1 }}>
-                                {renderParameterField(tool, param)}
+                                {renderParameterField(tool, param, paramValue)}
                               </Box>
                               <Box sx={{ width: 80, flexShrink: 0 }}>
-                                {renderParameterField(tool, nextParam)}
+                                {renderParameterField(tool, nextParam, nextParamValue)}
                               </Box>
                             </Box>
                           );
                           i += 2;
                         } else {
-                          elements.push(renderParameterField(tool, param));
+                          elements.push(renderParameterField(tool, param, paramValue));
                           i += 1;
                         }
                       }
@@ -676,3 +770,5 @@ export const ImageTool: React.FC<ToolPanelProps> = ({
     </Box>
   );
 };
+
+export const ImageTool = React.memo(ImageToolComponent);

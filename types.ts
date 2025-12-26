@@ -73,7 +73,7 @@ export interface EthnicityCategory {
   description: string;
 }
 
-export interface HistoryItem {
+export interface ImageEntry {
   id: string;
   parentId: string | null;
   imageData: string; // Base64
@@ -88,7 +88,11 @@ export interface HistoryItem {
   promptUsed: string;
   sourceSummary?: string | null;
   resolution?: { width: number; height: number };
+  isStarred?: boolean;
+  origin?: "generated" | "uploaded" | "environment";
 }
+
+export type HistoryItem = ImageEntry;
 
 export type ViewMode = "single" | "compare";
 
@@ -100,6 +104,18 @@ export interface AppState {
   isProcessing: boolean;
   isAuthenticated: boolean; // True when an OpenRouter API key is available
   error: ReactNode | null; // Error message to display to user
+}
+
+export type ThumbnailStripId =
+  | "history"
+  | "starred"
+  | "reference"
+  | "environment";
+
+export interface ThumbnailStripsSnapshot {
+  activeStripId: ThumbnailStripId;
+  pinnedStripIds: ThumbnailStripId[];
+  itemIdsByStrip: Record<ThumbnailStripId, string[]>;
 }
 
 export interface AuthState {
@@ -124,6 +140,7 @@ export interface PersistedImageToolsState {
   /** When true, the persisted history array is ordered newest -> oldest. */
   historyNewestFirst?: boolean;
   selectedArtStyleId?: string | null;
+  thumbnailStrips?: ThumbnailStripsSnapshot;
 }
 
 export interface ImageToolsStatePersistence {

@@ -5,6 +5,119 @@ import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 
+const SPLITTER_STORAGE_KEY = "workspacePanelSplitters";
+
+type SplitterState = {
+  horizontal: number;
+  vertical: number;
+};
+
+const DEFAULT_SPLITTERS: SplitterState = {
+  horizontal: 0.58,
+  vertical: 0.55,
+};
+
+const HORIZONTAL_LIMITS = { min: 0.25, max: 0.75 } as const;
+const VERTICAL_LIMITS = { min: 0.2, max: 0.8 } as const;
+const KEYBOARD_STEP = 0.02;
+
+const clampRatio = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const readStoredSplitters = (): SplitterState => {
+  if (typeof window === "undefined") {
+    return DEFAULT_SPLITTERS;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(SPLITTER_STORAGE_KEY);
+    if (!rawValue) return DEFAULT_SPLITTERS;
+
+    const parsed = JSON.parse(rawValue) as Partial<SplitterState>;
+    return {
+      horizontal: clampRatio(
+        typeof parsed.horizontal === "number"
+          ? parsed.horizontal
+          : DEFAULT_SPLITTERS.horizontal,
+        HORIZONTAL_LIMITS.min,
+        HORIZONTAL_LIMITS.max
+      ),
+      vertical: clampRatio(
+        typeof parsed.vertical === "number"
+          ? parsed.vertical
+          : DEFAULT_SPLITTERS.vertical,
+        VERTICAL_LIMITS.min,
+        VERTICAL_LIMITS.max
+      ),
+    };
+  } catch {
+    return DEFAULT_SPLITTERS;
+  }
+};
+
+type SplitterProps = {
+  orientation: "vertical" | "horizontal";
+  ariaLabel: string;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+};
+
+const Splitter: React.FC<SplitterProps> = ({
+  orientation,
+  ariaLabel,
+  onPointerDown,
+  onKeyDown,
+}) => {
+  const isVertical = orientation === "vertical";
+
+  return (
+    <Box
+      role="separator"
+      aria-label={ariaLabel}
+      aria-orientation={isVertical ? "vertical" : "horizontal"}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      sx={{
+        flex: "0 0 auto",
+        cursor: isVertical ? "col-resize" : "row-resize",
+        alignSelf: isVertical ? "stretch" : "auto",
+        width: isVertical ? "14px" : "100%",
+        height: isVertical ? "100%" : "14px",
+        mx: isVertical ? 1 : 0,
+        my: isVertical ? 0 : 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        userSelect: "none",
+        touchAction: "none",
+        transition: "background-color 120ms ease",
+        borderRadius: isVertical ? "999px" : 0,
+        outline: "none",
+        "&:focus-visible": {
+          backgroundColor: theme.colors.overlay,
+        },
+        "&:hover .splitter-thumb, &:focus-visible .splitter-thumb, &:active .splitter-thumb": {
+          opacity: 1,
+        },
+      }}
+    >
+      <Box
+        className="splitter-thumb"
+        sx={{
+          width: isVertical ? "3px" : "32px",
+          height: isVertical ? "60%" : "3px",
+          borderRadius: "999px",
+          backgroundColor: theme.colors.panelBorder,
+          boxShadow: theme.colors.panelShadow,
+          opacity: 0,
+          transition: "opacity 150ms ease",
+        }}
+      />
+    </Box>
+  );
+};
+
 interface WorkspaceProps {
   targetImage: HistoryItem | null;
   referenceImages: HistoryItem[];
@@ -20,6 +133,7 @@ interface WorkspaceProps {
   onUploadRight: (file: File) => void;
   isProcessing: boolean;
   activeToolId: string | null;
+  onToggleHistoryStar: (id: string) => void;
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({
@@ -37,11 +151,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onUploadRight,
   isProcessing,
   activeToolId,
+  onToggleHistoryStar,
 }) => {
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
   const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
-  // Only show target panel if the tool requires an image to edit (editImage !== false)
   const showTargetPanel = tool ? tool.editImage !== false : true;
 
   const slots: ImagePanelSlot[] = !showReferencePanel
@@ -51,6 +165,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           image,
           slotIndex: i,
           canRemove: true,
+          draggableImageId: image.id,
           dataTestId: `reference-slot-${i}`,
           uploadInputTestId: `reference-upload-input-${i}`,
           dropLabel: "Drop to add",
@@ -69,6 +184,136 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   const referenceLabel = "Reference Images";
 
+  const workspaceRef = React.useRef<HTMLDivElement>(null);
+  const leftColumnRef = React.useRef<HTMLDivElement>(null);
+  const [splitters, setSplitters] = React.useState<SplitterState>(() =>
+    readStoredSplitters()
+  );
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      SPLITTER_STORAGE_KEY,
+      JSON.stringify(splitters)
+    );
+  }, [splitters]);
+
+  const updateHorizontalSplit = React.useCallback((clientX: number) => {
+    const host = workspaceRef.current;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = (clientX - rect.left) / rect.width;
+    setSplitters((previous) => ({
+      ...previous,
+      horizontal: clampRatio(
+        ratio,
+        HORIZONTAL_LIMITS.min,
+        HORIZONTAL_LIMITS.max
+      ),
+    }));
+  }, []);
+
+  const updateVerticalSplit = React.useCallback((clientY: number) => {
+    const column = leftColumnRef.current;
+    if (!column) return;
+    const rect = column.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const ratio = (clientY - rect.top) / rect.height;
+    setSplitters((previous) => ({
+      ...previous,
+      vertical: clampRatio(
+        ratio,
+        VERTICAL_LIMITS.min,
+        VERTICAL_LIMITS.max
+      ),
+    }));
+  }, []);
+
+  const handleHorizontalPointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (typeof window === "undefined") return;
+      updateHorizontalSplit(event.clientX);
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        updateHorizontalSplit(moveEvent.clientX);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("pointercancel", stop);
+      };
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("pointercancel", stop);
+    },
+    [updateHorizontalSplit]
+  );
+
+  const handleVerticalPointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      if (typeof window === "undefined") return;
+      updateVerticalSplit(event.clientY);
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        updateVerticalSplit(moveEvent.clientY);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("pointercancel", stop);
+      };
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("pointercancel", stop);
+    },
+    [updateVerticalSplit]
+  );
+
+  const handleHorizontalKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const delta = event.key === "ArrowLeft" ? -KEYBOARD_STEP : KEYBOARD_STEP;
+      setSplitters((previous) => ({
+        ...previous,
+        horizontal: clampRatio(
+          previous.horizontal + delta,
+          HORIZONTAL_LIMITS.min,
+          HORIZONTAL_LIMITS.max
+        ),
+      }));
+    },
+    []
+  );
+
+  const handleVerticalKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      const delta = event.key === "ArrowUp" ? -KEYBOARD_STEP : KEYBOARD_STEP;
+      setSplitters((previous) => ({
+        ...previous,
+        vertical: clampRatio(
+          previous.vertical + delta,
+          VERTICAL_LIMITS.min,
+          VERTICAL_LIMITS.max
+        ),
+      }));
+    },
+    []
+  );
+
+  const showLeftColumn = showTargetPanel || showReferencePanel;
+  const leftColumnFlexGrow = showLeftColumn ? splitters.horizontal : 0;
+  const rightColumnFlexGrow = showLeftColumn ? 1 - splitters.horizontal : 1;
+  const targetFlexGrow = showReferencePanel ? splitters.vertical : 1;
+  const referenceFlexGrow = showTargetPanel ? 1 - splitters.vertical : 1;
+
   return (
     <Box
       sx={{
@@ -81,66 +326,114 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       }}
     >
       <Box
+        ref={workspaceRef}
         sx={{
           display: "flex",
           width: "100%",
           height: "100%",
-          gap: "10px",
           minHeight: 0,
+          minWidth: 0,
+          alignItems: "stretch",
         }}
       >
+        {showLeftColumn && (
+          <Box
+            ref={leftColumnRef}
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              flexGrow: leftColumnFlexGrow,
+              flexShrink: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              minHeight: 0,
+            }}
+          >
+            {showTargetPanel && (
+              <Box
+                sx={{
+                  position: "relative",
+                  flexGrow: showReferencePanel ? targetFlexGrow : 1,
+                  flexShrink: 1,
+                  flexBasis: 0,
+                  minHeight: 0,
+                }}
+              >
+                <ImagePanel
+                  image={targetImage}
+                  label="Image to Edit"
+                  panelTestId="target-panel"
+                  onUpload={onUploadTarget}
+                  isDropZone={true}
+                  onDrop={onSetTarget}
+                  onClear={onClearTarget}
+                  draggableImageId={targetImage?.id || undefined}
+                  uploadInputTestId="target-upload-input"
+                  onToggleStar={
+                    targetImage
+                      ? () => onToggleHistoryStar(targetImage.id)
+                      : undefined
+                  }
+                />
+              </Box>
+            )}
+
+            {showTargetPanel && showReferencePanel && (
+              <Splitter
+                orientation="horizontal"
+                ariaLabel="Resize Image to Edit and Reference panels"
+                onPointerDown={handleVerticalPointerDown}
+                onKeyDown={handleVerticalKeyDown}
+              />
+            )}
+
+            {showReferencePanel && (
+              <Box
+                sx={{
+                  flexGrow: showTargetPanel ? referenceFlexGrow : 1,
+                  flexShrink: 1,
+                  flexBasis: 0,
+                  minHeight: 0,
+                }}
+              >
+                <ImagePanel
+                  label={referenceLabel}
+                  layout="grid"
+                  panelTestId="reference-panel"
+                  slots={slots}
+                  disabled={false}
+                  onSlotUpload={(file, slotIndex) =>
+                    onUploadReference(file, slotIndex)
+                  }
+                  onSlotDrop={(imageId, slotIndex) =>
+                    onSetReferenceAt(slotIndex, imageId)
+                  }
+                  onSlotRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
+                />
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {showLeftColumn && (
+          <Splitter
+            orientation="vertical"
+            ariaLabel="Resize Image to Edit and Result panels"
+            onPointerDown={handleHorizontalPointerDown}
+            onKeyDown={handleHorizontalKeyDown}
+          />
+        )}
+
         <Box
           sx={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
+            flexGrow: showLeftColumn ? rightColumnFlexGrow : 1,
+            flexShrink: 1,
+            flexBasis: 0,
+            minWidth: 0,
             minHeight: 0,
+            position: "relative",
           }}
         >
-          {showTargetPanel && (
-            <Box
-              sx={{
-                position: "relative",
-                flex: showReferencePanel ? "1 1 0%" : "1 1 auto",
-                minHeight: 0,
-              }}
-            >
-              <ImagePanel
-                image={targetImage}
-                label="Image to Edit"
-                panelTestId="target-panel"
-                onUpload={onUploadTarget}
-                isDropZone={true}
-                onDrop={onSetTarget}
-                onClear={onClearTarget}
-                draggableImageId={targetImage?.id || undefined}
-                uploadInputTestId="target-upload-input"
-              />
-            </Box>
-          )}
-
-          {showReferencePanel && (
-            <Box sx={{ flex: 1, position: "relative", minHeight: 0 }}>
-              <ImagePanel
-                label={referenceLabel}
-                layout="grid"
-                panelTestId="reference-panel"
-                slots={slots}
-                disabled={false}
-                onSlotUpload={(file, slotIndex) =>
-                  onUploadReference(file, slotIndex)
-                }
-                onSlotDrop={(imageId, slotIndex) =>
-                  onSetReferenceAt(slotIndex, imageId)
-                }
-                onSlotRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
-              />
-            </Box>
-          )}
-        </Box>
-
-        <Box sx={{ flex: 1, position: "relative", minHeight: 0 }}>
           <ImagePanel
             image={rightImage}
             label="Result"
@@ -152,6 +445,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             onClear={onClearRight}
             draggableImageId={rightImage?.id || undefined}
             isLoading={isProcessing}
+            onToggleStar={
+              rightImage
+                ? () => onToggleHistoryStar(rightImage.id)
+                : undefined
+            }
           />
         </Box>
       </Box>

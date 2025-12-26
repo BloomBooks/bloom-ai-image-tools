@@ -1,9 +1,16 @@
 import React from "react";
 import { Box, IconButton, Stack, Typography } from "@mui/material";
-import { AppState, HistoryItem, ModelInfo, ToolParamsById } from "../types";
+import {
+  AppState,
+  HistoryItem,
+  ModelInfo,
+  ToolParamsById,
+  ThumbnailStripId,
+  ThumbnailStripsSnapshot,
+} from "../types";
 import { ImageTool } from "./tools/ImageTool";
 import { Workspace } from "./Workspace";
-import { HistoryStrip } from "./HistoryStrip";
+import { ThumbnailStripsCollection } from "./thumbnailStrips/ThumbnailStripsCollection";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 
@@ -18,6 +25,17 @@ interface ImageToolsPanelBar {
   historyItems: HistoryItem[];
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
+  thumbnailStrips: ThumbnailStripsSnapshot;
+  onStripItemDrop: (
+    stripId: ThumbnailStripId,
+    dropIndex: number,
+    draggedId: string | null,
+    event: React.DragEvent
+  ) => void;
+  onStripRemoveItem: (stripId: ThumbnailStripId, id: string) => void;
+  onStripPinToggle: (stripId: ThumbnailStripId) => void;
+  onStripActivate: (stripId: ThumbnailStripId) => void;
+  onStripDragActivate: (stripId: ThumbnailStripId) => void;
   selectedArtStyleId: string | null;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   onCancelProcessing: () => void;
@@ -34,7 +52,7 @@ interface ImageToolsPanelBar {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   onSelectHistoryItem: (id: string) => void;
-  onRemoveHistoryItem: (id: string) => void;
+  onToggleHistoryStar: (id: string) => void;
   onDismissError: () => void;
 }
 
@@ -49,6 +67,12 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   historyItems,
   hasHiddenHistory,
   onRequestHistoryAccess,
+  thumbnailStrips,
+  onStripItemDrop,
+  onStripRemoveItem,
+  onStripPinToggle,
+  onStripActivate,
+  onStripDragActivate,
   selectedArtStyleId,
   onApplyTool,
   onCancelProcessing,
@@ -65,7 +89,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onClearRight,
   onUploadRight,
   onSelectHistoryItem,
-  onRemoveHistoryItem,
+  onToggleHistoryStar,
   onDismissError,
 }) => {
   const hasTargetImage = !!targetImage;
@@ -154,15 +178,22 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             onUploadRight={onUploadRight}
             isProcessing={appState.isProcessing}
             activeToolId={activeToolId}
+            onToggleHistoryStar={onToggleHistoryStar}
           />
 
-          <HistoryStrip
-            items={historyItems}
-            currentId={appState.rightPanelImageId}
-            onSelect={onSelectHistoryItem}
-            onRemove={onRemoveHistoryItem}
+          <ThumbnailStripsCollection
+            snapshot={thumbnailStrips}
+            entries={historyItems}
+            selectedId={appState.rightPanelImageId}
             hasHiddenHistory={hasHiddenHistory}
             onRequestHistoryAccess={onRequestHistoryAccess}
+            onSelect={onSelectHistoryItem}
+            onToggleStar={onToggleHistoryStar}
+            onRemoveFromStrip={onStripRemoveItem}
+            onDropToStrip={onStripItemDrop}
+            onActivateStrip={onStripActivate}
+            onTogglePin={onStripPinToggle}
+            onDragActivateStrip={onStripDragActivate}
           />
         </Box>
       </Box>

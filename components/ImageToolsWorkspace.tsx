@@ -21,6 +21,8 @@ import {
   ImageToolsStatePersistence,
   ModelInfo,
   PersistedAppState,
+  ThumbnailStripId,
+  ThumbnailStripsSnapshot,
   ToolParamsById,
 } from "../types";
 import { ImageToolsBar } from "./ImageToolsBar";
@@ -80,6 +82,18 @@ import {
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
+import {
+  addItemToStrip,
+  createDefaultThumbnailStripsSnapshot,
+  hydrateThumbnailStripsSnapshot,
+  removeItemFromStrip,
+  reorderItemInStrip,
+  replaceStripItems,
+  setActiveStrip,
+  setStripPinState,
+  THUMBNAIL_STRIP_CONFIGS,
+  THUMBNAIL_STRIP_ORDER,
+} from "../lib/thumbnailStrips";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -149,6 +163,34 @@ const buildInsufficientCreditsError = (
   return <>OpenRouter said "{linkifyMessageWithUrl(safeMessage, url)}"</>;
 };
 
+const hashString = (value: string) => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+};
+
+const buildEnvironmentEntry = (url: string, index: number): HistoryItem => ({
+  id: `env-${index}-${hashString(url)}`,
+  parentId: null,
+  imageData: url,
+  imageFileName: null,
+  toolId: "environment",
+  parameters: {},
+  sourceStyleId: null,
+  durationMs: 0,
+  cost: 0,
+  model: "",
+  timestamp: 0,
+  promptUsed: "Environment Image",
+  sourceSummary: "Environment",
+  resolution: undefined,
+  isStarred: false,
+  origin: "environment",
+});
+
 const sanitizePersistedAppState = (
   persisted: PersistedAppState | null | undefined
 ): PersistedAppState => {
@@ -177,11 +219,13 @@ const sanitizePersistedAppState = (
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
+  environmentImageUrls?: string[];
 }
 
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
+  environmentImageUrls = [],
 }: ImageToolsWorkspaceProps) {
   const [state, setState] = useState<AppState>({
     targetImageId: null,
@@ -192,6 +236,9 @@ export function ImageToolsWorkspace({
     isAuthenticated: false,
     error: null,
   });
+  const [thumbnailStrips, setThumbnailStrips] = useState<ThumbnailStripsSnapshot>(
+    () => createDefaultThumbnailStripsSnapshot()
+  );
 
   const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
     createToolParamDefaults()
@@ -228,6 +275,12 @@ export function ImageToolsWorkspace({
   const envApiKey = envApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
   const usingEnvKey = !!(envApiKey && !apiKey);
+  const resolvedEnvironmentEntries = useMemo(() => {
+    return environmentImageUrls
+      .map((url, index) => ({ url: url?.trim(), index }))
+      .filter(({ url }) => Boolean(url))
+      .map(({ url, index }) => buildEnvironmentEntry(url as string, index));
+  }, [environmentImageUrls]);
   const isFolderPersistenceActive = !!fsBinding;
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
@@ -291,6 +344,19 @@ export function ImageToolsWorkspace({
     [fsBinding]
   );
 
+  const appendHistoryEntry = useCallback(
+    (entry: HistoryItem, options?: { skipHistoryStrip?: boolean }) => {
+      const { skipHistoryStrip = false } = options || {};
+      setState((prev) => ({ ...prev, history: [...prev.history, entry] }));
+      if (!skipHistoryStrip) {
+        setThumbnailStrips((prev) => addItemToStrip(prev, "history", entry.id));
+      }
+    },
+    []
+  );
+
+
+
   const updateAllArtStyleParams = useCallback(
     (styleId: string) => {
       setParamsByTool((prev) => {
@@ -345,6 +411,86 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     setFsSupported(supportsFileSystemAccess());
   }, []);
+
+  useEffect(() => {
+    if (!resolvedEnvironmentEntries.length) {
+      setThumbnailStrips((prev) => replaceStripItems(prev, "environment", []));
+      return;
+    }
+
+    setState((prev) => {
+      const existingIds = new Set(prev.history.map((item) => item.id));
+      const nextHistory = [...prev.history];
+      let mutated = false;
+      resolvedEnvironmentEntries.forEach((entry) => {
+        if (!existingIds.has(entry.id)) {
+          nextHistory.push(entry);
+          mutated = true;
+        }
+      });
+      return mutated ? { ...prev, history: nextHistory } : prev;
+    });
+
+    setThumbnailStrips((prev) =>
+      replaceStripItems(
+        prev,
+        "environment",
+        resolvedEnvironmentEntries.map((entry) => entry.id)
+      )
+    );
+  }, [resolvedEnvironmentEntries]);
+
+  useEffect(() => {
+    const referencedIds = new Set<string>();
+    THUMBNAIL_STRIP_ORDER.forEach((stripId) => {
+      (thumbnailStrips.itemIdsByStrip[stripId] || []).forEach((id) =>
+        referencedIds.add(id)
+      );
+    });
+    if (state.targetImageId) {
+      referencedIds.add(state.targetImageId);
+    }
+    state.referenceImageIds.forEach((id) => referencedIds.add(id));
+    if (state.rightPanelImageId) {
+      referencedIds.add(state.rightPanelImageId);
+    }
+
+    const orphaned = state.history.filter(
+      (entry) => entry.origin !== "environment" && !referencedIds.has(entry.id)
+    );
+    if (!orphaned.length) {
+      return;
+    }
+
+    orphaned.forEach((entry) => {
+      void deleteHistoryImageFromFolder(entry);
+    });
+
+    setState((prev) => ({
+      ...prev,
+      history: prev.history.filter(
+        (entry) =>
+          entry.origin === "environment" || referencedIds.has(entry.id)
+      ),
+      referenceImageIds: prev.referenceImageIds.filter((id) =>
+        referencedIds.has(id)
+      ),
+      targetImageId: prev.targetImageId && referencedIds.has(prev.targetImageId)
+        ? prev.targetImageId
+        : null,
+      rightPanelImageId:
+        prev.rightPanelImageId && referencedIds.has(prev.rightPanelImageId)
+          ? prev.rightPanelImageId
+          : null,
+    }));
+  }, [
+    deleteHistoryImageFromFolder,
+    state.history,
+    state.targetImageId,
+    state.referenceImageIds,
+    state.rightPanelImageId,
+    thumbnailStrips,
+  ]);
 
   const refreshCredits = useCallback(async () => {
     if (creditsRequestAbortControllerRef.current) {
@@ -489,6 +635,14 @@ export function ImageToolsWorkspace({
             error: null,
           }));
 
+          const hydratedStrips = hydrateThumbnailStripsSnapshot(
+            persisted.thumbnailStrips,
+            sanitized.history
+          );
+          if (!cancelled) {
+            setThumbnailStrips(hydratedStrips);
+          }
+
           const mergedParams = mergeParamsWithDefaults(persisted.paramsByTool);
           if (cancelled) return;
           setParamsByTool(mergedParams);
@@ -589,6 +743,7 @@ export function ImageToolsWorkspace({
         apiKey,
         authMethod,
       },
+      thumbnailStrips,
     };
   }, [
     state.targetImageId,
@@ -602,6 +757,7 @@ export function ImageToolsWorkspace({
     selectedArtStyleId,
     apiKey,
     authMethod,
+    thumbnailStrips,
   ]);
 
   const accessibleHistoryItems = useMemo(
@@ -854,15 +1010,16 @@ export function ImageToolsWorkspace({
         sourceStyleId: derivedSourceStyleId,
         sourceSummary,
         resolution,
+        isStarred: false,
       };
 
       if (fsBinding) {
         newItem = await persistHistoryImage(newItem);
       }
 
+      appendHistoryEntry(newItem);
       setState((prev) => ({
         ...prev,
-        history: [...prev.history, newItem],
         rightPanelImageId: newItem.id, // Result goes to right panel
         isProcessing: false,
       }));
@@ -937,15 +1094,16 @@ export function ImageToolsWorkspace({
           timestamp: Date.now(),
           promptUsed: "Original Upload",
           resolution: dimensions,
+          isStarred: false,
         };
 
         if (fsBinding) {
           newItem = await persistHistoryImage(newItem);
         }
 
+        appendHistoryEntry(newItem);
         setState((prev) => ({
           ...prev,
-          history: [...prev.history, newItem],
           targetImageId:
             targetPanel === "target" ? newItem.id : prev.targetImageId,
           referenceImageIds:
@@ -1016,14 +1174,15 @@ export function ImageToolsWorkspace({
           timestamp: Date.now(),
           promptUsed: "Original Upload",
           resolution: dimensions,
+          isStarred: false,
         };
 
         if (fsBinding) {
           newItem = await persistHistoryImage(newItem);
         }
 
+        appendHistoryEntry(newItem);
         setState((prev) => {
-          const nextHistory = [...prev.history, newItem];
           const nextIds = [...prev.referenceImageIds];
           const idx =
             typeof slotIndex === "number" && slotIndex >= 0
@@ -1038,7 +1197,6 @@ export function ImageToolsWorkspace({
 
           return {
             ...prev,
-            history: nextHistory,
             referenceImageIds: nextIds.slice(0, max),
           };
         });
@@ -1172,20 +1330,94 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
-  const handleRemoveHistoryItem = (id: string) => {
-    const item = state.history.find((h) => h.id === id);
-    if (item) {
-      void deleteHistoryImageFromFolder(item);
+  const handleToggleHistoryStar = useCallback((id: string) => {
+    let toggled: boolean | null = null;
+    setState((prev) => {
+      let changed = false;
+      const nextHistory = prev.history.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+        changed = true;
+        toggled = !item.isStarred;
+        return { ...item, isStarred: toggled };
+      });
+      return changed ? { ...prev, history: nextHistory } : prev;
+    });
+
+    if (toggled === null) {
+      return;
     }
-    setState((prev) => ({
-      ...prev,
-      history: prev.history.filter((h) => h.id !== id),
-      referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
-      targetImageId: prev.targetImageId === id ? null : prev.targetImageId,
-      rightPanelImageId:
-        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
-    }));
-  };
+    setThumbnailStrips((prev) => {
+      if (toggled) {
+        return addItemToStrip(prev, "starred", id);
+      }
+      return removeItemFromStrip(prev, "starred", id);
+    });
+  }, []);
+
+  const handleStripItemDrop = useCallback(
+    (
+      stripId: ThumbnailStripId,
+      dropIndex: number,
+      draggedId: string | null,
+      _event?: React.DragEvent
+    ) => {
+      if (!draggedId) {
+        return;
+      }
+      const config = THUMBNAIL_STRIP_CONFIGS[stripId];
+      if (!config.allowDrop) {
+        return;
+      }
+      const exists = state.history.some((item) => item.id === draggedId);
+      if (!exists) {
+        return;
+      }
+      setThumbnailStrips((prev) => {
+        const current = prev.itemIdsByStrip[stripId] || [];
+        if (current.includes(draggedId)) {
+          if (!config.allowReorder) {
+            return prev;
+          }
+          return reorderItemInStrip(prev, stripId, draggedId, dropIndex);
+        }
+        return addItemToStrip(prev, stripId, draggedId, dropIndex);
+      });
+    },
+    [state.history]
+  );
+
+  const handleStripPinToggle = useCallback((stripId: ThumbnailStripId) => {
+    setThumbnailStrips((prev) => {
+      const isPinned = prev.pinnedStripIds.includes(stripId);
+      return setStripPinState(prev, stripId, !isPinned);
+    });
+  }, []);
+
+  const handleStripActivate = useCallback((stripId: ThumbnailStripId) => {
+    setThumbnailStrips((prev) => setActiveStrip(prev, stripId));
+  }, []);
+
+  const handleStripDragActivate = handleStripActivate;
+
+  const handleStripRemoveItem = useCallback(
+    (stripId: ThumbnailStripId, imageId: string) => {
+      if (stripId === "environment") {
+        return;
+      }
+      if (stripId === "starred") {
+        const entry = state.history.find((item) => item.id === imageId);
+        if (entry?.isStarred) {
+          handleToggleHistoryStar(imageId);
+        }
+        return;
+      }
+
+      setThumbnailStrips((prev) => removeItemFromStrip(prev, stripId, imageId));
+    },
+    [handleToggleHistoryStar, state.history]
+  );
 
   const handleDismissError = () => {
     setState((prev) => ({ ...prev, error: null }));
@@ -1553,6 +1785,12 @@ export function ImageToolsWorkspace({
               }
               void handleEnableFolderStorage();
             }}
+            thumbnailStrips={thumbnailStrips}
+            onStripItemDrop={handleStripItemDrop}
+            onStripRemoveItem={handleStripRemoveItem}
+            onStripPinToggle={handleStripPinToggle}
+            onStripActivate={handleStripActivate}
+            onStripDragActivate={handleStripDragActivate}
             onApplyTool={handleApplyTool}
             onCancelProcessing={handleCancelProcessing}
             onToolSelect={handleToolSelectWithConstraints}
@@ -1569,7 +1807,7 @@ export function ImageToolsWorkspace({
             onClearRight={handleClearRightPanel}
             onUploadRight={handleUploadRight}
             onSelectHistoryItem={handleSelectHistoryItem}
-            onRemoveHistoryItem={handleRemoveHistoryItem}
+            onToggleHistoryStar={handleToggleHistoryStar}
             onDismissError={handleDismissError}
           />
         </Box>

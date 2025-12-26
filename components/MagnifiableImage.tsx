@@ -9,6 +9,7 @@ export type MagnifiableImageProps =
     zoom?: number;
     lensSize?: number;
     lensBorderColor?: string;
+    enableLens?: boolean;
   };
 
 type LensStyleState = {
@@ -30,6 +31,7 @@ export const MagnifiableImage = React.forwardRef<
     lensSize = 160,
     lensBorderColor = "rgba(255,255,255,0.55)",
     src,
+    enableLens = false,
     className: _unusedClassName,
     ...restImgProps
   } = props;
@@ -67,6 +69,12 @@ export const MagnifiableImage = React.forwardRef<
   React.useEffect(() => {
     setLensVisible(false);
   }, [src]);
+
+  React.useEffect(() => {
+    if (!enableLens) {
+      setLensVisible(false);
+    }
+  }, [enableLens]);
 
   const updateLensPosition = React.useCallback(
     (clientX: number, clientY: number) => {
@@ -126,12 +134,12 @@ export const MagnifiableImage = React.forwardRef<
   );
 
   const handlePointerEnter = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!src || !isPointerInteraction(event.pointerType)) return;
+    if (!src || !enableLens || !isPointerInteraction(event.pointerType)) return;
     updateLensPosition(event.clientX, event.clientY);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!src || !isPointerInteraction(event.pointerType)) return;
+    if (!src || !enableLens || !isPointerInteraction(event.pointerType)) return;
     updateLensPosition(event.clientX, event.clientY);
   };
 
@@ -172,7 +180,7 @@ export const MagnifiableImage = React.forwardRef<
         }}
       />
 
-      {lensVisible && src && (
+      {lensVisible && enableLens && src && (
         <div
           aria-hidden="true"
           style={{

@@ -15,6 +15,7 @@ export type ImagePanelSlot = {
   dropLabel?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   controls?: ImageSlotControls;
+  draggableImageId?: string;
 };
 
 type SingleImagePanelProps = {
@@ -31,6 +32,7 @@ type SingleImagePanelProps = {
   draggableImageId?: string;
   isLoading?: boolean;
   uploadInputTestId?: string;
+  onToggleStar?: () => void;
 };
 
 type GridImagePanelProps = {
@@ -160,6 +162,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                         remove: "Remove reference",
                       }
                     }
+                    draggableImageId={slot.draggableImageId}
                   />
                 </Box>
               );
@@ -183,7 +186,13 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     isLoading = false,
     uploadInputTestId,
     panelTestId,
+    onToggleStar,
   } = props;
+
+  const starState =
+    image && onToggleStar
+      ? { isStarred: Boolean(image.isStarred), onToggle: onToggleStar }
+      : undefined;
 
   const renderEmptyState = ({
     openFilePicker,
@@ -296,6 +305,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
             }
           : undefined
       }
+      starState={starState}
     />
   );
 };

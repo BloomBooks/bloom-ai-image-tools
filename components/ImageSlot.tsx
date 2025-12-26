@@ -35,6 +35,16 @@ export type ImageSlotControls = {
   remove?: boolean;
 };
 
+type SlotActionButton = {
+  key: string;
+  icon: string;
+  title: string;
+  onClick: () => void;
+  ariaPressed?: boolean;
+  isActive?: boolean;
+  testId?: string;
+};
+
 type RoleKind = "target" | "reference";
 
 type RenderEmptyStateArgs = {
@@ -61,6 +71,7 @@ export interface ImageSlotProps {
   dropLabel?: string;
   dataTestId?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
+  starState?: { isStarred: boolean; onToggle: () => void };
 }
 
 const VARIANT_LAYOUT_STYLES: Record<
@@ -193,8 +204,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dropLabel = "Drop image",
   dataTestId,
   actionLabels,
+  starState,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const slotRef = React.useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
   const [isHovered, setIsHovered] = React.useState(false);
@@ -205,6 +218,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const [thumbnailStatus, setThumbnailStatus] = React.useState<
     "idle" | "saving" | "success" | "error"
   >("idle");
+  const [isMagnifierPinned, setIsMagnifierPinned] = React.useState(false);
   const [imageMetadata, setImageMetadata] = React.useState<{
     imageId: string;
     width: number | null;
@@ -223,6 +237,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   React.useEffect(() => {
     if (!image) {
       setImageMetadata(null);
+      setIsMagnifierPinned(false);
       return;
     }
 
@@ -263,6 +278,36 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       isCancelled = true;
     };
   }, [image]);
+
+  // Leaving magnifier mode as soon as the slot loses focus-like attention keeps the interaction predictable.
+  React.useEffect(() => {
+    if (!isMagnifierPinned) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!slotRef.current) return;
+      if (slotRef.current.contains(event.target as Node)) return;
+      setIsMagnifierPinned(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMagnifierPinned(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMagnifierPinned]);
+
+  React.useEffect(() => {
+    if (!image || disabled) {
+      setIsMagnifierPinned(false);
+    }
+  }, [image, disabled]);
 
   const openFilePicker = () => {
     if (!onUpload || disabled) return;
@@ -393,6 +438,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     setIsHovered(false);
   };
 
+  const handleMagnifierToggle = () => {
+    if (!image || disabled) return;
+    setIsMagnifierPinned((previous) => !previous);
+  };
+
   // Get the art style ID from the image's metadata (parameters)
   const imageArtStyleId = getArtStyleIdForImage(image);
   const hasValidArtStyle = !!imageArtStyleId;
@@ -450,7 +500,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     remove: "Remove image",
   };
 
-  const actionButtons = [
+  const actionButtons: SlotActionButton[] = [
     {
       key: "upload",
       icon: Icons.Upload,
@@ -506,45 +556,69 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
   const shouldShowActions = isHovered && orderedActionButtons.length > 0;
 
-  const renderActions = () => {
-    if (!shouldShowActions) return null;
-
-    if (variant === "panel") {
-      return (
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            justifyContent: "flex-start",
-          }}
-        >
-          {orderedActionButtons.map((action) => (
-            <button
-              key={action.key}
-              type="button"
-              onClick={action.onClick}
-              style={{
-                padding: 8,
-                borderRadius: "50%",
-                border: `1px solid ${theme.colors.panelBorder}`,
-                backgroundColor: theme.colors.overlay,
-                color: theme.colors.textPrimary,
-                boxShadow: theme.colors.panelShadow,
-                backdropFilter: "blur(6px)",
-                transition: "background-color 120ms ease",
-              }}
-              title={action.title}
-              aria-label={action.title}
-            >
-              <Icon path={action.icon} width={16} height={16} />
-            </button>
-          ))}
-        </div>
-      );
-    }
+  const renderActionButton = (action: SlotActionButton) => {
+    const isActive = action.isActive ?? false;
 
     return (
+      <button
+        key={action.key}
+        type="button"
+        onClick={action.onClick}
+        data-testid={action.testId}
+        style={{
+          padding: 8,
+          borderRadius: "50%",
+          border: `1px solid ${
+            isActive ? theme.colors.accent : theme.colors.panelBorder
+          }`,
+          backgroundColor: isActive
+            ? theme.colors.accent
+            : theme.colors.overlay,
+          color: isActive
+            ? theme.colors.appBackground
+            : theme.colors.textPrimary,
+          boxShadow: theme.colors.panelShadow,
+          backdropFilter: "blur(6px)",
+          transition:
+            "background-color 120ms ease, border-color 120ms ease, color 120ms ease",
+        }}
+        title={action.title}
+        aria-label={action.title}
+        aria-pressed={
+          typeof action.ariaPressed === "boolean"
+            ? action.ariaPressed
+            : undefined
+        }
+      >
+        <Icon path={action.icon} width={16} height={16} />
+      </button>
+    );
+  };
+
+  const shouldShowMagnifierToggle = variant === "panel" && !!image && !disabled;
+
+  const panelActionButtons = shouldShowMagnifierToggle
+    ? [
+        ...orderedActionButtons,
+        {
+          key: "magnifier",
+          icon: Icons.Magnifier,
+          title: isMagnifierPinned ? "Disable magnifier" : "Enable magnifier",
+          onClick: handleMagnifierToggle,
+          ariaPressed: isMagnifierPinned,
+          isActive: isMagnifierPinned,
+          testId: "image-slot-magnifier-toggle",
+        } satisfies SlotActionButton,
+      ]
+    : orderedActionButtons;
+
+  const panelHeaderActions =
+    variant === "panel" && shouldShowActions
+      ? panelActionButtons.map(renderActionButton)
+      : [];
+
+  const tileActionsNode =
+    variant === "tile" && shouldShowActions ? (
       <div
         style={{
           position: "absolute",
@@ -557,30 +631,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           pointerEvents: disabled ? "none" : "auto",
         }}
       >
-        {orderedActionButtons.map((action) => (
-          <button
-            key={action.key}
-            type="button"
-            onClick={action.onClick}
-            style={{
-              padding: 8,
-              borderRadius: "50%",
-              border: `1px solid ${theme.colors.panelBorder}`,
-              backgroundColor: theme.colors.overlay,
-              color: theme.colors.textPrimary,
-              boxShadow: theme.colors.panelShadow,
-              backdropFilter: "blur(6px)",
-              transition: "background-color 120ms ease",
-            }}
-            title={action.title}
-            aria-label={action.title}
-          >
-            <Icon path={action.icon} width={16} height={16} />
-          </button>
-        ))}
+        {orderedActionButtons.map(renderActionButton)}
       </div>
-    );
-  };
+    ) : null;
 
   const defaultEmptyState = (
     <button
@@ -620,7 +673,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     ? renderEmptyState({ openFilePicker, isDropZone, disabled })
     : defaultEmptyState;
 
-  const actionsNode = renderActions();
+  const headerActions =
+    panelHeaderActions.length > 0 ? panelHeaderActions : undefined;
   const activeMetadata =
     image && imageMetadata?.imageId === image.id ? imageMetadata : null;
   const metadataLabels = activeMetadata
@@ -635,8 +689,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       }
     : null;
 
+  const shouldRenderHeader =
+    variant === "panel" && (label || headerActions || starState);
+
   return (
     <div
+      ref={slotRef}
       data-testid={dataTestId}
       style={{
         ...variantStyles.container,
@@ -662,8 +720,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       onMouseLeave={handleMouseLeave}
       onContextMenu={handleContextMenu}
     >
-      {variant === "panel" && (label || actionsNode) && (
-        <ImageSlotHeader label={label || ""} actions={actionsNode} />
+      {shouldRenderHeader && (
+        <ImageSlotHeader
+          label={label || ""}
+          actions={headerActions}
+          isStarred={starState?.isStarred}
+          onToggleStar={image ? starState?.onToggle : undefined}
+        />
       )}
 
       <div style={variantStyles.contentWrapper}>
@@ -672,19 +735,22 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             <div
               style={{
                 display: "flex",
+                width: "100%",
+                height: "100%",
                 maxWidth: "100%",
                 maxHeight: "100%",
-                ...TRANSPARENCY_BACKGROUND_STYLE,
               }}
             >
               <MagnifiableImage
                 src={image.imageData}
                 alt={label || "Reference"}
+                enableLens={isMagnifierPinned}
                 style={{
                   maxHeight: "100%",
                   maxWidth: "100%",
                   objectFit: "contain",
                   display: "block",
+                  ...TRANSPARENCY_BACKGROUND_STYLE,
                 }}
                 draggable={!!draggableImageId}
                 onDragStart={handleImageDragStart}
@@ -694,7 +760,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             emptyStateContent
           )}
 
-          {variant === "tile" && actionsNode}
+          {tileActionsNode}
 
           {rolePill && (
             <div
@@ -727,17 +793,17 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             <div
               style={{
                 position: "absolute",
-                left: 12,
-                right: 12,
-                bottom: 12,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: 12,
                 fontSize: "10px",
                 fontWeight: 600,
-                padding: "6px 12px",
-                borderRadius: "999px",
+                padding: "10px 16px",
+                borderRadius: "0 0 18px 18px",
                 zIndex: 15,
                 backgroundColor: theme.colors.overlay,
                 color: theme.colors.textPrimary,

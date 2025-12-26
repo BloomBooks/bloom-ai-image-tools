@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import {
-  HistoryItem,
+  ImageRecord,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
 } from "../../types";
@@ -19,7 +19,7 @@ const EMPTY_MESSAGES: Partial<Record<ThumbnailStripId, string>> = {
 
 interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
-  entries: HistoryItem[];
+  entries: ImageRecord[];
   selectedId: string | null;
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
@@ -54,7 +54,7 @@ export const ThumbnailStripsCollection: React.FC<
   onDragActivateStrip,
 }) => {
   const entriesById = useMemo(() => {
-    const map: Record<string, HistoryItem> = {};
+    const map: Record<string, ImageRecord> = {};
     for (const entry of entries) {
       map[entry.id] = entry;
     }

@@ -1,5 +1,5 @@
 import React from "react";
-import { HistoryItem } from "../types";
+import { ImageRecord } from "../types";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
@@ -20,10 +20,10 @@ const valueStyle: React.CSSProperties = {
 };
 
 interface ImageInfoPanelProps {
-  item: HistoryItem;
+  item: ImageRecord;
 }
 
-const resolveStyleSummary = (item: HistoryItem): string | null => {
+const resolveStyleSummary = (item: ImageRecord): string | null => {
   const paramStyleId = item.parameters?.styleId;
   const candidates = [item.sourceStyleId, paramStyleId];
   const styleId = candidates.find(

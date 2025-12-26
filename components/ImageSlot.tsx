@@ -1,10 +1,22 @@
 import React from "react";
-import { CircularProgress } from "@mui/material";
-import Popper from "@mui/material/Popper";
+import {
+  Button,
+  CircularProgress,
+  ClickAwayListener,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Popper,
+  Tooltip,
+} from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
-import { HistoryItem } from "../types";
+import { ImageRecord } from "../types";
 import { Icon, Icons } from "./Icons";
+import { ImageInfoPanel } from "./ImageInfoPanel";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { kBloomBlue, theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
@@ -24,7 +36,7 @@ import {
   handleCopy as copyImageToClipboard,
   handlePaste as pasteImageFromClipboard,
 } from "../lib/clipboardUtils";
-import { getImageDimensions, getMimeTypeFromUrl } from "../lib/imageUtils";
+import { getMimeTypeFromUrl } from "../lib/imageUtils";
 import {
   hasImageFilePayload,
   getImageFileFromDataTransfer,
@@ -58,7 +70,7 @@ type RenderEmptyStateArgs = {
 
 export interface ImageSlotProps {
   label?: string;
-  image: HistoryItem | null;
+  image: ImageRecord | null;
   disabled?: boolean;
   isDropZone?: boolean;
   onClick?: () => void;
@@ -67,7 +79,7 @@ export interface ImageSlotProps {
   onUpload?: (file: File) => void;
   onRemove?: () => void;
   draggableImageId?: string;
-  dragEffectAllowed?: DataTransfer['effectAllowed'];
+  dragEffectAllowed?: DataTransfer["effectAllowed"];
   onImageDragStart?: (event: React.DragEvent) => void;
   isLoading?: boolean;
   uploadInputTestId?: string;
@@ -79,7 +91,6 @@ export interface ImageSlotProps {
   dataTestId?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   starState?: { isStarred: boolean; onToggle: () => void };
-  hoverInfo?: (image: HistoryItem) => React.ReactNode;
 }
 
 const VARIANT_LAYOUT_STYLES: Record<
@@ -164,7 +175,8 @@ const VARIANT_LAYOUT_STYLES: Record<
       borderWidth: 2,
       borderStyle: "solid",
       overflow: "hidden",
-      transition: "opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
+      transition:
+        "opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
       width: "100%",
       aspectRatio: "1 / 1",
       backgroundColor: "transparent",
@@ -210,7 +222,7 @@ const TRANSPARENCY_BACKGROUND_STYLE: React.CSSProperties = {
   backgroundSize: `${TRANSPARENCY_PATTERN_SIZE}px ${TRANSPARENCY_PATTERN_SIZE}px`,
 };
 
-const getArtStyleIdForImage = (item?: HistoryItem | null): string | null => {
+const getArtStyleIdForImage = (item?: ImageRecord | null): string | null => {
   if (!item) return null;
 
   const normalizedFromSource = item.sourceStyleId;
@@ -250,13 +262,15 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dataTestId,
   actionLabels,
   starState,
-  hoverInfo,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const slotRef = React.useRef<HTMLDivElement>(null);
+  const thumbMoreButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const thumbCloseTimeoutRef = React.useRef<number | null>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
   const [isHovered, setIsHovered] = React.useState(false);
+  const [isThumbOverflowOpen, setIsThumbOverflowOpen] = React.useState(false);
   const [contextMenu, setContextMenu] = React.useState<{
     x: number;
     y: number;
@@ -265,12 +279,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     "idle" | "saving" | "success" | "error"
   >("idle");
   const [isMagnifierPinned, setIsMagnifierPinned] = React.useState(false);
-  const [imageMetadata, setImageMetadata] = React.useState<{
-    imageId: string;
-    width: number | null;
-    height: number | null;
-    mime: string | null;
-  } | null>(null);
+  const [isInfoDialogOpen, setIsInfoDialogOpen] = React.useState(false);
 
   const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
@@ -282,47 +291,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
   React.useEffect(() => {
     if (!image) {
-      setImageMetadata(null);
       setIsMagnifierPinned(false);
-      return;
     }
-
-    const normalizedMime =
-      getTypeFromMime(getMimeTypeFromUrl(image.imageData)) ||
-      getTypeFromMime(getTypeFromFileName(image.imageFileName)) ||
-      null;
-
-    const updateMetadata = (width: number | null, height: number | null) => {
-      setImageMetadata({
-        imageId: image.id,
-        mime: normalizedMime,
-        width: typeof width === "number" && width > 0 ? width : null,
-        height: typeof height === "number" && height > 0 ? height : null,
-      });
-    };
-
-    if (image.resolution) {
-      updateMetadata(image.resolution.width, image.resolution.height);
-      return;
-    }
-
-    let isCancelled = false;
-    (async () => {
-      try {
-        const { width, height } = await getImageDimensions(image.imageData);
-        if (!isCancelled) {
-          updateMetadata(width, height);
-        }
-      } catch {
-        if (!isCancelled) {
-          updateMetadata(null, null);
-        }
-      }
-    })();
-
-    return () => {
-      isCancelled = true;
-    };
   }, [image]);
 
   // Leaving magnifier mode as soon as the slot loses focus-like attention keeps the interaction predictable.
@@ -495,9 +465,22 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     setIsHovered(false);
   };
 
+  React.useEffect(() => {
+    if (!isHovered) setIsThumbOverflowOpen(false);
+  }, [isHovered]);
+
   const handleMagnifierToggle = () => {
     if (!image || disabled) return;
     setIsMagnifierPinned((previous) => !previous);
+  };
+
+  const handleOpenInfo = () => {
+    if (!image || disabled) return;
+    setIsInfoDialogOpen(true);
+  };
+
+  const handleCloseInfo = () => {
+    setIsInfoDialogOpen(false);
   };
 
   // Get the art style ID from the image's metadata (parameters)
@@ -595,30 +578,49 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     },
   ].filter((action) => action.isVisible && !disabled);
 
+  const infoAction: SlotActionButton | null =
+    image && !disabled
+      ? {
+          key: "info",
+          icon: Icons.Info,
+          title: "Image info",
+          onClick: handleOpenInfo,
+          testId: "image-info-button",
+        }
+      : null;
+
+  const actionButtonsWithInfo =
+    variant !== "panel" && infoAction
+      ? [...actionButtons, infoAction]
+      : actionButtons;
+
   const orderedActionButtons =
     variant === "panel"
       ? actionButtons
       : (() => {
-          const removeIndex = actionButtons.findIndex(
+          const removeIndex = actionButtonsWithInfo.findIndex(
             (action) => action.key === "remove"
           );
           if (removeIndex > 0) {
-            const reordered = [...actionButtons];
+            const reordered = [...actionButtonsWithInfo];
             const [removeAction] = reordered.splice(removeIndex, 1);
             reordered.unshift(removeAction);
             return reordered;
           }
-          return actionButtons;
+          return actionButtonsWithInfo;
         })();
 
   const shouldShowActions = isHovered && orderedActionButtons.length > 0;
 
-  const renderActionButton = (action: SlotActionButton) => {
+  const renderActionButton = (
+    action: SlotActionButton,
+    styleOverride?: React.CSSProperties
+  ) => {
     const isActive = action.isActive ?? false;
+    const usesTooltip = action.key === "info" && !!image;
 
-    return (
+    const buttonNode = (
       <button
-        key={action.key}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
@@ -628,9 +630,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         style={{
           padding: 8,
           borderRadius: "50%",
-          border: `1px solid ${
-            isActive ? theme.colors.accent : theme.colors.panelBorder
-          }`,
+          border: "none",
           backgroundColor: isActive
             ? theme.colors.accent
             : theme.colors.overlay,
@@ -640,9 +640,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           boxShadow: theme.colors.panelShadow,
           backdropFilter: "blur(6px)",
           transition:
-            "background-color 120ms ease, border-color 120ms ease, color 120ms ease",
+            "background-color 120ms ease, color 120ms ease",
+          ...styleOverride,
         }}
-        title={action.title}
+        title={usesTooltip ? undefined : action.title}
         aria-label={action.title}
         aria-pressed={
           typeof action.ariaPressed === "boolean"
@@ -653,6 +654,32 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         <Icon path={action.icon} width={16} height={16} />
       </button>
     );
+
+    if (usesTooltip) {
+      return (
+        <Tooltip
+          key={action.key}
+          placement="top"
+          enterDelay={150}
+          title={
+            <div data-testid="image-info-tooltip">
+              <ImageInfoPanel item={image} />
+            </div>
+          }
+          slotProps={{
+            tooltip: {
+              sx: {
+                maxWidth: "min(360px, calc(100vw - 32px))",
+              },
+            },
+          }}
+        >
+          {buttonNode}
+        </Tooltip>
+      );
+    }
+
+    return <React.Fragment key={action.key}>{buttonNode}</React.Fragment>;
   };
 
   const shouldShowMagnifierToggle = variant === "panel" && !!image && !disabled;
@@ -672,13 +699,16 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       ]
     : orderedActionButtons;
 
-  const panelHeaderActions =
-    variant === "panel" && shouldShowActions
-      ? panelActionButtons.map(renderActionButton)
+  const combinedHeaderActions =
+    variant === "panel" && isHovered
+      ? [
+          ...(infoAction ? [renderActionButton(infoAction)] : []),
+          ...panelActionButtons.map((action) => renderActionButton(action)),
+        ]
       : [];
 
   const floatingActionsNode =
-    variant !== "panel" && shouldShowActions ? (
+    variant !== "panel" && variant !== "thumb" && shouldShowActions ? (
       <div
         style={{
           position: "absolute",
@@ -691,9 +721,184 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           pointerEvents: disabled ? "none" : "auto",
         }}
       >
-        {orderedActionButtons.map(renderActionButton)}
+        {orderedActionButtons.map((action) => renderActionButton(action))}
       </div>
     ) : null;
+
+  const thumbOverlayActionsNode =
+    variant === "thumb" &&
+    !!image &&
+    !disabled &&
+    orderedActionButtons.length > 0
+      ? (() => {
+          const removeAction = orderedActionButtons.find(
+            (action) => action.key === "remove"
+          );
+          const overflowActions = orderedActionButtons.filter(
+            (action) => action.key !== "remove"
+          );
+
+          const showRemove = isHovered;
+          const showMoreTrigger =
+            overflowActions.length > 0 && (isHovered || isThumbOverflowOpen);
+
+          const clearCloseTimeout = () => {
+            if (thumbCloseTimeoutRef.current != null) {
+              window.clearTimeout(thumbCloseTimeoutRef.current);
+              thumbCloseTimeoutRef.current = null;
+            }
+          };
+
+          const scheduleClose = () => {
+            clearCloseTimeout();
+            thumbCloseTimeoutRef.current = window.setTimeout(() => {
+              setIsThumbOverflowOpen(false);
+            }, 120);
+          };
+
+          return (
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                zIndex: 20,
+                pointerEvents: disabled ? "none" : "auto",
+              }}
+            >
+              {removeAction
+                ? renderActionButton(removeAction, {
+                    opacity: showRemove ? 1 : 0,
+                    pointerEvents: showRemove ? "auto" : "none",
+                    transition: "opacity 120ms ease",
+                  })
+                : null}
+
+              {overflowActions.length > 0 ? (
+                <ClickAwayListener
+                  onClickAway={() => {
+                    setIsThumbOverflowOpen(false);
+                  }}
+                >
+                  <div
+                    onMouseEnter={() => {
+                      clearCloseTimeout();
+                      setIsThumbOverflowOpen(true);
+                    }}
+                    onMouseLeave={() => {
+                      scheduleClose();
+                    }}
+                    onFocusCapture={() => {
+                      clearCloseTimeout();
+                      setIsThumbOverflowOpen(true);
+                    }}
+                    onBlurCapture={(event) => {
+                      const next = event.relatedTarget as Node | null;
+                      if (!next || !event.currentTarget.contains(next)) {
+                        scheduleClose();
+                      }
+                    }}
+                    style={{ position: "relative" }}
+                  >
+                    <button
+                      ref={(node) => {
+                        thumbMoreButtonRef.current = node;
+                      }}
+                      type="button"
+                      aria-label="More actions"
+                      title="More actions"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        clearCloseTimeout();
+                        setIsThumbOverflowOpen((open) => !open);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.stopPropagation();
+                          setIsThumbOverflowOpen(false);
+                        }
+                      }}
+                      style={{
+                        padding: 8,
+                        borderRadius: "50%",
+                        border: "none",
+                        backgroundColor: theme.colors.overlay,
+                        color: theme.colors.textPrimary,
+                        boxShadow: theme.colors.panelShadow,
+                        backdropFilter: "blur(6px)",
+                        transition: "opacity 120ms ease",
+                        opacity: showMoreTrigger ? 1 : 0,
+                        pointerEvents: showMoreTrigger ? "auto" : "none",
+                      }}
+                    >
+                      <Icon path={Icons.More} width={16} height={16} />
+                    </button>
+
+                    <Popper
+                      open={isThumbOverflowOpen}
+                      anchorEl={thumbMoreButtonRef.current}
+                      placement="left-start"
+                      style={{ zIndex: 60 }}
+                      modifiers={[
+                        {
+                          name: "offset",
+                          options: { offset: [0, 0] },
+                        },
+                      ]}
+                    >
+                      <div
+                        onMouseEnter={() => {
+                          clearCloseTimeout();
+                        }}
+                        onMouseLeave={() => {
+                          scheduleClose();
+                        }}
+                        onFocusCapture={() => {
+                          clearCloseTimeout();
+                        }}
+                        onBlurCapture={(event) => {
+                          const next = event.relatedTarget as Node | null;
+                          if (!next || !event.currentTarget.contains(next)) {
+                            scheduleClose();
+                          }
+                        }}
+                        style={{
+                          border: `1px solid ${theme.colors.panelBorder}`,
+                          borderRadius: 999,
+                          backgroundColor: theme.colors.overlay,
+                          boxShadow: theme.colors.panelShadow,
+                          backdropFilter: "blur(6px)",
+                          display: "flex",
+                          flexDirection: "row",
+                          gap: 4,
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          padding: 4,
+                          paddingRight: 8,
+                          transition:
+                            "opacity 140ms ease, transform 140ms ease",
+                          opacity: isThumbOverflowOpen ? 1 : 0,
+                          transform: isThumbOverflowOpen
+                            ? "translateX(0)"
+                            : "translateX(10px)",
+                          pointerEvents: isThumbOverflowOpen ? "auto" : "none",
+                        }}
+                      >
+                        {overflowActions.map((action) =>
+                          renderActionButton(action)
+                        )}
+                      </div>
+                    </Popper>
+                  </div>
+                </ClickAwayListener>
+              ) : null}
+            </div>
+          );
+        })()
+      : null;
 
   const defaultEmptyState = (
     <button
@@ -734,20 +939,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     : defaultEmptyState;
 
   const headerActions =
-    panelHeaderActions.length > 0 ? panelHeaderActions : undefined;
-  const activeMetadata =
-    image && imageMetadata?.imageId === image.id ? imageMetadata : null;
-  const metadataLabels = activeMetadata
-    ? {
-        dimension:
-          activeMetadata.width && activeMetadata.height
-            ? `${activeMetadata.width} x ${activeMetadata.height}`
-            : activeMetadata.width || activeMetadata.height
-            ? `${activeMetadata.width ?? "?"} x ${activeMetadata.height ?? "?"}`
-            : "Unknown size",
-        mime: activeMetadata.mime || "Unknown type",
-      }
-    : null;
+    combinedHeaderActions.length > 0 ? combinedHeaderActions : undefined;
 
   const shouldRenderHeader =
     variant === "panel" && (label || headerActions || starState);
@@ -768,34 +960,40 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         position: "absolute",
         top: 8,
         left: 8,
-        padding: 8,
-        borderRadius: 999,
-        border: `1px solid ${theme.colors.panelBorder}`,
+        padding: starState?.isStarred ? 4 : 8,
+        borderRadius: starState?.isStarred ? 0 : 999,
+        border: "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: theme.colors.overlay,
+        backgroundColor: starState?.isStarred
+          ? "transparent"
+          : theme.colors.overlay,
         color: starState?.isStarred
           ? theme.colors.accent
           : theme.colors.textPrimary,
         opacity: starState?.isStarred ? 1 : isHovered ? 1 : 0,
         transition:
           "opacity 120ms ease, color 120ms ease, box-shadow 120ms ease",
-        boxShadow: starState?.isStarred ? theme.colors.accentShadow : "none",
-        backdropFilter: "blur(6px)",
+        boxShadow: starState?.isStarred ? "none" : "none",
+        backdropFilter: starState?.isStarred ? "none" : "blur(6px)",
         zIndex: 25,
-        pointerEvents: disabled ? "none" : "auto",
+        pointerEvents:
+          disabled || (!starState?.isStarred && !isHovered) ? "none" : "auto",
       }}
     >
       {starState?.isStarred ? (
-        <StarIcon sx={{ fontSize: 16 }} />
+        <StarIcon
+          sx={{
+            fontSize: 18,
+            filter: `drop-shadow(${theme.colors.panelShadow})`,
+          }}
+        />
       ) : (
         <StarBorderIcon sx={{ fontSize: 16 }} />
       )}
     </button>
   ) : null;
-
-  const shouldShowHoverInfo = !!image && !!hoverInfo && isHovered;
 
   return (
     <>
@@ -817,18 +1015,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               : isHovered
               ? hoverBackgroundColor
               : baseBackgroundColor,
-          opacity:
-            disabled
-              ? 0.4
-              : variant === "thumb"
-              ? isSelected
-                ? 1
-                : isHovered
-                ? 1
-                : 0.8
-              : 1,
+          opacity: disabled
+            ? 0.4
+            : variant === "thumb"
+            ? isSelected
+              ? 1
+              : isHovered
+              ? 1
+              : 0.8
+            : 1,
           cursor:
-            !disabled && (onClick || variant === "thumb") ? "pointer" : "default",
+            !disabled && (onClick || variant === "thumb")
+              ? "pointer"
+              : "default",
           pointerEvents: disabled ? "none" : "auto",
           filter: disabled ? "grayscale(1)" : "none",
           borderColor: isDragOver
@@ -862,292 +1061,263 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           }
         }}
       >
-      {shouldRenderHeader && (
-        <ImageSlotHeader
-          label={label || ""}
-          actions={headerActions}
-          isStarred={starState?.isStarred}
-          onToggleStar={image ? starState?.onToggle : undefined}
-        />
-      )}
+        {shouldRenderHeader && (
+          <ImageSlotHeader
+            label={label || ""}
+            actions={headerActions}
+            isStarred={starState?.isStarred}
+            onToggleStar={image ? starState?.onToggle : undefined}
+          />
+        )}
 
-      <div style={variantStyles.contentWrapper}>
-        <div style={variantStyles.innerWrapper}>
-          {image ? (
-            <div
-              style={{
-                display: "flex",
-                width: "100%",
-                height: "100%",
-                maxWidth: "100%",
-                maxHeight: "100%",
-              }}
-            >
-              <MagnifiableImage
-                src={image.imageData}
-                alt={label || "Reference"}
-                enableLens={isMagnifierPinned}
+        <div style={variantStyles.contentWrapper}>
+          <div style={variantStyles.innerWrapper}>
+            {image ? (
+              <div
                 style={{
-                  maxHeight: "100%",
+                  display: "flex",
+                  width: "100%",
+                  height: "100%",
                   maxWidth: "100%",
-                  objectFit: variant === "thumb" ? "cover" : "contain",
-                  display: "block",
-                  ...(variant === "thumb"
-                    ? undefined
-                    : TRANSPARENCY_BACKGROUND_STYLE),
-                }}
-                draggable={!!draggableImageId}
-                onDragStart={handleImageDragStart}
-              />
-            </div>
-          ) : (
-            emptyStateContent
-          )}
-
-          {floatingActionsNode}
-
-          {overlayStarNode}
-
-          {rolePill && (
-            <div
-              data-testid={rolePill.testId}
-              style={{
-                position: "absolute",
-                top: 8,
-                left: 8,
-                padding: "4px 8px",
-                borderRadius: "999px",
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                userSelect: "none",
-                zIndex: 10,
-                backgroundColor:
-                  rolePill.kind === "target"
-                    ? theme.colors.accent
-                    : theme.colors.overlay,
-                color: theme.colors.textPrimary,
-                border: `1px solid ${theme.colors.panelBorder}`,
-                boxShadow: theme.colors.insetShadow,
-              }}
-            >
-              {rolePill.label}
-            </div>
-          )}
-
-          {image && metadataLabels && isHovered && (
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                fontSize: "10px",
-                fontWeight: 600,
-                padding: "10px 16px",
-                borderRadius: "0 0 18px 18px",
-                zIndex: 15,
-                backgroundColor: theme.colors.overlay,
-                color: theme.colors.textPrimary,
-                boxShadow: theme.colors.panelShadow,
-                pointerEvents: "none",
-              }}
-            >
-              <span>{metadataLabels.dimension}</span>
-              <span style={{ opacity: 0.85 }}>{metadataLabels.mime}</span>
-            </div>
-          )}
-
-          {isDragOver && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 20,
-                borderRadius: "18px",
-                backgroundColor: theme.colors.dropZone,
-                border: `2px dashed ${theme.colors.dropZoneBorder}`,
-                pointerEvents: "none",
-                backdropFilter: "blur(1px)",
-              }}
-            >
-              <span
-                style={{
-                  fontWeight: 700,
-                  fontSize: "0.9rem",
-                  color: theme.colors.textPrimary,
-                  textShadow: theme.colors.panelShadow,
+                  maxHeight: "100%",
                 }}
               >
-                {dropLabel}
-              </span>
-            </div>
-          )}
+                <MagnifiableImage
+                  src={image.imageData}
+                  alt={label || "Reference"}
+                  enableLens={isMagnifierPinned}
+                  style={{
+                    maxHeight: "100%",
+                    maxWidth: "100%",
+                    objectFit: variant === "thumb" ? "cover" : "contain",
+                    display: "block",
+                    ...(variant === "thumb"
+                      ? undefined
+                      : TRANSPARENCY_BACKGROUND_STYLE),
+                  }}
+                  draggable={!!draggableImageId}
+                  onDragStart={handleImageDragStart}
+                />
+              </div>
+            ) : (
+              emptyStateContent
+            )}
 
-          {isLoading && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 16,
-                zIndex: 30,
-                borderRadius: "18px",
-                backgroundColor: theme.colors.overlayStrong,
-                backdropFilter: "blur(4px)",
-              }}
-            >
-              <CircularProgress size={40} sx={{ color: theme.colors.accent }} />
-              <span
+            {floatingActionsNode}
+
+            {thumbOverlayActionsNode}
+
+            {overlayStarNode}
+
+            {rolePill && (
+              <div
+                data-testid={rolePill.testId}
                 style={{
-                  fontSize: "0.9rem",
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  padding: "4px 8px",
+                  borderRadius: "999px",
+                  fontSize: "10px",
                   fontWeight: 600,
                   letterSpacing: "0.08em",
+                  userSelect: "none",
+                  zIndex: 10,
+                  backgroundColor:
+                    rolePill.kind === "target"
+                      ? theme.colors.accent
+                      : theme.colors.overlay,
                   color: theme.colors.textPrimary,
+                  border: `1px solid ${theme.colors.panelBorder}`,
+                  boxShadow: theme.colors.insetShadow,
                 }}
               >
-                Generating...
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+                {rolePill.label}
+              </div>
+            )}
 
-      <input
-        type="file"
-        ref={fileInputRef}
-        style={{ display: "none" }}
-        accept="image/*"
-        data-testid={uploadInputTestId}
-        onChange={handleInputChange}
-      />
+            {isDragOver && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 20,
+                  borderRadius: "18px",
+                  backgroundColor: theme.colors.dropZone,
+                  border: `2px dashed ${theme.colors.dropZoneBorder}`,
+                  pointerEvents: "none",
+                  backdropFilter: "blur(1px)",
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "0.9rem",
+                    color: theme.colors.textPrimary,
+                    textShadow: theme.colors.panelShadow,
+                  }}
+                >
+                  {dropLabel}
+                </span>
+              </div>
+            )}
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          data-testid="image-slot-context-menu"
-          style={{
-            position: "fixed",
-            left: contextMenu.x,
-            top: contextMenu.y,
-            zIndex: 50,
-            borderRadius: 12,
-            padding: 4,
-            minWidth: 160,
-            backgroundColor: theme.colors.surfaceRaised,
-            borderColor: theme.colors.border,
-            boxShadow: theme.colors.panelShadow,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            data-testid="context-menu-set-thumbnail"
-            style={{
-              width: "100%",
-              padding: "8px 16px",
-              textAlign: "left",
-              fontSize: "0.85rem",
-              color: theme.colors.textPrimary,
-              backgroundColor: "transparent",
-              border: "none",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = theme.colors.surfaceAlt;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-            }}
-            onClick={handleSetThumbnail}
-          >
-            Set thumbnail
-          </button>
-        </div>
-      )}
-
-      {/* Thumbnail Status Indicator */}
-      {thumbnailStatus !== "idle" && (
-        <div
-          data-testid="thumbnail-status"
-          style={{
-            position: "absolute",
-            bottom: 8,
-            left: 8,
-            padding: "4px 12px",
-            borderRadius: "999px",
-            fontSize: "0.75rem",
-            fontWeight: 500,
-            zIndex: 40,
-            backgroundColor:
-              thumbnailStatus === "saving"
-                ? theme.colors.accent
-                : thumbnailStatus === "success"
-                ? "#22c55e"
-                : "#ef4444",
-            color: "white",
-          }}
-        >
-          {thumbnailStatus === "saving" && "Saving..."}
-          {thumbnailStatus === "success" && "Thumbnail saved!"}
-          {thumbnailStatus === "error" && "Failed to save"}
-        </div>
-      )}
-      </div>
-
-      {shouldShowHoverInfo && slotRef.current && (
-        <Popper
-          open={true}
-          anchorEl={slotRef.current}
-          placement="top"
-          modifiers={[
-            { name: "offset", options: { offset: [0, 12] } },
-            {
-              name: "preventOverflow",
-              options: { padding: 8, altAxis: true },
-            },
-          ]}
-          style={{ zIndex: 1500 }}
-        >
-          <div
-            style={{
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: 12,
-              padding: 16,
-              backgroundColor: theme.colors.surfaceRaised,
-              color: theme.colors.textPrimary,
-              width: "max-content",
-              maxWidth: "min(320px, calc(100vw - 32px))",
-              boxShadow: theme.colors.panelShadow,
-              position: "relative",
-              fontSize: "0.75rem",
-            }}
-          >
-            {hoverInfo?.(image as HistoryItem)}
-            <div
-              style={{
-                position: "absolute",
-                bottom: -6,
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: 0,
-                height: 0,
-                borderLeft: "6px solid transparent",
-                borderRight: "6px solid transparent",
-                borderTop: `6px solid ${theme.colors.surfaceRaised}`,
-              }}
-            />
+            {isLoading && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 16,
+                  zIndex: 30,
+                  borderRadius: "18px",
+                  backgroundColor: theme.colors.overlayStrong,
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                <CircularProgress
+                  size={40}
+                  sx={{ color: theme.colors.accent }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    color: theme.colors.textPrimary,
+                  }}
+                >
+                  Generating...
+                </span>
+              </div>
+            )}
           </div>
-        </Popper>
+        </div>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          accept="image/*"
+          data-testid={uploadInputTestId}
+          onChange={handleInputChange}
+        />
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <div
+            data-testid="image-slot-context-menu"
+            style={{
+              position: "fixed",
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 50,
+              borderRadius: 12,
+              padding: 4,
+              minWidth: 160,
+              backgroundColor: theme.colors.surfaceRaised,
+              borderColor: theme.colors.border,
+              boxShadow: theme.colors.panelShadow,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              data-testid="context-menu-set-thumbnail"
+              style={{
+                width: "100%",
+                padding: "8px 16px",
+                textAlign: "left",
+                fontSize: "0.85rem",
+                color: theme.colors.textPrimary,
+                backgroundColor: "transparent",
+                border: "none",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme.colors.surfaceAlt;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+              onClick={handleSetThumbnail}
+            >
+              Set thumbnail
+            </button>
+          </div>
+        )}
+
+        {/* Thumbnail Status Indicator */}
+        {thumbnailStatus !== "idle" && (
+          <div
+            data-testid="thumbnail-status"
+            style={{
+              position: "absolute",
+              bottom: 8,
+              left: 8,
+              padding: "4px 12px",
+              borderRadius: "999px",
+              fontSize: "0.75rem",
+              fontWeight: 500,
+              zIndex: 40,
+              backgroundColor:
+                thumbnailStatus === "saving"
+                  ? theme.colors.accent
+                  : thumbnailStatus === "success"
+                  ? "#22c55e"
+                  : "#ef4444",
+              color: "white",
+            }}
+          >
+            {thumbnailStatus === "saving" && "Saving..."}
+            {thumbnailStatus === "success" && "Thumbnail saved!"}
+            {thumbnailStatus === "error" && "Failed to save"}
+          </div>
+        )}
+      </div>
+
+      {image && (
+        <Dialog
+          open={isInfoDialogOpen}
+          onClose={handleCloseInfo}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            "data-testid": "image-info-dialog",
+            sx: {
+              borderRadius: 3,
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            {label ? `${label} info` : "Image info"}
+            <IconButton
+              aria-label="Close"
+              onClick={handleCloseInfo}
+              data-testid="image-info-dialog-close"
+              sx={{
+                position: "absolute",
+                right: 8,
+                top: 8,
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers>
+            <ImageInfoPanel item={image} />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseInfo} variant="contained">
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
     </>
   );

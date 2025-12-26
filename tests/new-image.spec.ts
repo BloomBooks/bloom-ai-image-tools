@@ -55,9 +55,18 @@ test("creates a new robot image via OpenRouter", async ({ page }) => {
   await expect(resultImage).toBeVisible();
 
   // Verify history item displays correct model and cost
-  // Hover over the first history card to show the tooltip popover
+  // Hover over the first history card, then open its overflow controls to reach the info icon.
   const historyThumb = page.locator('[draggable="true"]').first();
   await historyThumb.hover();
+
+  const historyCard = page.getByTestId("history-card").first();
+  const moreActions = historyCard.getByRole("button", { name: "More actions" });
+  await expect(moreActions).toBeVisible();
+  await moreActions.hover();
+
+  const infoButton = historyCard.getByTestId("image-info-button");
+  await expect(infoButton).toBeVisible();
+  await infoButton.hover();
 
   // Verify the model matches what we expect from the API
   const modelDisplay = page.getByTestId("history-model");

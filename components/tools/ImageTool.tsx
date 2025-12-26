@@ -195,6 +195,25 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       fullWidth
       size="small"
       disabled={disabled}
+      sx={
+        multiline
+          ? {
+              "& .MuiInputLabel-root": {
+                fontWeight: 400,
+              },
+              "& .MuiInputBase-inputMultiline": {
+                fontWeight: 400,
+              },
+              "& textarea": {
+                resize: "vertical",
+                overflow: "auto",
+                minHeight: "8rem",
+                maxHeight: "60vh",
+                fontWeight: 400,
+              },
+            }
+          : undefined
+      }
       inputProps={{ "data-testid": inputTestId }}
     />
   );

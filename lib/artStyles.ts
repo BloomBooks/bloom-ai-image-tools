@@ -1,5 +1,5 @@
 import JSON5 from "json5";
-import type { ArtStyle, ArtStyleDefinition, HistoryItem } from "../types";
+import type { ArtStyle, ArtStyleDefinition, ImageRecord } from "../types";
 import artStyleCatalog from "../components/artStyle/art-styles.json5";
 
 export const CLEAR_ART_STYLE_ID = "none";
@@ -34,11 +34,11 @@ export const getStyleIdFromParams = (
 };
 
 /**
- * Extracts the effective style ID from a HistoryItem.
+ * Extracts the effective style ID from an ImageRecord.
  * Checks sourceStyleId first, then falls back to parameters.
  */
-export const getStyleIdFromHistoryItem = (
-  item?: HistoryItem | null
+export const getStyleIdFromImageRecord = (
+  item?: ImageRecord | null
 ): string | null => {
   if (!item) return null;
   return (
@@ -46,6 +46,9 @@ export const getStyleIdFromHistoryItem = (
     getStyleIdFromParams(item.parameters)
   );
 };
+
+/** @deprecated Use getStyleIdFromImageRecord. */
+export const getStyleIdFromHistoryItem = getStyleIdFromImageRecord;
 
 const parseCatalog = (): ArtStyleDefinition[] => {
   try {

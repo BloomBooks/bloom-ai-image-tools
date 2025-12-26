@@ -51,9 +51,10 @@ const setupClipboardHarness = async (page: Page) => {
 };
 
 const copyTargetImage = async (page: Page) => {
-  const targetImage = page.getByRole("img", { name: "Image to Edit" });
+  const targetPanel = page.getByTestId("target-panel");
+  const targetImage = targetPanel.getByRole("img", { name: "Image to Edit" });
   await targetImage.hover();
-  const copyButton = page.getByRole("button", { name: "Copy to Clipboard" });
+  const copyButton = targetPanel.getByRole("button", { name: "Copy to Clipboard" });
   await expect(copyButton).toBeVisible();
   await copyButton.click();
 };

@@ -6,12 +6,12 @@ import {
   removeItemFromStrip,
   reorderItemInStrip,
 } from "../thumbnailStrips";
-import { HistoryItem } from "../../types";
+import { ImageRecord } from "../../types";
 
 const makeEntry = (
   id: string,
-  overrides: Partial<HistoryItem> = {}
-): HistoryItem => ({
+  overrides: Partial<ImageRecord> = {}
+): ImageRecord => ({
   id,
   parentId: null,
   imageData: `data:image/png;base64,${id}`,
@@ -71,7 +71,7 @@ describe("thumbnail strip helpers", () => {
     const entries = [makeEntry("base"), makeEntry("star", { isStarred: true })];
     const hydrated = hydrateThumbnailStripsSnapshot(null, entries);
 
-    expect(hydrated.itemIdsByStrip.history).toEqual(["base", "star"]);
+    expect(hydrated.itemIdsByStrip.history).toEqual(["star", "base"]);
     expect(hydrated.itemIdsByStrip.starred).toEqual(["star"]);
   });
 });

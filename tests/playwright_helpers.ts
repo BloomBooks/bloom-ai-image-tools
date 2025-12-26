@@ -124,10 +124,22 @@ export const SAMPLE_IMAGE_PATH = path.resolve(
 	"line-drawing-sketch.png"
 );
 
-export const uploadSampleImageToTarget = async (page: Page) => {
+export const ALT_SAMPLE_IMAGE_PATH = path.resolve(
+	currentDir,
+	"..",
+	"assets",
+	"art-styles",
+	"watercolor-dream.png"
+);
+
+export const uploadImageToTarget = async (page: Page, filePath: string) => {
 	const uploadInput = page.getByTestId("target-upload-input");
-	await uploadInput.setInputFiles(SAMPLE_IMAGE_PATH);
+	await uploadInput.setInputFiles(filePath);
 	await expect(
 		page.getByRole("img", { name: "Image to Edit" })
 	).toBeVisible();
+};
+
+export const uploadSampleImageToTarget = async (page: Page) => {
+	await uploadImageToTarget(page, SAMPLE_IMAGE_PATH);
 };

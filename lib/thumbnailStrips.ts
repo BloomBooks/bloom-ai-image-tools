@@ -1,5 +1,5 @@
 import {
-  HistoryItem,
+  ImageRecord,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
 } from "../types";
@@ -227,14 +227,18 @@ export const stripCollectionIncludes = (
   );
 };
 
-const filterNonEnvironment = (entries: HistoryItem[]) =>
+const filterNonEnvironment = (entries: ImageRecord[]) =>
   entries.filter((entry) => entry.origin !== "environment");
 
 export const buildStripSnapshotFromEntries = (
-  entries: HistoryItem[]
+  entries: ImageRecord[]
 ): ThumbnailStripsSnapshot => {
   const base = createDefaultThumbnailStripsSnapshot();
-  const orderedHistory = filterNonEnvironment(entries).map((entry) => entry.id);
+  // UI expectation: most recent items should appear first (leftmost).
+  // App state keeps history oldest-first, so reverse for display ordering.
+  const orderedHistory = filterNonEnvironment(entries)
+    .map((entry) => entry.id)
+    .reverse();
   base.itemIdsByStrip.history = orderedHistory;
   base.itemIdsByStrip.starred = entries
     .filter((entry) => entry.isStarred)
@@ -244,7 +248,7 @@ export const buildStripSnapshotFromEntries = (
 
 export const hydrateThumbnailStripsSnapshot = (
   persisted: ThumbnailStripsSnapshot | null | undefined,
-  entries: HistoryItem[]
+  entries: ImageRecord[]
 ): ThumbnailStripsSnapshot => {
   const fallback = buildStripSnapshotFromEntries(entries);
   if (!persisted) {

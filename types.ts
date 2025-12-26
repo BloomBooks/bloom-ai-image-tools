@@ -73,7 +73,7 @@ export interface EthnicityCategory {
   description: string;
 }
 
-export interface ImageEntry {
+export interface ImageRecordData {
   id: string;
   parentId: string | null;
   imageData: string; // Base64
@@ -92,7 +92,13 @@ export interface ImageEntry {
   origin?: "generated" | "uploaded" | "environment";
 }
 
-export type HistoryItem = ImageEntry;
+/** @deprecated Use ImageRecordData. */
+export type ImageEntry = ImageRecordData;
+
+export type ImageRecord = ImageRecordData;
+
+/** @deprecated Use ImageRecord. */
+export type HistoryItem = ImageRecord;
 
 export type ViewMode = "single" | "compare";
 
@@ -100,7 +106,7 @@ export interface AppState {
   targetImageId: string | null; // Image chosen in the "Image to Edit" panel
   referenceImageIds: string[]; // Additional reference images ("like this")
   rightPanelImageId: string | null; // The "Result" or preview
-  history: HistoryItem[];
+  history: ImageRecord[];
   isProcessing: boolean;
   isAuthenticated: boolean; // True when an OpenRouter API key is available
   error: ReactNode | null; // Error message to display to user
@@ -127,7 +133,7 @@ export interface PersistedAppState {
   targetImageId: string | null;
   referenceImageIds: string[];
   rightPanelImageId: string | null;
-  history: HistoryItem[];
+  history: ImageRecord[];
 }
 
 export interface PersistedImageToolsState {

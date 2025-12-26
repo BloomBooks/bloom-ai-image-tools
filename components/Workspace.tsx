@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "@mui/material";
-import { HistoryItem } from "../types";
+import { ImageRecord } from "../types";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -97,9 +97,10 @@ const Splitter: React.FC<SplitterProps> = ({
         "&:focus-visible": {
           backgroundColor: theme.colors.overlay,
         },
-        "&:hover .splitter-thumb, &:focus-visible .splitter-thumb, &:active .splitter-thumb": {
-          opacity: 1,
-        },
+        "&:hover .splitter-thumb, &:focus-visible .splitter-thumb, &:active .splitter-thumb":
+          {
+            opacity: 1,
+          },
       }}
     >
       <Box
@@ -119,9 +120,9 @@ const Splitter: React.FC<SplitterProps> = ({
 };
 
 interface WorkspaceProps {
-  targetImage: HistoryItem | null;
-  referenceImages: HistoryItem[];
-  rightImage: HistoryItem | null;
+  targetImage: ImageRecord | null;
+  referenceImages: ImageRecord[];
+  rightImage: ImageRecord | null;
   onSetTarget: (id: string) => void;
   onSetReferenceAt: (index: number, id: string) => void;
   onSetRight: (id: string) => void;
@@ -222,11 +223,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     const ratio = (clientY - rect.top) / rect.height;
     setSplitters((previous) => ({
       ...previous,
-      vertical: clampRatio(
-        ratio,
-        VERTICAL_LIMITS.min,
-        VERTICAL_LIMITS.max
-      ),
+      vertical: clampRatio(ratio, VERTICAL_LIMITS.min, VERTICAL_LIMITS.max),
     }));
   }, []);
 
@@ -446,9 +443,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             draggableImageId={rightImage?.id || undefined}
             isLoading={isProcessing}
             onToggleStar={
-              rightImage
-                ? () => onToggleHistoryStar(rightImage.id)
-                : undefined
+              rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined
             }
           />
         </Box>

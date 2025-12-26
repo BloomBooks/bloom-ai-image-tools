@@ -31,3 +31,7 @@ Bloom AI Image Tools provides a browser-based workspace for creating and editing
    - `HistoryStrip` (and `ImageSlot` thumbnails) keep recent generations accessible for drag-over to the main panels.
    - `CapabilityPanel`, `ToolPanel`, and files under components/tools describe the registry-driven tool controls.
    - `ReferenceImagesPanel`, `ImageInfoPanel`, and `ImageToolsPanel` subcomponents round out auxiliary UI.
+
+## UI
+
+Avoid adding borders around buttons or anything else that are to be placed over images.

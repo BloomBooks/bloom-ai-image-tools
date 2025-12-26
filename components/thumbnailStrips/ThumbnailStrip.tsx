@@ -5,18 +5,15 @@ import {
   STRIP_BORDER,
   STRIP_BORDER_COLOR,
 } from "./stripStyleConstants";
-import {
-  getInternalImageDragData,
-} from "../dragConstants";
-import { HistoryItem, ThumbnailStripId } from "../../types";
+import { getInternalImageDragData } from "../dragConstants";
+import { ImageRecord, ThumbnailStripId } from "../../types";
 import { Icon, Icons } from "../Icons";
-import { ImageInfoPanel } from "../ImageInfoPanel";
 import { ImageSlot } from "../ImageSlot";
 
 interface ThumbnailStripProps {
   stripId: ThumbnailStripId;
   itemIds: string[];
-  itemsById: Record<string, HistoryItem>;
+  itemsById: Record<string, ImageRecord>;
   selectedId: string | null;
   allowDrop: boolean;
   allowRemove: boolean;
@@ -90,7 +87,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   const orderedItems = useMemo(() => {
     return itemIds
       .map((id) => itemsById[id])
-      .filter((item): item is HistoryItem => Boolean(item?.imageData));
+      .filter((item): item is ImageRecord => Boolean(item?.imageData));
   }, [itemIds, itemsById]);
 
   const handleDropAtIndex = (event: React.DragEvent, dropIndex: number) => {
@@ -142,7 +139,11 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
     event.preventDefault();
     setHoveredIndex(null);
     const draggedId = getInternalImageDragData(event.dataTransfer);
-    debugLog("dropOnStrip", { stripId, dropIndex: orderedItems.length, draggedId });
+    debugLog("dropOnStrip", {
+      stripId,
+      dropIndex: orderedItems.length,
+      draggedId,
+    });
     // Dropping on the strip (not on a specific gutter) appends to the end.
     onItemDropped(stripId, orderedItems.length, draggedId, event);
   };
@@ -204,7 +205,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 isStarred: Boolean(item.isStarred),
                 onToggle: () => onToggleStar(item.id),
               }}
-              hoverInfo={(image) => <ImageInfoPanel item={image} />}
             />
           </div>
           {allowDrop && renderDropZone(index + 1)}

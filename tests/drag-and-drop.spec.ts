@@ -29,13 +29,17 @@ test.describe("history drag-and-drop", () => {
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(0);
 
-    await historyThumb.dragTo(targetPanel);
+    await historyThumb.dragTo(targetPanel, {
+      sourcePosition: { x: 56, y: 70 },
+    });
     await expect(
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(1);
 
     const resultPanel = page.getByTestId("result-panel");
-    await page.getByTestId("history-card").first().dragTo(resultPanel);
+    await page.getByTestId("history-card").first().dragTo(resultPanel, {
+      sourcePosition: { x: 56, y: 70 },
+    });
     await expect(
       page.getByRole("img", { name: "Result" })
     ).toBeVisible();

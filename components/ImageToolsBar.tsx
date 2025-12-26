@@ -2,7 +2,7 @@ import React from "react";
 import { Box, IconButton, Stack, Typography } from "@mui/material";
 import {
   AppState,
-  HistoryItem,
+  ImageRecord,
   ModelInfo,
   ToolParamsById,
   ThumbnailStripId,
@@ -17,12 +17,12 @@ import { Icon, Icons } from "./Icons";
 interface ImageToolsPanelBar {
   appState: AppState;
   selectedModel: ModelInfo | null;
-  targetImage: HistoryItem | null;
-  referenceImages: HistoryItem[];
-  rightImage: HistoryItem | null;
+  targetImage: ImageRecord | null;
+  referenceImages: ImageRecord[];
+  rightImage: ImageRecord | null;
   activeToolId: string | null;
   toolParams: ToolParamsById;
-  historyItems: HistoryItem[];
+  historyItems: ImageRecord[];
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
   thumbnailStrips: ThumbnailStripsSnapshot;

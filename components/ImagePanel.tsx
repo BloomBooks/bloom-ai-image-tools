@@ -1,13 +1,13 @@
 import React from "react";
 import { Box } from "@mui/material";
-import { HistoryItem } from "../types";
+import { ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 
 export type ImagePanelSlot = {
   slotIndex: number;
-  image: HistoryItem | null;
+  image: ImageRecord | null;
   canRemove: boolean;
   rolePill?: ImageSlotProps["rolePill"];
   dataTestId?: string;
@@ -22,7 +22,7 @@ type SingleImagePanelProps = {
   label: string;
   layout?: "single";
   panelTestId?: string;
-  image: HistoryItem | null;
+  image: ImageRecord | null;
   onUpload: (file: File) => void;
   isDropZone?: boolean;
   onDrop?: (imageId: string) => void;

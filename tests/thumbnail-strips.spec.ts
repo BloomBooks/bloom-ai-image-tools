@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import {
   resetImageToolsPersistence,
+  uploadImageToTarget,
+  ALT_SAMPLE_IMAGE_PATH,
   uploadSampleImageToTarget,
 } from "./playwright_helpers";
 
@@ -150,5 +152,38 @@ test.describe("thumbnail strips", () => {
 
     await expect(starredStrip.getByTestId("history-card")).toHaveCount(1);
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(1);
+  });
+
+  test("shows newest history item first", async ({ page }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+
+    const initialTargetSrc = await page
+      .getByRole("img", { name: "Image to Edit" })
+      .getAttribute("src");
+    expect(initialTargetSrc).toBeTruthy();
+
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+
+    const newTargetImage = page.getByRole("img", { name: "Image to Edit" });
+    await expect(newTargetImage).toBeVisible();
+
+    await expect
+      .poll(async () => newTargetImage.getAttribute("src"), {
+        timeout: 5000,
+      })
+      .not.toEqual(initialTargetSrc);
+
+    const updatedTargetSrc = await newTargetImage.getAttribute("src");
+    expect(updatedTargetSrc).toBeTruthy();
+
+    const firstHistoryThumbImg = historyStrip
+      .getByTestId("history-card")
+      .first()
+      .locator("img")
+      .first();
+
+    await expect(firstHistoryThumbImg).toBeVisible();
+    const firstThumbSrc = await firstHistoryThumbImg.getAttribute("src");
+    expect(firstThumbSrc).toEqual(updatedTargetSrc);
   });
 });

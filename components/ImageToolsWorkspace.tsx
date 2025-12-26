@@ -17,7 +17,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import {
   AppState,
-  HistoryItem,
+  ImageRecord,
   ImageToolsStatePersistence,
   ModelInfo,
   PersistedAppState,
@@ -69,7 +69,7 @@ import {
 } from "../services/persistence/fileSystemAccess";
 import {
   getStyleIdFromParams,
-  getStyleIdFromHistoryItem,
+  getStyleIdFromImageRecord,
 } from "../lib/artStyles";
 import {
   getImageDimensions,
@@ -172,7 +172,7 @@ const hashString = (value: string) => {
   return Math.abs(hash).toString(36);
 };
 
-const buildEnvironmentEntry = (url: string, index: number): HistoryItem => ({
+const buildEnvironmentEntry = (url: string, index: number): ImageRecord => ({
   id: `env-${index}-${hashString(url)}`,
   parentId: null,
   imageData: url,
@@ -195,7 +195,7 @@ const sanitizePersistedAppState = (
   persisted: PersistedAppState | null | undefined
 ): PersistedAppState => {
   const history = Array.isArray(persisted?.history)
-    ? (persisted?.history as HistoryItem[])
+    ? (persisted?.history as ImageRecord[])
     : [];
   const accessibleIds = new Set(
     history.filter((item) => !!item.imageData).map((item) => item.id)
@@ -298,9 +298,9 @@ export function ImageToolsWorkspace({
 
   const persistHistoryImage = useCallback(
     async (
-      item: HistoryItem,
+      item: ImageRecord,
       bindingOverride?: FileSystemImageBinding | null
-    ): Promise<HistoryItem> => {
+    ): Promise<ImageRecord> => {
       const bindingToUse = bindingOverride ?? fsBinding;
       if (!bindingToUse || !item.imageData) {
         return item;
@@ -313,7 +313,25 @@ export function ImageToolsWorkspace({
         await writeImageFile(bindingToUse, fileName, item.imageData);
         return { ...item, imageFileName: fileName };
       } catch (error) {
-        console.error("Failed to save history image", error);
+        const errorDetails =
+          error instanceof Error
+            ? {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              }
+            : error;
+        console.error("Failed to save history image", {
+          historyId: item.id,
+          directoryName: bindingToUse.directoryName,
+          imageFileName: item.imageFileName,
+          derivedMime: getMimeTypeFromUrl(item.imageData) ?? "image/png",
+          derivedFileName: deriveImageFileName(
+            item.id,
+            getMimeTypeFromUrl(item.imageData) ?? "image/png"
+          ),
+          error: errorDetails,
+        });
         setFsError("Could not save image to folder.");
         return item;
       }
@@ -322,7 +340,7 @@ export function ImageToolsWorkspace({
   );
 
   const loadHistoryImageFromFolder = useCallback(
-    async (item: HistoryItem): Promise<HistoryItem> => {
+    async (item: ImageRecord): Promise<ImageRecord> => {
       if (!fsBinding || item.imageData || !item.imageFileName) {
         return item;
       }
@@ -336,7 +354,7 @@ export function ImageToolsWorkspace({
   );
 
   const deleteHistoryImageFromFolder = useCallback(
-    async (item: HistoryItem) => {
+    async (item: ImageRecord) => {
       if (!fsBinding || !item.imageFileName) {
         return;
       }
@@ -346,11 +364,13 @@ export function ImageToolsWorkspace({
   );
 
   const appendHistoryEntry = useCallback(
-    (entry: HistoryItem, options?: { skipHistoryStrip?: boolean }) => {
+    (entry: ImageRecord, options?: { skipHistoryStrip?: boolean }) => {
       const { skipHistoryStrip = false } = options || {};
       setState((prev) => ({ ...prev, history: [...prev.history, entry] }));
       if (!skipHistoryStrip) {
-        setThumbnailStrips((prev) => addItemToStrip(prev, "history", entry.id));
+        // Keep the history strip ordered newest-first (leftmost), matching
+        // hydrate/build behavior.
+        setThumbnailStrips((prev) => addItemToStrip(prev, "history", entry.id, 0));
       }
     },
     []
@@ -575,7 +595,7 @@ export function ImageToolsWorkspace({
       if (cancelled) {
         return;
       }
-      const updateMap = new Map<string, HistoryItem>(
+      const updateMap = new Map<string, ImageRecord>(
         updatedItems.map((item) => [item.id, item])
       );
       setState((prev) => {
@@ -901,7 +921,7 @@ export function ImageToolsWorkspace({
     const { min, max } = getReferenceConstraints(tool.referenceImages);
     const referenceItems = state.referenceImageIds
       .map((id) => state.history.find((h) => h.id === id) || null)
-      .filter((h): h is HistoryItem => !!h);
+      .filter((h): h is ImageRecord => !!h);
 
     // Requirements: tools may require 0, 1, or 1+ reference images.
     if (referenceItems.length < min) {
@@ -932,11 +952,11 @@ export function ImageToolsWorkspace({
       const constrainedReferences = referenceItems.slice(0, max);
       const referenceStyleId =
         constrainedReferences
-          .map((item) => getStyleIdFromHistoryItem(item))
+          .map((item) => getStyleIdFromImageRecord(item))
           .find((styleId): styleId is string => Boolean(styleId)) || null;
       const derivedSourceStyleId =
         getStyleIdFromParams(params) ||
-        getStyleIdFromHistoryItem(targetImage) ||
+        getStyleIdFromImageRecord(targetImage) ||
         referenceStyleId ||
         null;
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
@@ -994,7 +1014,7 @@ export function ImageToolsWorkspace({
 
       const resolution = await getImageDimensions(processedImageData);
 
-      let newItem: HistoryItem = {
+      let newItem: ImageRecord = {
         id: uuid(),
         parentId:
           requiresEditImage && targetImage
@@ -1082,7 +1102,7 @@ export function ImageToolsWorkspace({
     async (file: File, targetPanel: "target" | "right") => {
       try {
         const { dataUrl, dimensions } = await prepareImageBlob(file);
-        let newItem: HistoryItem = {
+        let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
           imageData: dataUrl,
@@ -1162,7 +1182,7 @@ export function ImageToolsWorkspace({
       try {
         const { dataUrl, dimensions } = await prepareImageBlob(file);
 
-        let newItem: HistoryItem = {
+        let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
           imageData: dataUrl,
@@ -1435,7 +1455,7 @@ export function ImageToolsWorkspace({
 
   const referenceItems = state.referenceImageIds
     .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
-    .filter((h): h is HistoryItem => !!h);
+    .filter((h): h is ImageRecord => !!h);
   const rightItem =
     accessibleHistoryItems.find((h) => h.id === state.rightPanelImageId) ||
     null;

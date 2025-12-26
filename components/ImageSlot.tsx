@@ -1,5 +1,8 @@
 import React from "react";
 import { CircularProgress } from "@mui/material";
+import Popper from "@mui/material/Popper";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { MagnifiableImage } from "./MagnifiableImage";
@@ -58,20 +61,25 @@ export interface ImageSlotProps {
   image: HistoryItem | null;
   disabled?: boolean;
   isDropZone?: boolean;
+  onClick?: () => void;
+  isSelected?: boolean;
   onDrop?: (imageId: string) => void;
   onUpload?: (file: File) => void;
   onRemove?: () => void;
   draggableImageId?: string;
+  dragEffectAllowed?: DataTransfer['effectAllowed'];
+  onImageDragStart?: (event: React.DragEvent) => void;
   isLoading?: boolean;
   uploadInputTestId?: string;
   controls?: ImageSlotControls;
-  variant?: "panel" | "tile";
+  variant?: "panel" | "tile" | "thumb";
   rolePill?: { label: string; kind?: RoleKind; testId?: string };
   renderEmptyState?: (args: RenderEmptyStateArgs) => React.ReactNode;
   dropLabel?: string;
   dataTestId?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   starState?: { isStarred: boolean; onToggle: () => void };
+  hoverInfo?: (image: HistoryItem) => React.ReactNode;
 }
 
 const VARIANT_LAYOUT_STYLES: Record<
@@ -147,6 +155,39 @@ const VARIANT_LAYOUT_STYLES: Record<
       minHeight: 0,
     },
   },
+  thumb: {
+    container: {
+      position: "relative",
+      display: "flex",
+      flexDirection: "column",
+      borderRadius: 12,
+      borderWidth: 2,
+      borderStyle: "solid",
+      overflow: "hidden",
+      transition: "opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
+      width: "100%",
+      aspectRatio: "1 / 1",
+      backgroundColor: "transparent",
+    },
+    contentWrapper: {
+      display: "flex",
+      flex: 1,
+      alignItems: "stretch",
+      justifyContent: "stretch",
+      minHeight: 0,
+    },
+    innerWrapper: {
+      position: "relative",
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "stretch",
+      justifyContent: "stretch",
+      minHeight: 0,
+      borderRadius: "inherit",
+      overflow: "hidden",
+    },
+  },
 };
 
 const TRANSPARENCY_TILE_SIZE = 16;
@@ -191,10 +232,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   image,
   disabled = false,
   isDropZone = false,
+  onClick,
+  isSelected = false,
   onDrop,
   onUpload,
   onRemove,
   draggableImageId,
+  dragEffectAllowed,
+  onImageDragStart,
   isLoading = false,
   uploadInputTestId,
   controls,
@@ -205,6 +250,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dataTestId,
   actionLabels,
   starState,
+  hoverInfo,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const slotRef = React.useRef<HTMLDivElement>(null);
@@ -424,10 +470,21 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
   };
 
-  const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
+  const applyInternalDragData = (event: React.DragEvent) => {
     if (!draggableImageId || !event.dataTransfer) return;
     setInternalImageDragData(event.dataTransfer, draggableImageId);
-    event.dataTransfer.effectAllowed = "copyMove";
+    event.dataTransfer.effectAllowed = dragEffectAllowed ?? "copyMove";
+  };
+
+  const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
+    applyInternalDragData(event);
+    onImageDragStart?.(event);
+  };
+
+  const handleContainerDragStart = (event: React.DragEvent<HTMLDivElement>) => {
+    if (variant !== "thumb") return;
+    applyInternalDragData(event);
+    onImageDragStart?.(event);
   };
 
   const handleMouseEnter = () => {
@@ -563,7 +620,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       <button
         key={action.key}
         type="button"
-        onClick={action.onClick}
+        onClick={(event) => {
+          event.stopPropagation();
+          action.onClick();
+        }}
         data-testid={action.testId}
         style={{
           padding: 8,
@@ -617,8 +677,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       ? panelActionButtons.map(renderActionButton)
       : [];
 
-  const tileActionsNode =
-    variant === "tile" && shouldShowActions ? (
+  const floatingActionsNode =
+    variant !== "panel" && shouldShowActions ? (
       <div
         style={{
           position: "absolute",
@@ -692,34 +752,116 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const shouldRenderHeader =
     variant === "panel" && (label || headerActions || starState);
 
-  return (
-    <div
-      ref={slotRef}
-      data-testid={dataTestId}
-      style={{
-        ...variantStyles.container,
-        backgroundColor: isDragOver
-          ? theme.colors.dropZone
-          : isHovered
-          ? hoverBackgroundColor
-          : baseBackgroundColor,
-        opacity: disabled ? 0.4 : 1,
-        pointerEvents: disabled ? "none" : "auto",
-        filter: disabled ? "grayscale(1)" : "none",
-        borderColor: isDragOver
-          ? theme.colors.dropZoneBorder
-          : theme.colors.panelBorder,
-        boxShadow: theme.colors.panelShadow,
-        minHeight: variant === "tile" ? 0 : undefined,
+  const shouldShowOverlayStar =
+    variant !== "panel" && !!starState && !!image && !disabled;
+
+  const overlayStarNode = shouldShowOverlayStar ? (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        starState?.onToggle();
       }}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onContextMenu={handleContextMenu}
+      aria-pressed={starState?.isStarred}
+      title={starState?.isStarred ? "Unstar image" : "Star image"}
+      style={{
+        position: "absolute",
+        top: 8,
+        left: 8,
+        padding: 8,
+        borderRadius: 999,
+        border: `1px solid ${theme.colors.panelBorder}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: theme.colors.overlay,
+        color: starState?.isStarred
+          ? theme.colors.accent
+          : theme.colors.textPrimary,
+        opacity: starState?.isStarred ? 1 : isHovered ? 1 : 0,
+        transition:
+          "opacity 120ms ease, color 120ms ease, box-shadow 120ms ease",
+        boxShadow: starState?.isStarred ? theme.colors.accentShadow : "none",
+        backdropFilter: "blur(6px)",
+        zIndex: 25,
+        pointerEvents: disabled ? "none" : "auto",
+      }}
     >
+      {starState?.isStarred ? (
+        <StarIcon sx={{ fontSize: 16 }} />
+      ) : (
+        <StarBorderIcon sx={{ fontSize: 16 }} />
+      )}
+    </button>
+  ) : null;
+
+  const shouldShowHoverInfo = !!image && !!hoverInfo && isHovered;
+
+  return (
+    <>
+      <div
+        ref={slotRef}
+        data-testid={dataTestId}
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick && !disabled ? 0 : undefined}
+        onClick={disabled ? undefined : onClick}
+        draggable={variant === "thumb" && !!draggableImageId && !disabled}
+        onDragStart={handleContainerDragStart}
+        style={{
+          ...variantStyles.container,
+          backgroundColor:
+            variant === "thumb"
+              ? "transparent"
+              : isDragOver
+              ? theme.colors.dropZone
+              : isHovered
+              ? hoverBackgroundColor
+              : baseBackgroundColor,
+          opacity:
+            disabled
+              ? 0.4
+              : variant === "thumb"
+              ? isSelected
+                ? 1
+                : isHovered
+                ? 1
+                : 0.8
+              : 1,
+          cursor:
+            !disabled && (onClick || variant === "thumb") ? "pointer" : "default",
+          pointerEvents: disabled ? "none" : "auto",
+          filter: disabled ? "grayscale(1)" : "none",
+          borderColor: isDragOver
+            ? theme.colors.dropZoneBorder
+            : variant === "thumb"
+            ? isSelected
+              ? theme.colors.accent
+              : theme.colors.border
+            : theme.colors.panelBorder,
+          boxShadow:
+            variant === "thumb"
+              ? isSelected
+                ? theme.colors.accentShadow
+                : "none"
+              : theme.colors.panelShadow,
+          minHeight: variant === "tile" ? 0 : undefined,
+          outline: "none",
+        }}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onContextMenu={handleContextMenu}
+        onKeyDown={(event) => {
+          if (!onClick || disabled) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClick();
+          }
+        }}
+      >
       {shouldRenderHeader && (
         <ImageSlotHeader
           label={label || ""}
@@ -748,9 +890,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 style={{
                   maxHeight: "100%",
                   maxWidth: "100%",
-                  objectFit: "contain",
+                  objectFit: variant === "thumb" ? "cover" : "contain",
                   display: "block",
-                  ...TRANSPARENCY_BACKGROUND_STYLE,
+                  ...(variant === "thumb"
+                    ? undefined
+                    : TRANSPARENCY_BACKGROUND_STYLE),
                 }}
                 draggable={!!draggableImageId}
                 onDragStart={handleImageDragStart}
@@ -760,7 +904,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             emptyStateContent
           )}
 
-          {tileActionsNode}
+          {floatingActionsNode}
+
+          {overlayStarNode}
 
           {rolePill && (
             <div
@@ -956,6 +1102,53 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           {thumbnailStatus === "error" && "Failed to save"}
         </div>
       )}
-    </div>
+      </div>
+
+      {shouldShowHoverInfo && slotRef.current && (
+        <Popper
+          open={true}
+          anchorEl={slotRef.current}
+          placement="top"
+          modifiers={[
+            { name: "offset", options: { offset: [0, 12] } },
+            {
+              name: "preventOverflow",
+              options: { padding: 8, altAxis: true },
+            },
+          ]}
+          style={{ zIndex: 1500 }}
+        >
+          <div
+            style={{
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: 12,
+              padding: 16,
+              backgroundColor: theme.colors.surfaceRaised,
+              color: theme.colors.textPrimary,
+              width: "max-content",
+              maxWidth: "min(320px, calc(100vw - 32px))",
+              boxShadow: theme.colors.panelShadow,
+              position: "relative",
+              fontSize: "0.75rem",
+            }}
+          >
+            {hoverInfo?.(image as HistoryItem)}
+            <div
+              style={{
+                position: "absolute",
+                bottom: -6,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: 0,
+                height: 0,
+                borderLeft: "6px solid transparent",
+                borderRight: "6px solid transparent",
+                borderTop: `6px solid ${theme.colors.surfaceRaised}`,
+              }}
+            />
+          </div>
+        </Popper>
+      )}
+    </>
   );
 };

@@ -1,4 +1,8 @@
-import { HistoryItem, ThumbnailStripId, ThumbnailStripsSnapshot } from "../types";
+import {
+  HistoryItem,
+  ThumbnailStripId,
+  ThumbnailStripsSnapshot,
+} from "../types";
 
 export interface ThumbnailStripConfig {
   id: ThumbnailStripId;
@@ -16,7 +20,10 @@ export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
   "environment",
 ];
 
-export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripConfig> = {
+export const THUMBNAIL_STRIP_CONFIGS: Record<
+  ThumbnailStripId,
+  ThumbnailStripConfig
+> = {
   history: {
     id: "history",
     label: "History",
@@ -58,16 +65,17 @@ const cloneStripArrays = (
   return cloned as Record<ThumbnailStripId, string[]>;
 };
 
-export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot => ({
-  activeStripId: "history",
-  pinnedStripIds: ["history"],
-  itemIdsByStrip: {
-    history: [],
-    starred: [],
-    reference: [],
-    environment: [],
-  },
-});
+export const createDefaultThumbnailStripsSnapshot =
+  (): ThumbnailStripsSnapshot => ({
+    activeStripId: "history",
+    pinnedStripIds: ["history"],
+    itemIdsByStrip: {
+      history: [],
+      starred: [],
+      reference: [],
+      environment: [],
+    },
+  });
 
 const uniqueInsert = (
   list: string[],

@@ -1,18 +1,154 @@
 import { test, expect } from "@playwright/test";
+import {
+  resetImageToolsPersistence,
+  uploadSampleImageToTarget,
+} from "./playwright_helpers";
+
+const isVerbose = !!process.env.E2E_VERBOSE;
 
 test.describe("thumbnail strips", () => {
-  test("pinning tabs keeps strips visible", async ({ page }) => {
-    await page.goto("/");
+  test.beforeEach(async ({ page }) => {
+  if (isVerbose) {
+    await page.addInitScript(() => {
+      (window as any).__E2E_VERBOSE = true;
+    });
 
-    await expect(page.getByTestId("thumbnail-strip-history")).toBeVisible();
+    page.on("console", (msg) =>
+      console.log(`[browser:${msg.type()}] ${msg.text()}`)
+    );
+    page.on("pageerror", (error) =>
+      console.log(`[pageerror] ${error?.message ?? error}`)
+    );
+    page.on("requestfailed", (request) =>
+      console.log(
+        `[requestfailed] ${request.method()} ${request.url()} (${request.failure()?.errorText})`
+      )
+    );
+  }
+
+    await resetImageToolsPersistence(page);
+    await page.goto("/");
+    await uploadSampleImageToTarget(page);
+
+  if (isVerbose) {
+    await page.evaluate(() => {
+      const formatTypes = (dt: DataTransfer | null) => {
+        if (!dt) return [];
+        try {
+          return Array.from(dt.types || []);
+        } catch {
+          return [];
+        }
+      };
+
+      const logDt = (label: string, event: DragEvent) => {
+        const dt = event.dataTransfer;
+        const types = formatTypes(dt);
+        let plain = "";
+        let internal = "";
+        let pointInfo = "";
+        try {
+          plain = dt?.getData("text/plain") || "";
+          internal = dt?.getData("application/x-bloom-image-id") || "";
+        } catch {
+          // ignore
+        }
+
+        try {
+          const x = (event as unknown as { clientX?: number }).clientX ?? 0;
+          const y = (event as unknown as { clientY?: number }).clientY ?? 0;
+          const el = document.elementFromPoint(x, y) as HTMLElement | null;
+          const elTestId =
+            el?.getAttribute("data-testid") ||
+            el?.closest("[data-testid]")?.getAttribute("data-testid") ||
+            "";
+          const elStripId =
+            el?.closest("[data-strip-id]")?.getAttribute("data-strip-id") || "";
+          const elTag = el?.tagName?.toLowerCase() || "";
+          pointInfo = ` @(${x},${y}) el=${elTag}${elTestId ? ` testid=${elTestId}` : ""}${elStripId ? ` elStrip=${elStripId}` : ""}`;
+        } catch {
+          // ignore
+        }
+        const strip = (event.target as HTMLElement | null)?.closest(
+          "[data-strip-id]"
+        );
+        console.log(
+          `[dnd] ${label} strip=${strip?.getAttribute("data-strip-id") || "?"} defaultPrevented=${event.defaultPrevented} types=${JSON.stringify(types)} text/plain=${plain} internal=${internal}${pointInfo}`
+        );
+      };
+
+      document.addEventListener("dragenter", (event) => {
+        logDt("dragenter", event as DragEvent);
+      });
+      document.addEventListener("dragover", (event) => {
+        logDt("dragover", event as DragEvent);
+      });
+
+      document.addEventListener("dragstart", (event) => {
+        logDt("dragstart(bubble)", event as DragEvent);
+        queueMicrotask(() =>
+          logDt("dragstart(after)", event as DragEvent)
+        );
+      });
+
+      document.addEventListener("drop", (event) => {
+        logDt("drop(bubble)", event as DragEvent);
+        queueMicrotask(() => logDt("drop(after)", event as DragEvent));
+      });
+      document.addEventListener("dragend", (event) => {
+        logDt("dragend", event as DragEvent);
+      });
+    });
+  }
+  });
+
+  test("switches the active strip when selecting tabs", async ({ page }) => {
+    const starredStrip = page.getByTestId("thumbnail-strip-starred").first();
+    await expect(starredStrip).toHaveAttribute("data-active", "true");
 
     await page.getByTestId("thumbnail-tab-reference").click();
-    await expect(page.getByTestId("thumbnail-strip-reference")).toBeVisible();
 
-    await page.getByTestId("thumbnail-tab-pin-reference").click();
-    await expect(page.getByTestId("thumbnail-strip-reference")).toBeVisible();
+    const referenceStrip = page.getByTestId("thumbnail-strip-reference");
+    await expect(referenceStrip).toHaveAttribute("data-active", "true");
+    await expect(starredStrip).toHaveAttribute("data-active", "false");
+  });
 
-    await page.getByTestId("thumbnail-tab-environment").click();
-    await expect(page.getByTestId("thumbnail-strip-environment")).toBeVisible();
+  test("allows pinning and unpinning strips", async ({ page }) => {
+    const starPin = page.getByTestId("thumbnail-tab-pin-starred");
+
+    await expect(
+      page.locator('[data-strip-id="starred"][data-pinned="false"]')
+    ).toHaveCount(1);
+
+    await starPin.click();
+
+    await expect(
+      page.locator('[data-strip-id="starred"][data-pinned="true"]')
+    ).toHaveCount(1);
+    await expect(
+      page.locator('[data-strip-id="starred"][data-pinned="false"]')
+    ).toHaveCount(0);
+
+    await starPin.click();
+
+    await expect(
+      page.locator('[data-strip-id="starred"][data-pinned="true"]')
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-strip-id="starred"][data-pinned="false"]')
+    ).toHaveCount(1);
+  });
+
+  test("copies history entries when dragged between strips", async ({
+    page,
+  }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const starredStrip = page.getByTestId("thumbnail-strip-starred").first();
+    const historyThumb = historyStrip.getByTestId("history-card").first();
+
+    await historyThumb.dragTo(starredStrip);
+
+    await expect(starredStrip.getByTestId("history-card")).toHaveCount(1);
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(1);
   });
 });

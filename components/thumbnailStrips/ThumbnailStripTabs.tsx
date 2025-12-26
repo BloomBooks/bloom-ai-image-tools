@@ -15,6 +15,26 @@ import {
   THUMBNAIL_STRIP_CONFIGS,
 } from "../../lib/thumbnailStrips";
 import { theme } from "../../themes";
+import {
+  STRIP_BORDER,
+  STRIP_ACTIVE_BORDER_COLOR,
+  STRIP_TAB_RADIUS,
+  STRIP_BORDER_WIDTH,
+} from "./stripStyleConstants";
+
+const PIN_BUTTON_SX = {
+  borderRadius: "50%",
+  border: "none",
+  backgroundColor: "transparent",
+  color: theme.colors.textPrimary,
+  opacity: 0.85,
+  boxShadow: "none",
+  transition: "opacity 120ms ease",
+  "&:hover": {
+    opacity: 1,
+    backgroundColor: "transparent",
+  },
+} as const;
 
 const STRIP_ICONS: Record<
   ThumbnailStripId,
@@ -51,9 +71,9 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     activeStripId !== undefined ? activeStripId : snapshot.activeStripId;
   const isCompact = stripIds.length === 1;
   const railWidth = 96;
-  const railPadding = isCompact ? 0.5 : 1;
+  const railPaddingY = isCompact ? 0.25 : 0.5;
   const pinSize = isCompact ? 22 : 26;
-  const tabPadding = isCompact ? 0.5 : 1;
+  const tabGap = isCompact ? 0.5 : 0.75;
 
   const handleTabClick = (stripId: ThumbnailStripId) => {
     onActivate(stripId);
@@ -76,11 +96,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     onTogglePin(stripId);
   };
 
-  const renderPinButton = (
-    stripId: ThumbnailStripId,
-    isPinned: boolean,
-    dimension: number
-  ) => (
+  const renderPinButton = (stripId: ThumbnailStripId, isPinned: boolean) => (
     <IconButton
       component="span"
       size="small"
@@ -94,15 +110,9 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
       }
       data-testid={`thumbnail-tab-pin-${stripId}`}
       sx={{
-        borderRadius: "50%",
-        border: "none",
-        backgroundColor: isPinned
-          ? theme.colors.accentSubtle
-          : theme.colors.surfaceRaised,
-        color: isPinned ? theme.colors.accent : theme.colors.textPrimary,
-        width: dimension,
-        height: dimension,
-        boxShadow: theme.colors.panelShadow,
+        ...PIN_BUTTON_SX,
+        width: pinSize,
+        height: pinSize,
       }}
     >
       {isPinned ? (
@@ -120,59 +130,65 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     const label = THUMBNAIL_STRIP_CONFIGS[stripId].label;
 
     return (
-      <Tooltip
-        key={`${stripId}-${isCompact ? "compact" : "full"}`}
-        title={label}
-        placement="left"
-        arrow
-      >
-        <Box
-        sx={{
-          border: `1px solid ${
-            isActive ? theme.colors.accent : theme.colors.border
-          }`,
-          borderRadius: 2,
-          backgroundColor: isActive
-            ? theme.colors.surfaceRaised
-            : theme.colors.surfaceAlt,
-          boxShadow: isActive ? theme.colors.panelShadow : "none",
-          overflow: "hidden",
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          alignItems: "stretch",
-        }}
-      >
-        <button
-          type="button"
-          id={tabId}
-          data-testid={tabId}
-          onClick={() => handleTabClick(stripId)}
-          onDragEnter={(event) => handleDragEnter(event, stripId)}
-          style={{
-            width: "100%",
-            minHeight: 42,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 8,
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: theme.colors.textPrimary,
-          }}
-        >
-          <IconComponent fontSize="medium" />
-        </button>
+      <Tooltip title={label} placement="left" arrow>
         <Box
           sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingRight: 1,
+            border: "none",
+            borderTopLeftRadius: 0,
+            borderBottomLeftRadius: 0,
+            borderTopRightRadius: STRIP_TAB_RADIUS,
+            borderBottomRightRadius: STRIP_TAB_RADIUS,
+            backgroundColor: "transparent",
+            boxShadow: "none",
+            overflow: "hidden",
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            alignItems: "stretch",
+            transition: "all 140ms ease",
+            ...(isActive
+              ? {
+                  backgroundColor: theme.colors.surface,
+                  border: STRIP_BORDER,
+                  borderColor: STRIP_ACTIVE_BORDER_COLOR,
+                  borderLeftWidth: 0,
+                  boxShadow: theme.colors.panelShadow,
+                  zIndex: 1,
+                }
+              : {}),
           }}
         >
-          {renderPinButton(stripId, isPinned, pinSize)}
-        </Box>
+          <button
+            type="button"
+            id={tabId}
+            data-testid={tabId}
+            onClick={() => handleTabClick(stripId)}
+            onDragEnter={(event) => handleDragEnter(event, stripId)}
+            style={{
+              width: "100%",
+              minHeight: 42,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 8,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: theme.colors.textPrimary,
+            }}
+          >
+            <IconComponent fontSize="medium" />
+          </button>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingRight: 1,
+              border: "none",
+            }}
+          >
+            {renderPinButton(stripId, isPinned)}
+          </Box>
         </Box>
       </Tooltip>
     );
@@ -181,17 +197,24 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   return (
     <Box
       sx={{
-        borderLeft: `1px solid ${theme.colors.border}`,
-        backgroundColor: theme.colors.surface,
-        padding: railPadding,
+        paddingTop: railPaddingY,
+        paddingBottom: railPaddingY,
+        paddingLeft: 0,
+        paddingRight: isCompact ? 0 : 0.5,
         flexShrink: 0,
         width: railWidth,
         display: "flex",
         flexDirection: "column",
-        gap: tabPadding,
+        justifyContent: "flex-end",
+        gap: tabGap,
+        marginLeft: "-1px", // cover up this bit of the border of the box we're next to so that it looks seamless
       }}
     >
-      {stripIds.map((stripId) => renderTab(stripId))}
+      {stripIds.map((stripId) => (
+        <React.Fragment key={`${stripId}-${isCompact ? "compact" : "full"}`}>
+          {renderTab(stripId)}
+        </React.Fragment>
+      ))}
     </Box>
   );
 };

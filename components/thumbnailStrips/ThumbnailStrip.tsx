@@ -1,12 +1,17 @@
 import React, { useMemo, useState } from "react";
-import { HistoryCard } from "../HistoryCard";
 import { theme } from "../../themes";
 import {
+  STRIP_ACTIVE_BORDER_COLOR,
+  STRIP_BORDER,
+  STRIP_BORDER_COLOR,
+} from "./stripStyleConstants";
+import {
   getInternalImageDragData,
-  setInternalImageDragData,
 } from "../dragConstants";
 import { HistoryItem, ThumbnailStripId } from "../../types";
 import { Icon, Icons } from "../Icons";
+import { ImageInfoPanel } from "../ImageInfoPanel";
+import { ImageSlot } from "../ImageSlot";
 
 interface ThumbnailStripProps {
   stripId: ThumbnailStripId;
@@ -17,6 +22,7 @@ interface ThumbnailStripProps {
   allowRemove: boolean;
   allowReorder: boolean;
   pinned: boolean;
+  isActive?: boolean;
   hasHiddenHistory?: boolean;
   onRequestHistoryAccess?: () => void;
   emptyStateMessage?: string;
@@ -32,7 +38,7 @@ interface ThumbnailStripProps {
 }
 
 const stripShellStyles: React.CSSProperties = {
-  borderTop: `1px solid ${theme.colors.border}`,
+  border: STRIP_BORDER,
   backgroundColor: theme.colors.surface,
   display: "flex",
   flexDirection: "column",
@@ -46,7 +52,8 @@ const dropZoneBaseStyles: React.CSSProperties = {
   borderRadius: 999,
   margin: "0 4px",
   alignSelf: "center",
-  transition: "background-color 150ms ease",
+  transition:
+    "background-color 150ms ease, border-color 150ms ease, opacity 150ms ease",
 };
 
 export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
@@ -58,6 +65,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   allowRemove,
   allowReorder,
   pinned,
+  isActive = false,
   hasHiddenHistory = false,
   onRequestHistoryAccess,
   emptyStateMessage,
@@ -68,44 +76,75 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
+  const debugLog = (...args: any[]) => {
+    try {
+      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
+        // eslint-disable-next-line no-console
+        console.log("[thumbnail-strip]", ...args);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const orderedItems = useMemo(() => {
     return itemIds
       .map((id) => itemsById[id])
       .filter((item): item is HistoryItem => Boolean(item?.imageData));
   }, [itemIds, itemsById]);
 
-  const handleDragStart = (event: React.DragEvent, id: string) => {
-    setInternalImageDragData(event.dataTransfer, id);
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = allowReorder ? "move" : "copy";
-    }
-  };
-
-  const handleDropAtIndex = (
-    event: React.DragEvent,
-    dropIndex: number
-  ) => {
+  const handleDropAtIndex = (event: React.DragEvent, dropIndex: number) => {
     if (!allowDrop) {
       return;
     }
     event.preventDefault();
+    event.stopPropagation();
     setHoveredIndex(null);
     const draggedId = getInternalImageDragData(event.dataTransfer);
+    debugLog("dropAtIndex", { stripId, dropIndex, draggedId });
     onItemDropped(stripId, dropIndex, draggedId, event);
   };
 
-  const handleDragOverZone = (
-    event: React.DragEvent,
-    index: number
-  ) => {
+  const resolveDropEffect = (dataTransfer: DataTransfer | null) => {
+    if (!dataTransfer) {
+      return allowReorder ? "move" : "copy";
+    }
+    const draggedId = getInternalImageDragData(dataTransfer);
+    const isReorder = !!draggedId && itemIds.includes(draggedId);
+    if (isReorder) {
+      return allowReorder ? "move" : "none";
+    }
+    return "copy";
+  };
+
+  const handleDragOverZone = (event: React.DragEvent, index: number) => {
     if (!allowDrop) {
       return;
     }
     event.preventDefault();
+    event.stopPropagation();
     setHoveredIndex(index);
     if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = allowReorder ? "move" : "copy";
+      event.dataTransfer.dropEffect = resolveDropEffect(event.dataTransfer);
     }
+  };
+
+  const handleStripDragOver = (event: React.DragEvent) => {
+    if (!allowDrop) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = resolveDropEffect(event.dataTransfer);
+    }
+  };
+
+  const handleStripDrop = (event: React.DragEvent) => {
+    if (!allowDrop) return;
+    event.preventDefault();
+    setHoveredIndex(null);
+    const draggedId = getInternalImageDragData(event.dataTransfer);
+    debugLog("dropOnStrip", { stripId, dropIndex: orderedItems.length, draggedId });
+    // Dropping on the strip (not on a specific gutter) appends to the end.
+    onItemDropped(stripId, orderedItems.length, draggedId, event);
   };
 
   const renderDropZone = (index: number) => (
@@ -118,19 +157,19 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       style={{
         ...dropZoneBaseStyles,
         backgroundColor:
-          hoveredIndex === index
-            ? theme.colors.accentSubtle
-            : "transparent",
+          hoveredIndex === index ? theme.colors.accentSubtle : "transparent",
         border:
           hoveredIndex === index
             ? `1px solid ${theme.colors.accent}`
-            : `1px dashed ${theme.colors.border}`,
+            : "1px solid transparent",
       }}
     />
   );
 
   const content = orderedItems.length ? (
     <div
+      onDragOver={handleStripDragOver}
+      onDrop={handleStripDrop}
       style={{
         display: "flex",
         alignItems: "center",
@@ -144,15 +183,30 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       {allowDrop && renderDropZone(0)}
       {orderedItems.map((item, index) => (
         <React.Fragment key={`${stripId}-${item.id}`}>
-          <HistoryCard
-            item={item}
-            isSelected={item.id === selectedId}
-            isStarred={Boolean(item.isStarred)}
-            onSelect={() => onSelect(item.id)}
-            onDragStart={(event) => handleDragStart(event, item.id)}
-            onToggleStar={() => onToggleStar(item.id)}
-            onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
-          />
+          <div style={{ width: 112, flexShrink: 0 }}>
+            <ImageSlot
+              image={item}
+              variant="thumb"
+              dataTestId="history-card"
+              onClick={() => onSelect(item.id)}
+              isSelected={item.id === selectedId}
+              draggableImageId={item.id}
+              dragEffectAllowed="copyMove"
+              controls={{
+                upload: false,
+                paste: false,
+                copy: true,
+                download: true,
+                remove: allowRemove,
+              }}
+              onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
+              starState={{
+                isStarred: Boolean(item.isStarred),
+                onToggle: () => onToggleStar(item.id),
+              }}
+              hoverInfo={(image) => <ImageInfoPanel item={image} />}
+            />
+          </div>
           {allowDrop && renderDropZone(index + 1)}
         </React.Fragment>
       ))}
@@ -205,6 +259,8 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
     </div>
   ) : (
     <div
+      onDragOver={handleStripDragOver}
+      onDrop={handleStripDrop}
       style={{
         display: "flex",
         alignItems: "center",
@@ -226,9 +282,16 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         ...stripShellStyles,
         minHeight: 168,
         boxShadow: pinned ? theme.colors.panelShadow : "none",
+        borderColor: isActive ? STRIP_ACTIVE_BORDER_COLOR : STRIP_BORDER_COLOR,
+        //borderRightWidth: isActive ? 0 : 1,
+        border: `1px solid ${STRIP_ACTIVE_BORDER_COLOR}`,
       }}
       data-strip-id={stripId}
       data-testid={`thumbnail-strip-${stripId}`}
+      data-active={isActive ? "true" : "false"}
+      data-pinned={pinned ? "true" : "false"}
+      onDragOver={handleStripDragOver}
+      onDrop={handleStripDrop}
     >
       {content}
     </div>

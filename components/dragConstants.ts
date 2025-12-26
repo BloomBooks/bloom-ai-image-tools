@@ -1,5 +1,7 @@
 export const INTERNAL_IMAGE_DRAG_DATA_MIME = "application/x-bloom-image-id";
 
+let lastInternalDraggedImageId: string | null = null;
+
 const normalizeCandidate = (value: string | null | undefined) => {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
@@ -16,8 +18,22 @@ export const setInternalImageDragData = (
   if (!dataTransfer || !imageId) {
     return;
   }
-  dataTransfer.setData(INTERNAL_IMAGE_DRAG_DATA_MIME, imageId);
-  dataTransfer.setData("text/plain", imageId);
+
+  lastInternalDraggedImageId = imageId;
+
+  // Some drag sources (or Playwright's synthetic drag) can be picky about
+  // which MIME types are allowed. Try each independently so we at least
+  // populate a plain-text fallback.
+  try {
+    dataTransfer.setData(INTERNAL_IMAGE_DRAG_DATA_MIME, imageId);
+  } catch {
+    // ignore
+  }
+  try {
+    dataTransfer.setData("text/plain", imageId);
+  } catch {
+    // ignore
+  }
 };
 
 export const getInternalImageDragData = (
@@ -37,6 +53,20 @@ export const getInternalImageDragData = (
   const plainValue = normalizeCandidate(dataTransfer.getData("text/plain"));
   if (plainValue && isLikelyHistoryId(plainValue)) {
     return plainValue;
+  }
+
+  // Fallback: some environments expose the drag data types but return empty
+  // strings from getData() during dragover/drop. If the drag is internal,
+  // fall back to the last ID we successfully set.
+  const types = Array.from(dataTransfer.types || []);
+  const looksInternal =
+    types.includes(INTERNAL_IMAGE_DRAG_DATA_MIME) || types.includes("text/plain");
+  if (
+    looksInternal &&
+    lastInternalDraggedImageId &&
+    isLikelyHistoryId(lastInternalDraggedImageId)
+  ) {
+    return lastInternalDraggedImageId;
   }
 
   return null;

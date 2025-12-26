@@ -14,8 +14,13 @@ test.describe("history drag-and-drop", () => {
   }) => {
     await uploadSampleImageToTarget(page);
 
-    const historyCard = page.getByTestId("history-card").first();
-    await expect(historyCard).toBeVisible();
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyThumb = historyStrip.getByTestId("history-card").first();
+    await expect(historyThumb).toBeVisible();
+    const initialHistoryThumbCount = await historyStrip
+      .getByTestId("history-card")
+      .count();
+    expect(initialHistoryThumbCount).toBeGreaterThan(0);
 
     const targetPanel = page.getByTestId("target-panel");
     await targetPanel.hover();
@@ -24,7 +29,7 @@ test.describe("history drag-and-drop", () => {
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(0);
 
-    await historyCard.dragTo(targetPanel);
+    await historyThumb.dragTo(targetPanel);
     await expect(
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(1);
@@ -34,6 +39,8 @@ test.describe("history drag-and-drop", () => {
     await expect(
       page.getByRole("img", { name: "Result" })
     ).toBeVisible();
-    await expect(page.getByTestId("history-card")).toHaveCount(1);
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(
+      initialHistoryThumbCount
+    );
   });
 });

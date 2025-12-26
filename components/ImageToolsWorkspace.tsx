@@ -236,9 +236,10 @@ export function ImageToolsWorkspace({
     isAuthenticated: false,
     error: null,
   });
-  const [thumbnailStrips, setThumbnailStrips] = useState<ThumbnailStripsSnapshot>(
-    () => createDefaultThumbnailStripsSnapshot()
-  );
+  const [thumbnailStrips, setThumbnailStrips] =
+    useState<ThumbnailStripsSnapshot>(() =>
+      createDefaultThumbnailStripsSnapshot()
+    );
 
   const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
     createToolParamDefaults()
@@ -355,8 +356,6 @@ export function ImageToolsWorkspace({
     []
   );
 
-
-
   const updateAllArtStyleParams = useCallback(
     (styleId: string) => {
       setParamsByTool((prev) => {
@@ -469,15 +468,15 @@ export function ImageToolsWorkspace({
     setState((prev) => ({
       ...prev,
       history: prev.history.filter(
-        (entry) =>
-          entry.origin === "environment" || referencedIds.has(entry.id)
+        (entry) => entry.origin === "environment" || referencedIds.has(entry.id)
       ),
       referenceImageIds: prev.referenceImageIds.filter((id) =>
         referencedIds.has(id)
       ),
-      targetImageId: prev.targetImageId && referencedIds.has(prev.targetImageId)
-        ? prev.targetImageId
-        : null,
+      targetImageId:
+        prev.targetImageId && referencedIds.has(prev.targetImageId)
+          ? prev.targetImageId
+          : null,
       rightPanelImageId:
         prev.rightPanelImageId && referencedIds.has(prev.rightPanelImageId)
           ? prev.rightPanelImageId
@@ -677,6 +676,7 @@ export function ImageToolsWorkspace({
           if (persisted.auth?.apiKey) {
             setApiKey(persisted.auth.apiKey);
             setAuthMethod(persisted.auth.authMethod ?? null);
+            setState((prev) => ({ ...prev, isAuthenticated: true }));
           }
         } else if (envApiKey) {
           setState((prev) => ({ ...prev, isAuthenticated: true }));
@@ -706,6 +706,7 @@ export function ImageToolsWorkspace({
       | null;
     setApiKey(storedKey);
     setAuthMethod(storedMethod ?? "manual");
+    setState((prev) => ({ ...prev, isAuthenticated: true }));
     localStorage.removeItem(API_KEY_STORAGE_KEY);
     localStorage.removeItem(AUTH_METHOD_STORAGE_KEY);
   }, [isHydrated, apiKey]);
@@ -1286,6 +1287,7 @@ export function ImageToolsWorkspace({
     }
     setApiKey(trimmed);
     setAuthMethod("manual");
+    setState((prev) => ({ ...prev, isAuthenticated: true }));
   };
 
   const handleSetReferenceAt = (index: number, id: string) => {
@@ -1497,7 +1499,7 @@ export function ImageToolsWorkspace({
         )
       : null;
 
-  const creditsProgressAriaProps: React.AriaAttributes =
+  const creditsProgressAriaProps: React.HTMLAttributes<HTMLElement> =
     creditsProgressFraction !== null && credits
       ? {
           role: "progressbar",

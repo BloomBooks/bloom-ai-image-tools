@@ -128,7 +128,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
               {models.map((model) => {
                 const isSelected = model.id === pendingModelId;
                 return (
-                  <Grid item xs={12} sm={6} key={model.id}>
+                  <Grid size={{ xs: 12, sm: 6 }} key={model.id}>
                     <Card
                       variant="outlined"
                       sx={{

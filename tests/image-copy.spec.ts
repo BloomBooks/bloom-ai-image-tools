@@ -94,7 +94,7 @@ test.describe("Image copy clipboard behavior", () => {
 
   test("falls back to PNG when clipboard rejects PNG", async ({ page }) => {
     await page.evaluate(() => {
-      window.__setUnsupportedClipboardTypes?.(["image/png"]);
+      window.__setUnsupportedClipboardTypes?.(["png"]);
     });
 
     await uploadSampleImageToTarget(page);
@@ -117,7 +117,7 @@ test.describe("Image copy clipboard behavior", () => {
     await copyTargetImage(page);
 
     const writes = await waitForClipboardWrites(page);
-    expect(writes[writes.length - 1]?.[0]?.type).toBe("image/png");
+    expect(writes[writes.length - 1]?.[0]?.type).toBe("png");
   });
 
   test("preserves PNG when clipboard supports it", async ({ page }) => {
@@ -141,7 +141,7 @@ test.describe("Image copy clipboard behavior", () => {
     await copyTargetImage(page);
 
     const writes = await waitForClipboardWrites(page);
-    expect(writes[writes.length - 1]?.[0]?.type).toBe("image/png");
+    expect(writes[writes.length - 1]?.[0]?.type).toBe("png");
   });
 });
 

@@ -3,7 +3,7 @@ import { inexpensive_model_for_testing } from "./tests/playwright_helpers";
 
 export default defineConfig({
   testDir: "tests",
-  timeout: 120_000,
+  timeout: 10_000,
   fullyParallel: true,
   reporter: "list",
   use: {
@@ -12,12 +12,14 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    actionTimeout: 2_000,
+    navigationTimeout: 3_000,
   },
   webServer: {
     command: "pnpm dev --host --port 3000",
     url: "http://localhost:3000",
     reuseExistingServer: true,
-    timeout: 120_000,
+    timeout: 10_000,
     stdout: "pipe",
     stderr: "pipe",
     env: {

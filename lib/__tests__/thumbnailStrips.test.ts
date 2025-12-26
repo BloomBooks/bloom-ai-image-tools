@@ -8,7 +8,10 @@ import {
 } from "../thumbnailStrips";
 import { HistoryItem } from "../../types";
 
-const makeEntry = (id: string, overrides: Partial<HistoryItem> = {}): HistoryItem => ({
+const makeEntry = (
+  id: string,
+  overrides: Partial<HistoryItem> = {}
+): HistoryItem => ({
   id,
   parentId: null,
   imageData: `data:image/png;base64,${id}`,
@@ -42,7 +45,11 @@ describe("thumbnail strip helpers", () => {
 
   it("reorders items within a strip", () => {
     const base = createDefaultThumbnailStripsSnapshot();
-    const seeded = addItemToStrip(addItemToStrip(base, "reference", "a"), "reference", "b");
+    const seeded = addItemToStrip(
+      addItemToStrip(base, "reference", "a"),
+      "reference",
+      "b"
+    );
     const moved = reorderItemInStrip(seeded, "reference", "a", 1);
 
     expect(moved.itemIdsByStrip.reference).toEqual(["b", "a"]);
@@ -50,7 +57,11 @@ describe("thumbnail strip helpers", () => {
 
   it("removes items from a strip", () => {
     const base = createDefaultThumbnailStripsSnapshot();
-    const seeded = addItemToStrip(addItemToStrip(base, "reference", "a"), "reference", "b");
+    const seeded = addItemToStrip(
+      addItemToStrip(base, "reference", "a"),
+      "reference",
+      "b"
+    );
     const stripped = removeItemFromStrip(seeded, "reference", "a");
 
     expect(stripped.itemIdsByStrip.reference).toEqual(["b"]);

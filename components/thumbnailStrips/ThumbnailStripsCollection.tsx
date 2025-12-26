@@ -37,7 +37,9 @@ interface ThumbnailStripsCollectionProps {
   onDragActivateStrip: (stripId: ThumbnailStripId) => void;
 }
 
-export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
+export const ThumbnailStripsCollection: React.FC<
+  ThumbnailStripsCollectionProps
+> = ({
   snapshot,
   entries,
   selectedId,
@@ -52,10 +54,11 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   onDragActivateStrip,
 }) => {
   const entriesById = useMemo(() => {
-    return entries.reduce<Record<string, HistoryItem>>((acc, entry) => {
-      acc[entry.id] = entry;
-      return acc;
-    }, {});
+    const map: Record<string, HistoryItem> = {};
+    for (const entry of entries) {
+      map[entry.id] = entry;
+    }
+    return map;
   }, [entries]);
 
   const pinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) =>
@@ -66,13 +69,13 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
     (id) => !snapshot.pinnedStripIds.includes(id)
   );
 
-  const primaryStripId = unpinnedStripIds.length
+  const activeUnpinnedStripId = unpinnedStripIds.length
     ? unpinnedStripIds.includes(snapshot.activeStripId)
       ? snapshot.activeStripId
       : unpinnedStripIds[0]
     : null;
 
-  const renderStrip = (stripId: ThumbnailStripId) => {
+  const renderStrip = (stripId: ThumbnailStripId, activeOverride?: boolean) => {
     const config = THUMBNAIL_STRIP_CONFIGS[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
     return (
@@ -86,6 +89,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         allowRemove={config.allowRemove}
         allowReorder={config.allowReorder}
         pinned={snapshot.pinnedStripIds.includes(stripId)}
+        isActive={activeOverride ?? snapshot.activeStripId === stripId}
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
         onRequestHistoryAccess={
           stripId === "history" ? onRequestHistoryAccess : undefined
@@ -103,7 +107,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
 
   const rowShellStyles: React.CSSProperties = {
     display: "flex",
-    gap: 12,
+    gap: 0,
     alignItems: "stretch",
     width: "100%",
   };
@@ -129,10 +133,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
           <ThumbnailStripTabs
             snapshot={snapshot}
             stripIds={[stripId]}
-            variant="compact"
-            activeStripId={
-              snapshot.activeStripId === stripId ? stripId : null
-            }
+            activeStripId={snapshot.activeStripId === stripId ? stripId : null}
             onActivate={onActivateStrip}
             onTogglePin={onTogglePin}
             onDragActivate={onDragActivateStrip}
@@ -140,13 +141,24 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         </div>
       ))}
 
-      {primaryStripId && (
+      {activeUnpinnedStripId && (
         <div style={rowShellStyles}>
-          <div style={stripColumnStyles}>{renderStrip(primaryStripId)}</div>
+          <div style={stripColumnStyles}>
+            {unpinnedStripIds.map((stripId) => (
+              <div
+                key={`unpinned-${stripId}`}
+                style={{
+                  display: stripId === activeUnpinnedStripId ? "block" : "none",
+                }}
+              >
+                {renderStrip(stripId, stripId === activeUnpinnedStripId)}
+              </div>
+            ))}
+          </div>
           <ThumbnailStripTabs
             snapshot={snapshot}
             stripIds={unpinnedStripIds}
-            activeStripId={primaryStripId}
+            activeStripId={activeUnpinnedStripId}
             onActivate={onActivateStrip}
             onTogglePin={onTogglePin}
             onDragActivate={onDragActivateStrip}

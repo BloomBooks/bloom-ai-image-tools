@@ -6,10 +6,13 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { ImageRecord } from "../types";
 import { ImageInfoPanel } from "./ImageInfoPanel";
+import { copyTextToClipboard } from "../lib/textClipboard";
 
 export interface ImageSlotInfoDialogProps {
   open: boolean;
@@ -26,6 +29,36 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
 }) => {
   if (!image) return null;
 
+  const [promptCopied, setPromptCopied] = React.useState(false);
+  const copyResetTimeoutRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const promptContent =
+    image.promptUsed && image.promptUsed.length
+      ? image.promptUsed
+      : "Prompt unavailable.";
+
+  const handleCopyPrompt = async () => {
+    const ok = await copyTextToClipboard(promptContent);
+    if (!ok) return;
+
+    setPromptCopied(true);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setPromptCopied(false);
+      copyResetTimeoutRef.current = null;
+    }, 1500);
+  };
+
   return (
     <Dialog
       open={open}
@@ -39,8 +72,19 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
         },
       }}
     >
-      <DialogTitle sx={{ pr: 6 }}>
+      <DialogTitle sx={{ pr: 12 }}>
         {label ? `${label} info` : "Image info"}
+        <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
+          <IconButton
+            aria-label="Copy full prompt"
+            onClick={handleCopyPrompt}
+            size="small"
+            data-testid="image-info-dialog-copy-prompt"
+            sx={{ position: "absolute", right: 44, top: 8 }}
+          >
+            <ContentCopyIcon fontSize="inherit" />
+          </IconButton>
+        </Tooltip>
         <IconButton
           aria-label="Close"
           onClick={onClose}

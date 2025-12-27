@@ -38,9 +38,9 @@ import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { darkTheme } from "./materialUITheme";
 import { handleOAuthCallback, initiateOAuthFlow } from "../lib/openRouterOAuth";
-import JSON5 from "json5";
-import modelCatalogText from "../data/models-registry.json5";
+import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
 import { ModelChooserDialog } from "./ModelChooserDialog";
+import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
@@ -100,17 +100,7 @@ import {
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
 
-const MODEL_CATALOG: ModelInfo[] = (() => {
-  try {
-    const parsed = JSON5.parse(modelCatalogText);
-    return Array.isArray(parsed) ? (parsed as ModelInfo[]) : [];
-  } catch (err) {
-    console.error("Failed to parse model registry (JSON5)", err);
-    return [];
-  }
-})();
-const DEFAULT_MODEL =
-  MODEL_CATALOG.find((model) => model.default) || MODEL_CATALOG[0] || null;
+// MODEL_CATALOG + DEFAULT_MODEL come from lib/modelsCatalog.
 
 const rotate360 = keyframes`
   from {
@@ -780,55 +770,68 @@ export function ImageToolsWorkspace({
     localStorage.removeItem(AUTH_METHOD_STORAGE_KEY);
   }, [isHydrated, apiKey]);
 
-  const persistableState = useMemo(() => {
-    const cacheStart = Math.max(
-      state.history.length - LOCAL_HISTORY_CACHE_LIMIT,
-      0
-    );
-    const historyForPersistence = state.history.map((item, index) => {
-      const keepImageData =
-        !fsBinding ||
-        !item.imageFileName ||
-        !item.imageData ||
-        index >= cacheStart;
-      if (keepImageData) {
-        return item;
-      }
-      return { ...item, imageData: "" };
-    });
+  type IdleFriendlyWindow = Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
 
-    return {
-      version: IMAGE_TOOLS_STATE_VERSION,
-      appState: {
-        targetImageId: state.targetImageId,
-        referenceImageIds: state.referenceImageIds,
-        rightPanelImageId: state.rightPanelImageId,
-        history: historyForPersistence,
-      },
-      paramsByTool,
-      activeToolId,
-      selectedModelId: selectedModelId || null,
-      selectedArtStyleId: selectedArtStyleId ?? null,
-      auth: {
-        apiKey,
-        authMethod,
-      },
-      thumbnailStrips,
-    };
-  }, [
-    state.targetImageId,
-    state.referenceImageIds,
-    state.rightPanelImageId,
-    state.history,
-    fsBinding,
-    paramsByTool,
-    activeToolId,
-    selectedModelId,
-    selectedArtStyleId,
-    apiKey,
-    authMethod,
-    thumbnailStrips,
-  ]);
+  const debugLog = useCallback((...args: any[]) => {
+    try {
+      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
+        // eslint-disable-next-line no-console
+        console.log("[persistence]", ...args);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Keep the latest inputs for persistence in refs so we can build the persisted object
+  // off the critical input-event path (e.g., pointerup/dragend).
+  const stateRef = useRef(state);
+  const fsBindingRef = useRef(fsBinding);
+  const paramsByToolRef = useRef(paramsByTool);
+  const activeToolIdRef = useRef(activeToolId);
+  const selectedModelIdRef = useRef(selectedModelId);
+  const selectedArtStyleIdRef = useRef(selectedArtStyleId);
+  const apiKeyRef = useRef(apiKey);
+  const authMethodRef = useRef(authMethod);
+  const thumbnailStripsRef = useRef(thumbnailStrips);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  useEffect(() => {
+    fsBindingRef.current = fsBinding;
+  }, [fsBinding]);
+  useEffect(() => {
+    paramsByToolRef.current = paramsByTool;
+  }, [paramsByTool]);
+  useEffect(() => {
+    activeToolIdRef.current = activeToolId;
+  }, [activeToolId]);
+  useEffect(() => {
+    selectedModelIdRef.current = selectedModelId;
+  }, [selectedModelId]);
+  useEffect(() => {
+    selectedArtStyleIdRef.current = selectedArtStyleId;
+  }, [selectedArtStyleId]);
+  useEffect(() => {
+    apiKeyRef.current = apiKey;
+  }, [apiKey]);
+  useEffect(() => {
+    authMethodRef.current = authMethod;
+  }, [authMethod]);
+  useEffect(() => {
+    thumbnailStripsRef.current = thumbnailStrips;
+  }, [thumbnailStrips]);
+
+  const persistenceScheduleRef = useRef<{
+    idleHandle: number | null;
+    timeoutHandle: number | null;
+    saving: boolean;
+    dirty: boolean;
+  }>({ idleHandle: null, timeoutHandle: null, saving: false, dirty: false });
 
   const accessibleHistoryItems = useMemo(
     () => state.history.filter((item) => !!item.imageData),
@@ -846,8 +849,136 @@ export function ImageToolsWorkspace({
 
   useEffect(() => {
     if (!isHydrated || !persistence) return;
-    void persistence.save(persistableState);
-  }, [persistence, persistableState, isHydrated]);
+
+    const clearPending = () => {
+      if (typeof window === "undefined") return;
+      const handles = persistenceScheduleRef.current;
+      if (handles.idleHandle !== null) {
+        (window as IdleFriendlyWindow).cancelIdleCallback?.(handles.idleHandle);
+        handles.idleHandle = null;
+      }
+      if (handles.timeoutHandle !== null) {
+        window.clearTimeout(handles.timeoutHandle);
+        handles.timeoutHandle = null;
+      }
+    };
+
+    const buildPersistableState = () => {
+      const currentState = stateRef.current;
+      const currentFsBinding = fsBindingRef.current;
+
+      const cacheStart = Math.max(
+        currentState.history.length - LOCAL_HISTORY_CACHE_LIMIT,
+        0
+      );
+
+      const historyForPersistence = currentState.history.map((item, index) => {
+        const keepImageData =
+          !currentFsBinding ||
+          !item.imageFileName ||
+          !item.imageData ||
+          index >= cacheStart;
+        if (keepImageData) {
+          return item;
+        }
+        return { ...item, imageData: "" };
+      });
+
+      return {
+        version: IMAGE_TOOLS_STATE_VERSION,
+        appState: {
+          targetImageId: currentState.targetImageId,
+          referenceImageIds: currentState.referenceImageIds,
+          rightPanelImageId: currentState.rightPanelImageId,
+          history: historyForPersistence,
+        },
+        paramsByTool: paramsByToolRef.current,
+        activeToolId: activeToolIdRef.current,
+        selectedModelId: selectedModelIdRef.current || null,
+        selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
+        auth: {
+          apiKey: apiKeyRef.current,
+          authMethod: authMethodRef.current,
+        },
+        thumbnailStrips: thumbnailStripsRef.current,
+      };
+    };
+
+    const runSave = async () => {
+      const sched = persistenceScheduleRef.current;
+      clearPending();
+
+      if (sched.saving) {
+        sched.dirty = true;
+        return;
+      }
+
+      sched.saving = true;
+      sched.dirty = false;
+      const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+      debugLog("save(start)");
+
+      try {
+        await persistence.save(buildPersistableState());
+      } finally {
+        const end = typeof performance !== "undefined" ? performance.now() : Date.now();
+        debugLog(`save(done) dt=${Math.round(end - start)}ms`);
+        sched.saving = false;
+        if (sched.dirty) {
+          scheduleSave();
+        }
+      }
+    };
+
+    const scheduleSave = () => {
+      if (typeof window === "undefined") {
+        void runSave();
+        return;
+      }
+
+      const sched = persistenceScheduleRef.current;
+      sched.dirty = true;
+      clearPending();
+
+      const win = window as IdleFriendlyWindow;
+      // Debounce a bit to coalesce rapid state changes, then run during idle time.
+      const scheduleImpl = () => {
+        if (typeof win.requestIdleCallback === "function") {
+          sched.idleHandle = win.requestIdleCallback(() => {
+            void runSave();
+          }, { timeout: 1500 });
+        } else {
+          sched.timeoutHandle = window.setTimeout(() => {
+            void runSave();
+          }, 0);
+        }
+      };
+
+      sched.timeoutHandle = window.setTimeout(scheduleImpl, 250);
+    };
+
+    scheduleSave();
+
+    return () => {
+      clearPending();
+    };
+  }, [
+    persistence,
+    isHydrated,
+    state.targetImageId,
+    state.referenceImageIds,
+    state.rightPanelImageId,
+    state.history,
+    fsBinding,
+    paramsByTool,
+    activeToolId,
+    selectedModelId,
+    selectedArtStyleId,
+    apiKey,
+    authMethod,
+    thumbnailStrips,
+    debugLog,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1649,116 +1780,19 @@ export function ImageToolsWorkspace({
 
           <Stack spacing={1} alignItems="flex-end">
             <Stack direction="row" spacing={3} alignItems="center">
-              {shouldShowConnectToOpenRouterCTA ? (
-                <Button
-                  type="button"
-                  onClick={() => setIsSettingsDialogOpen(true)}
-                  variant="contained"
-                  disableElevation
-                  sx={{
-                    px: 3,
-                    py: 1.25,
-                    borderRadius: "999px",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    letterSpacing: "0.28em",
-                    textTransform: "uppercase",
-                    backgroundColor: theme.colors.accent,
-                    color: theme.colors.surface,
-                    boxShadow: theme.colors.accentShadow,
-                    transition:
-                      "transform 150ms ease, background-color 150ms ease",
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      backgroundColor: theme.colors.accentHover,
-                    },
-                  }}
-                >
-                  Connect to OpenRouter
-                </Button>
-              ) : (
-                <Box
-                  tabIndex={0}
-                  aria-label={creditsTooltipLabel}
-                  sx={{
-                    position: "relative",
-                    textAlign: "right",
-                    lineHeight: 1.2,
-                    cursor: "default",
-                    outline: "none",
-                    "&:hover [data-role='credits-tooltip'], &:focus-within [data-role='credits-tooltip']":
-                      {
-                        opacity: 1,
-                      },
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontWeight: 600,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: creditsLabelColor,
-                      display: "block",
-                    }}
-                  >
-                    OpenRouter Credits
-                  </Typography>
-                  <Stack spacing={0.75} alignItems="flex-end" mt={0.5}>
-                    <Box
-                      sx={{
-                        width: 160,
-                        height: 10,
-                        borderRadius: 999,
-                        overflow: "hidden",
-                        border: `1px solid ${progressBorderColor}`,
-                        backgroundColor: progressTrackBackground,
-                      }}
-                      {...creditsProgressAriaProps}
-                    >
-                      <Box
-                        sx={{
-                          height: "100%",
-                          borderRadius: 999,
-                          transition: "width 200ms ease",
-                          backgroundColor: progressFillColor,
-                          width: `${Math.max(
-                            0,
-                            Math.min(100, (creditsProgressFraction ?? 0) * 100)
-                          )}%`,
-                          opacity: creditsProgressFraction !== null ? 1 : 0.35,
-                        }}
-                      />
-                    </Box>
-                  </Stack>
-                  {creditsTooltipLines.length > 0 && (
-                    <Box
-                      data-role="credits-tooltip"
-                      sx={{
-                        position: "absolute",
-                        top: "calc(100% + 8px)",
-                        right: 0,
-                        px: 1.25,
-                        py: 1,
-                        borderRadius: 1,
-                        fontSize: "0.75rem",
-                        boxShadow: theme.colors.panelShadow,
-                        whiteSpace: "nowrap",
-                        transition: "opacity 150ms ease",
-                        opacity: 0,
-                        pointerEvents: "none",
-                        border: `1px solid ${progressBorderColor}`,
-                        backgroundColor: theme.colors.surface,
-                        color: theme.colors.textPrimary,
-                      }}
-                    >
-                      {creditsTooltipLines.map((line, index) => (
-                        <div key={`credits-tooltip-${index}`}>{line}</div>
-                      ))}
-                    </Box>
-                  )}
-                </Box>
-              )}
+              <OpenRouterCreditsHeader
+                shouldShowConnectToOpenRouterCTA={shouldShowConnectToOpenRouterCTA}
+                onOpenSettingsDialog={() => setIsSettingsDialogOpen(true)}
+                creditsTooltipLabel={creditsTooltipLabel}
+                creditsTooltipLines={creditsTooltipLines}
+                creditsProgressFraction={creditsProgressFraction}
+                creditsProgressAriaProps={creditsProgressAriaProps}
+                creditsLabelColor={creditsLabelColor}
+                progressBorderColor={progressBorderColor}
+                progressTrackBackground={progressTrackBackground}
+                progressFillColor={progressFillColor}
+                appColors={theme.colors}
+              />
               {selectedModel && (
                 <Button
                   type="button"

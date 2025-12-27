@@ -139,9 +139,33 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onDismissError,
 }) => {
   const hasTargetImage = !!targetImage;
+  const debugLog = React.useCallback((...args: any[]) => {
+    try {
+      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
+        // eslint-disable-next-line no-console
+        console.log("[dnd-timing]", ...args);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const lastPointerDownRef = React.useRef<
+    | {
+        t: number;
+        x: number;
+        y: number;
+        pointerType: string;
+        targetTestId: string;
+      }
+    | null
+  >(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+      // This governs how much movement is required before a drag is considered active.
+      // Lower values make drags feel more immediate (especially on trackpads).
+      activationConstraint: { distance: 2 },
     })
   );
 
@@ -256,6 +280,18 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={(event) => {
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const last = lastPointerDownRef.current;
+            if (last) {
+              debugLog(
+                `dragStart dt=${Math.round(now - last.t)}ms pointer=${last.pointerType} from=(${Math.round(
+                  last.x
+                )},${Math.round(last.y)}) targetTestId=${last.targetTestId || ""}`
+              );
+            } else {
+              debugLog("dragStart (no prior pointerdown recorded)");
+            }
+
             const imageId = (event.active.data.current as any)?.imageId as
               | string
               | undefined;
@@ -268,6 +304,32 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           onDragEnd={handleDragEnd}
         >
           <Box
+            onPointerDownCapture={(event) => {
+              if (typeof window === "undefined") return;
+              const pe = event as React.PointerEvent<HTMLElement>;
+              // Only record primary-button interactions.
+              if (typeof (pe as any).button === "number" && (pe as any).button !== 0) return;
+
+              const target = pe.target as HTMLElement | null;
+              const targetTestId =
+                target?.getAttribute("data-testid") ||
+                target?.closest("[data-testid]")?.getAttribute("data-testid") ||
+                "";
+
+              lastPointerDownRef.current = {
+                t: typeof performance !== "undefined" ? performance.now() : Date.now(),
+                x: pe.clientX,
+                y: pe.clientY,
+                pointerType: (pe as any).pointerType || "unknown",
+                targetTestId,
+              };
+
+              debugLog(
+                `pointerDown (${lastPointerDownRef.current.pointerType}) @(${Math.round(
+                  pe.clientX
+                )},${Math.round(pe.clientY)}) targetTestId=${targetTestId || ""}`
+              );
+            }}
             sx={{
               flex: 1,
               display: "flex",

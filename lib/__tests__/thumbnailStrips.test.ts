@@ -74,4 +74,21 @@ describe("thumbnail strip helpers", () => {
     expect(hydrated.itemIdsByStrip.history).toEqual(["star", "base"]);
     expect(hydrated.itemIdsByStrip.starred).toEqual(["star"]);
   });
+
+  it("preserves explicitly empty pinnedStripIds during hydrate", () => {
+    const entries = [makeEntry("base"), makeEntry("star", { isStarred: true })];
+    const persisted = {
+      ...createDefaultThumbnailStripsSnapshot(),
+      pinnedStripIds: [],
+      itemIdsByStrip: {
+        history: ["base"],
+        starred: [],
+        reference: [],
+        environment: [],
+      },
+    };
+
+    const hydrated = hydrateThumbnailStripsSnapshot(persisted, entries);
+    expect(hydrated.pinnedStripIds).toEqual([]);
+  });
 });

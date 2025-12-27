@@ -57,16 +57,6 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
         justifyContent="flex-end"
         sx={{ flexWrap: "nowrap", flexShrink: 0 }}
       >
-        {actions ? (
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            sx={{ flexWrap: "nowrap" }}
-          >
-            {actions}
-          </Stack>
-        ) : null}
         {onToggleStar ? (
           <IconButton
             type="button"
@@ -88,6 +78,16 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
               <StarBorderIcon fontSize="inherit" />
             )}
           </IconButton>
+        ) : null}
+        {actions ? (
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ flexWrap: "nowrap" }}
+          >
+            {actions}
+          </Stack>
         ) : null}
       </Stack>
     </Box>

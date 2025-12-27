@@ -32,6 +32,8 @@ type SingleImagePanelProps = {
   disabled?: boolean;
   onClear?: () => void;
   showUploadControls?: boolean;
+  showCopyButton?: boolean;
+  showDownloadButton?: boolean;
   draggableImageId?: string;
   isLoading?: boolean;
   uploadInputTestId?: string;
@@ -195,6 +197,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     disabled = false,
     onClear,
     showUploadControls = true,
+    showCopyButton = true,
+    showDownloadButton = true,
     draggableImageId,
     isLoading = false,
     uploadInputTestId,
@@ -314,8 +318,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         controls={{
           upload: showUploadControls,
           paste: showUploadControls,
-          copy: true,
-          download: true,
+          copy: showCopyButton,
+          download: showDownloadButton,
           remove: !!onClear,
         }}
         renderEmptyState={renderEmptyState}

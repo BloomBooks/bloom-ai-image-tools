@@ -50,11 +50,36 @@ const setupClipboardHarness = async (page: Page) => {
   });
 };
 
-const copyTargetImage = async (page: Page) => {
-  const targetPanel = page.getByTestId("target-panel");
-  const targetImage = targetPanel.getByRole("img", { name: "Image to Edit" });
-  await targetImage.hover();
-  const copyButton = targetPanel.getByRole("button", { name: "Copy to Clipboard" });
+const copyResultImage = async (page: Page) => {
+  // Put an image into the Result panel by dragging the newest history item.
+  const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+  const historyThumb = historyStrip
+    .getByTestId("thumbnail-strip-item-history")
+    .first();
+  await expect(historyThumb).toBeVisible();
+
+  const resultPanel = page.getByTestId("result-panel");
+  {
+    const from = await historyThumb.boundingBox();
+    const to = await resultPanel.boundingBox();
+    expect(from).toBeTruthy();
+    expect(to).toBeTruthy();
+    if (!from || !to) return;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+  }
+
+  const resultImage = page.getByRole("img", { name: "Result" });
+  await expect(resultImage).toBeVisible();
+  await resultImage.hover();
+
+  const copyButton = resultPanel.getByRole("button", {
+    name: "Copy to Clipboard",
+  });
   await expect(copyButton).toBeVisible();
   await copyButton.click();
 };
@@ -95,7 +120,7 @@ test.describe("Image copy clipboard behavior", () => {
 
   test("falls back to PNG when clipboard rejects PNG", async ({ page }) => {
     await page.evaluate(() => {
-      window.__setUnsupportedClipboardTypes?.(["png"]);
+      window.__setUnsupportedClipboardTypes?.(["image/png"]);
     });
 
     await uploadSampleImageToTarget(page);
@@ -115,10 +140,10 @@ test.describe("Image copy clipboard behavior", () => {
       });
       console.log("[diagnostics] target dims", dims);
     }
-    await copyTargetImage(page);
+    await copyResultImage(page);
 
     const writes = await waitForClipboardWrites(page);
-    expect(writes[writes.length - 1]?.[0]?.type).toBe("png");
+    expect(writes[writes.length - 1]?.[0]?.type).toBe("image/png");
   });
 
   test("preserves PNG when clipboard supports it", async ({ page }) => {
@@ -139,10 +164,10 @@ test.describe("Image copy clipboard behavior", () => {
       });
       console.log("[diagnostics] target dims", dims);
     }
-    await copyTargetImage(page);
+    await copyResultImage(page);
 
     const writes = await waitForClipboardWrites(page);
-    expect(writes[writes.length - 1]?.[0]?.type).toBe("png");
+    expect(writes[writes.length - 1]?.[0]?.type).toBe("image/png");
   });
 });
 

@@ -35,6 +35,24 @@ import {
   hasImageFilePayload,
   getImageFileFromDataTransfer,
 } from "../lib/dragUtils";
+import { TOOLS } from "./tools/tools-registry";
+import { getModelNameById } from "../lib/modelsCatalog";
+
+let transparentDragImage: HTMLImageElement | null = null;
+const getTransparentDragImage = (): HTMLImageElement | null => {
+  try {
+    if (typeof document === "undefined") return null;
+    if (transparentDragImage) return transparentDragImage;
+    const img = document.createElement("img");
+    // 1x1 transparent GIF
+    img.src =
+      "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+    transparentDragImage = img;
+    return img;
+  } catch {
+    return null;
+  }
+};
 
 export type ImageSlotControls = {
   upload?: boolean;
@@ -265,6 +283,27 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const [isMagnifierPinned, setIsMagnifierPinned] = React.useState(false);
   const [isInfoDialogOpen, setIsInfoDialogOpen] = React.useState(false);
 
+  const debugLog = React.useCallback((...args: any[]) => {
+    try {
+      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
+        // eslint-disable-next-line no-console
+        console.log("[image-slot]", ...args);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const lastDragPointerDownRef = React.useRef<
+    | {
+        t: number;
+        x: number;
+        y: number;
+        pointerType: string;
+      }
+    | null
+  >(null);
+
   const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
     paste: controls?.paste ?? true,
@@ -341,9 +380,31 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!image || !mergedControls.copy) return;
 
     try {
-      await copyImageToClipboard(image.imageData);
+      setThumbnailStatus("copying");
+
+      const tool = TOOLS.find((t) => t.id === image.toolId) || null;
+      const isNewImageTool = tool?.editImage === false;
+      const modelId = (image.model || "").trim();
+      const modelName = getModelNameById(modelId) || modelId;
+      const pngMetadata = modelId
+        ? isNewImageTool
+          ? {
+              IllustratorModel: modelName,
+              IllustratorModelId: modelId,
+            }
+          : {
+              EditorModel: modelName,
+              EditorModelId: modelId,
+            }
+        : undefined;
+
+      await copyImageToClipboard(image.imageData, pngMetadata);
+      setThumbnailStatus("copied");
+      setTimeout(() => setThumbnailStatus("idle"), 1500);
     } catch (err) {
       console.error("Failed to copy image:", err);
+      setThumbnailStatus("copyError");
+      setTimeout(() => setThumbnailStatus("idle"), 3000);
     }
   };
 
@@ -428,15 +489,42 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!draggableImageId || !event.dataTransfer) return;
     setInternalImageDragData(event.dataTransfer, draggableImageId);
     event.dataTransfer.effectAllowed = dragEffectAllowed ?? "copyMove";
+
+    // Avoid expensive default drag preview generation (especially with large data-URL images).
+    // This can reduce perceived delay between pointer gesture and drag actually starting.
+    try {
+      const dragImg = getTransparentDragImage();
+      if (dragImg) {
+        event.dataTransfer.setDragImage(dragImg, 0, 0);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (lastDragPointerDownRef.current) {
+      debugLog(
+        `dragstart(img) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`
+      );
+    } else {
+      debugLog("dragstart(img) (no prior pointerdown recorded)");
+    }
     applyInternalDragData(event);
     onImageDragStart?.(event);
   };
 
   const handleContainerDragStart = (event: React.DragEvent<HTMLDivElement>) => {
     if (variant !== "thumb") return;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (lastDragPointerDownRef.current) {
+      debugLog(
+        `dragstart(container) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`
+      );
+    } else {
+      debugLog("dragstart(container) (no prior pointerdown recorded)");
+    }
     applyInternalDragData(event);
     onImageDragStart?.(event);
   };
@@ -591,6 +679,24 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         role={onClick ? "button" : undefined}
         tabIndex={onClick && !disabled ? 0 : undefined}
         onClick={disabled ? undefined : onClick}
+        onPointerDownCapture={(event) => {
+          // Record timing only for potentially-draggable slots/images.
+          const isPotentiallyDraggable =
+            (!disabled && !!draggableImageId) ||
+            (variant === "thumb" && !!draggableImageId && !disabled);
+          if (!isPotentiallyDraggable) return;
+          lastDragPointerDownRef.current = {
+            t: typeof performance !== "undefined" ? performance.now() : Date.now(),
+            x: event.clientX,
+            y: event.clientY,
+            pointerType: (event as any).pointerType || "unknown",
+          };
+          debugLog(
+            `pointerDown(${lastDragPointerDownRef.current.pointerType}) @(${Math.round(
+              event.clientX
+            )},${Math.round(event.clientY)}) variant=${variant}`
+          );
+        }}
         draggable={variant === "thumb" && !!draggableImageId && !disabled}
         onDragStart={handleContainerDragStart}
         style={{

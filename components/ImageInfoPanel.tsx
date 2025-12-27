@@ -1,8 +1,11 @@
 import React from "react";
+import { IconButton, Tooltip } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { ImageRecord } from "../types";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
+import { copyTextToClipboard } from "../lib/textClipboard";
 
 const rowStyle: React.CSSProperties = {
   display: "grid",
@@ -45,6 +48,34 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     item.promptUsed && item.promptUsed.length
       ? item.promptUsed
       : "Prompt unavailable.";
+
+  const [promptCopied, setPromptCopied] = React.useState(false);
+  const copyResetTimeoutRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyPrompt = async () => {
+    const ok = await copyTextToClipboard(promptContent);
+    if (!ok) {
+      console.warn("Failed to copy prompt");
+      return;
+    }
+
+    setPromptCopied(true);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setPromptCopied(false);
+      copyResetTimeoutRef.current = null;
+    }, 1500);
+  };
   // Only show parameters that are recognized by the current tool definition.
   // This filters out legacy/stale parameters from older versions.
   const toolParamNames = new Set(
@@ -164,15 +195,29 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           borderTop: `1px solid ${theme.colors.border}`,
         }}
       >
-        <span
+        <div
           style={{
-            display: "block",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
             marginBottom: 4,
             color: theme.colors.textMuted,
           }}
         >
-          Full Prompt:
-        </span>
+          <span style={{ display: "block" }}>Full Prompt:</span>
+          <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
+            <IconButton
+              aria-label="Copy full prompt"
+              onClick={handleCopyPrompt}
+              size="small"
+              data-testid="copy-full-prompt"
+              sx={{ color: theme.colors.textMuted }}
+            >
+              <ContentCopyIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        </div>
         <div
           style={{
             color: theme.colors.textPrimary,

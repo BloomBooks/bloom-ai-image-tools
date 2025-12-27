@@ -1,5 +1,6 @@
 import React from "react";
-import { ClickAwayListener, Popper, Tooltip } from "@mui/material";
+import { ClickAwayListener, IconButton, Popper, Tooltip } from "@mui/material";
+import type { SxProps, Theme as MuiTheme } from "@mui/material/styles";
 import { ImageRecord } from "../types";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
@@ -24,6 +25,26 @@ type SlotActionButton = {
   isActive?: boolean;
   testId?: string;
   isVisible?: boolean;
+};
+
+const moveRemoveToEnd = (actions: SlotActionButton[]) => {
+  const removeIndex = actions.findIndex((action) => action.key === "remove");
+  if (removeIndex === -1 || removeIndex === actions.length - 1) return actions;
+  const reordered = [...actions];
+  const [removeAction] = reordered.splice(removeIndex, 1);
+  reordered.push(removeAction);
+  return reordered;
+};
+
+const insertBeforeRemove = (
+  actions: SlotActionButton[],
+  actionToInsert: SlotActionButton
+) => {
+  const removeIndex = actions.findIndex((action) => action.key === "remove");
+  if (removeIndex === -1) return [...actions, actionToInsert];
+  const next = [...actions];
+  next.splice(removeIndex, 0, actionToInsert);
+  return next;
 };
 
 export type ImageSlotActionsHandle = {
@@ -99,7 +120,7 @@ export const ImageSlotActions = React.forwardRef<
     moreDelayTimeoutRef.current = window.setTimeout(() => {
       setIsThumbMoreReady(true);
       moreDelayTimeoutRef.current = null;
-    }, 500);
+    }, 100);
   }, [clearMoreDelayTimeout]);
 
   const clearCloseTimeout = React.useCallback(() => {
@@ -235,69 +256,64 @@ export const ImageSlotActions = React.forwardRef<
       ? [...coreActions, infoAction]
       : coreActions;
 
-  const orderedActions =
-    variant === "panel"
-      ? coreActions
-      : (() => {
-          const removeIndex = actionsWithInfo.findIndex(
-            (action) => action.key === "remove"
-          );
-          if (removeIndex > 0) {
-            const reordered = [...actionsWithInfo];
-            const [removeAction] = reordered.splice(removeIndex, 1);
-            reordered.unshift(removeAction);
-            return reordered;
-          }
-          return actionsWithInfo;
-        })();
+  // Keep the X (remove) action at the end for consistent left-to-right / top-to-bottom ordering.
+  const orderedActions = moveRemoveToEnd(actionsWithInfo);
 
   const shouldShowMagnifierToggle = variant === "panel" && !!image && !disabled;
 
   const panelActions = shouldShowMagnifierToggle
-    ? [
-        ...orderedActions,
-        {
-          key: "magnifier",
-          icon: Icons.Magnifier,
-          title: isMagnifierPinned ? "Disable magnifier" : "Enable magnifier",
-          onClick: onToggleMagnifier,
-          ariaPressed: isMagnifierPinned,
-          isActive: isMagnifierPinned,
-          testId: "image-slot-magnifier-toggle",
-        } satisfies SlotActionButton,
-      ]
+    ? insertBeforeRemove(orderedActions, {
+        key: "magnifier",
+        icon: Icons.Magnifier,
+        title: isMagnifierPinned ? "Disable magnifier" : "Enable magnifier",
+        onClick: onToggleMagnifier,
+        ariaPressed: isMagnifierPinned,
+        isActive: isMagnifierPinned,
+        testId: "image-slot-magnifier-toggle",
+      } satisfies SlotActionButton)
     : orderedActions;
 
   const renderActionButton = (
     action: SlotActionButton,
-    styleOverride?: React.CSSProperties
+    sxOverride?: SxProps<MuiTheme>
   ) => {
     const isActive = action.isActive ?? false;
     const usesTooltip = action.key === "info" && !!image;
 
+    const baseSx: SxProps<MuiTheme> = {
+      p: `${buttonPadding}px`,
+      borderRadius: "50%",
+      border: "none",
+      bgcolor: isActive ? theme.colors.accent : theme.colors.overlay,
+      color: isActive ? theme.colors.appBackground : theme.colors.textPrimary,
+      boxShadow: theme.colors.panelShadow,
+      backdropFilter: "blur(6px)",
+      transition:
+        "background-color 120ms ease, color 120ms ease, transform 70ms ease, filter 120ms ease",
+      WebkitTapHighlightColor: "transparent",
+      "&:hover": {
+        filter: "brightness(1.08)",
+      },
+      "&:active": {
+        transform: "translateY(1px)",
+      },
+      "&.Mui-focusVisible": {
+        filter: "brightness(1.1)",
+      },
+      "&.Mui-disabled": {
+        opacity: 0.45,
+      },
+    };
+
     const buttonNode = (
-      <button
+      <IconButton
         type="button"
         onClick={(event) => {
           event.stopPropagation();
           action.onClick();
         }}
         data-testid={action.testId}
-        style={{
-          padding: buttonPadding,
-          borderRadius: "50%",
-          border: "none",
-          backgroundColor: isActive
-            ? theme.colors.accent
-            : theme.colors.overlay,
-          color: isActive
-            ? theme.colors.appBackground
-            : theme.colors.textPrimary,
-          boxShadow: theme.colors.panelShadow,
-          backdropFilter: "blur(6px)",
-          transition: "background-color 120ms ease, color 120ms ease",
-          ...styleOverride,
-        }}
+        sx={[baseSx, sxOverride] as SxProps<MuiTheme>}
         title={usesTooltip ? undefined : action.title}
         aria-label={action.title}
         aria-pressed={
@@ -307,7 +323,7 @@ export const ImageSlotActions = React.forwardRef<
         }
       >
         <Icon path={action.icon} width={iconSize} height={iconSize} />
-      </button>
+      </IconButton>
     );
 
     if (usesTooltip) {
@@ -448,7 +464,7 @@ export const ImageSlotActions = React.forwardRef<
                     showMoreTrigger || isThumbOverflowOpen ? "auto" : "none",
                 }}
               >
-                <button
+                <IconButton
                   ref={(node) => {
                     moreButtonRef.current = node;
                   }}
@@ -467,21 +483,32 @@ export const ImageSlotActions = React.forwardRef<
                       setIsThumbOverflowOpen(false);
                     }
                   }}
-                  style={{
-                    padding: buttonPadding,
+                  sx={{
+                    p: `${buttonPadding}px`,
                     borderRadius: "50%",
                     border: "none",
-                    backgroundColor: theme.colors.overlay,
+                    bgcolor: theme.colors.overlay,
                     color: theme.colors.textPrimary,
                     boxShadow: theme.colors.panelShadow,
                     backdropFilter: "blur(6px)",
-                    transition: "opacity 120ms ease",
+                    transition:
+                      "opacity 120ms ease, transform 70ms ease, filter 120ms ease",
                     opacity: showMoreTrigger ? 1 : 0,
                     pointerEvents: showMoreTrigger ? "auto" : "none",
+                    WebkitTapHighlightColor: "transparent",
+                    "&:hover": {
+                      filter: "brightness(1.08)",
+                    },
+                    "&:active": {
+                      transform: "translateY(1px)",
+                    },
+                    "&.Mui-focusVisible": {
+                      filter: "brightness(1.1)",
+                    },
                   }}
                 >
                   <Icon path={Icons.More} width={iconSize} height={iconSize} />
-                </button>
+                </IconButton>
 
                 <Popper
                   open={isThumbOverflowOpen}

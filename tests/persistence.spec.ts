@@ -52,6 +52,10 @@ test.describe("state persistence", () => {
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
 
+    // Give the debounced persistence writer time to flush auth/model/params to IndexedDB.
+    // (Persistence saves during idle time with a short debounce.)
+    await page.waitForTimeout(2200);
+
     await page.reload();
 
     // Wait for the app to load and restore state
@@ -67,15 +71,71 @@ test.describe("state persistence", () => {
       { timeout: 5000 }
     );
 
-    await expect(page.getByAltText("Image to Edit")).toBeVisible();
+    // Restoring image blobs from IndexedDB can be a bit slow on CI.
+    await expect(page.getByAltText("Image to Edit")).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(
       page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
 
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
     await expect(promptLocator).toHaveValue(promptValue);
     await expect(page.getByRole("button", { name: /Model:/i })).toHaveText(
       /GPT-5 Image Mini/
     );
+  });
+
+
+  test("persists textarea size across reload", async ({ page }) => {
+    test.setTimeout(25_000);
+
+    await clearOpenRouterApiKey(page);
+    await setOpenRouterApiKey(page, "persist-textarea-size-key");
+
+    // Image Description (generate_image / prompt)
+    await page.getByRole("button", { name: /Create an Image/i }).click();
+    const promptLocator = page.getByTestId("input-prompt");
+    await expect(promptLocator).toBeVisible();
+    await promptLocator.fill("A test prompt");
+
+    await promptLocator.evaluate((el) => {
+      (el as HTMLTextAreaElement).style.height = "120px";
+      el.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    });
+
+    // Extra Instructions (enhance_drawing / extraInstructions)
+    await page.getByRole("button", { name: /Enhance Line Drawing/i }).click();
+    const extraLocator = page.getByTestId("input-extraInstructions");
+    await expect(extraLocator).toBeVisible();
+    await extraLocator.fill("Extra instructions");
+
+    await page.evaluate(() => {
+      const el = document.querySelector(
+        '[data-testid="input-extraInstructions"]'
+      ) as HTMLTextAreaElement | null;
+      if (!el) throw new Error("Missing extraInstructions textarea");
+      el.style.height = "160px";
+      el.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    });
+
+    await page.reload();
+
+    // Verify Extra Instructions height restored.
+    await page.getByRole("button", { name: /Enhance Line Drawing/i }).click();
+    const restoredExtra = page.getByTestId("input-extraInstructions");
+    await expect(restoredExtra).toBeVisible();
+    const extraHeight = await restoredExtra.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().height)
+    );
+    expect(extraHeight).toBeGreaterThanOrEqual(140);
+
+    // Switch back to Create an Image and verify prompt height restored.
+    await page.getByRole("button", { name: /Create an Image/i }).click();
+    const restoredPrompt = page.getByTestId("input-prompt");
+    const promptHeight = await restoredPrompt.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().height)
+    );
+    expect(promptHeight).toBeGreaterThanOrEqual(105);
   });
 });

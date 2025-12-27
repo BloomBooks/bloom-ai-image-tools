@@ -1,7 +1,14 @@
 import React from "react";
 import { theme } from "../themes";
 
-export type ThumbnailStatus = "idle" | "saving" | "success" | "error";
+export type ThumbnailStatus =
+  | "idle"
+  | "saving"
+  | "success"
+  | "error"
+  | "copying"
+  | "copied"
+  | "copyError";
 
 export interface ImageSlotThumbnailStatusBadgeProps {
   status: ThumbnailStatus;
@@ -25,17 +32,20 @@ export const ImageSlotThumbnailStatusBadge: React.FC<
         fontWeight: 500,
         zIndex: 40,
         backgroundColor:
-          status === "saving"
+          status === "saving" || status === "copying"
             ? theme.colors.accent
-            : status === "success"
+            : status === "success" || status === "copied"
             ? "#22c55e"
             : "#ef4444",
         color: "white",
       }}
     >
       {status === "saving" && "Saving..."}
+      {status === "copying" && "Copying..."}
       {status === "success" && "Thumbnail saved!"}
       {status === "error" && "Failed to save"}
+      {status === "copied" && "Copied!"}
+      {status === "copyError" && "Copy failed"}
     </div>
   );
 };

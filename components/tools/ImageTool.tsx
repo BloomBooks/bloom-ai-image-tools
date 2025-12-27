@@ -123,6 +123,7 @@ interface ParamTextInputProps {
   disabled: boolean;
   multiline?: boolean;
   rows?: number;
+  persistHeightKey?: string;
   inputTestId: string;
   onCommit: (value: string) => void;
 }
@@ -135,12 +136,14 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
   disabled,
   multiline,
   rows,
+  persistHeightKey,
   inputTestId,
   onCommit,
 }: ParamTextInputProps) {
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const commitRef = useRef(onCommit);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     commitRef.current = onCommit;
@@ -182,6 +185,67 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
     []
   );
 
+  useEffect(() => {
+    if (!multiline) return;
+    if (!persistHeightKey) return;
+    if (typeof window === "undefined") return;
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const applyPersistedHeight = () => {
+      let storedRaw: string | null = null;
+      try {
+        storedRaw = window.localStorage?.getItem(persistHeightKey) ?? null;
+      } catch {
+        storedRaw = null;
+      }
+
+      const stored = storedRaw ? Number(storedRaw) : NaN;
+      if (!Number.isFinite(stored) || stored <= 0) return;
+
+      const maxReasonable = Math.max(160, Math.floor(window.innerHeight * 0.9));
+      const clamped = Math.max(120, Math.min(Math.round(stored), maxReasonable));
+      textarea.style.height = `${clamped}px`;
+    };
+
+    const saveHeight = () => {
+      const height = Math.round(textarea.getBoundingClientRect().height);
+      if (!Number.isFinite(height) || height <= 0) return;
+      try {
+        window.localStorage?.setItem(persistHeightKey, String(height));
+      } catch {
+        // ignore
+      }
+    };
+
+    // Apply immediately and again on next frame to avoid losing to layout/autosize.
+    applyPersistedHeight();
+    const rafId = window.requestAnimationFrame(applyPersistedHeight);
+
+    textarea.addEventListener("pointerup", saveHeight);
+    textarea.addEventListener("mouseup", saveHeight);
+    textarea.addEventListener("touchend", saveHeight);
+    window.addEventListener("beforeunload", saveHeight);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof (window as any).ResizeObserver === "function") {
+      resizeObserver = new ResizeObserver(() => {
+        saveHeight();
+      });
+      resizeObserver.observe(textarea);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      textarea.removeEventListener("pointerup", saveHeight);
+      textarea.removeEventListener("mouseup", saveHeight);
+      textarea.removeEventListener("touchend", saveHeight);
+      window.removeEventListener("beforeunload", saveHeight);
+      resizeObserver?.disconnect();
+    };
+  }, [multiline, persistHeightKey]);
+
   return (
     <TextField
       name={name}
@@ -195,6 +259,10 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       fullWidth
       size="small"
       disabled={disabled}
+      inputRef={(node) => {
+        // When multiline, MUI renders a <textarea>.
+        textareaRef.current = (node as unknown as HTMLTextAreaElement | null);
+      }}
       sx={
         multiline
           ? {
@@ -400,6 +468,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "textarea") {
+        const persistHeightKey = `bloom-ai-image-tools:textarea-height:${tool.id}:${param.name}`;
         return (
           <ParamTextInput
             key={param.name}
@@ -410,6 +479,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             disabled={isProcessing}
             multiline
             rows={6}
+            persistHeightKey={persistHeightKey}
             inputTestId={inputTestId}
             onCommit={(nextValue) =>
               handleParamChange(tool.id, param.name, nextValue)

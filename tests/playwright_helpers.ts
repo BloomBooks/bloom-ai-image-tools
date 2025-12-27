@@ -19,11 +19,13 @@ export const resetImageToolsPersistence = async (page: Page) => {
 			apiKeyKey,
 			methodKey,
 			dbName,
+			uiKeyPrefix,
 		}: {
 			flag: string;
 			apiKeyKey: string;
 			methodKey: string;
 			dbName: string;
+			uiKeyPrefix: string;
 		}) => {
 			// Always set this so tests don't accidentally pick up an env key.
 			window.sessionStorage?.setItem(flag, "1");
@@ -39,6 +41,15 @@ export const resetImageToolsPersistence = async (page: Page) => {
 			try {
 				window.localStorage?.removeItem(apiKeyKey);
 				window.localStorage?.removeItem(methodKey);
+				// Clear UI preference keys (e.g. persisted textarea sizes).
+				const keysToRemove: string[] = [];
+				for (let i = 0; i < (window.localStorage?.length ?? 0); i++) {
+					const key = window.localStorage?.key(i);
+					if (key && key.startsWith(uiKeyPrefix)) {
+						keysToRemove.push(key);
+					}
+				}
+				keysToRemove.forEach((key) => window.localStorage?.removeItem(key));
 			} catch {
 				// ignore
 			}
@@ -61,6 +72,7 @@ export const resetImageToolsPersistence = async (page: Page) => {
 			apiKeyKey: API_KEY_STORAGE_KEY,
 			methodKey: AUTH_METHOD_STORAGE_KEY,
 			dbName: IMAGE_TOOLS_DB_NAME,
+			uiKeyPrefix: "bloom-ai-image-tools:textarea-height:",
 		}
 	);
 

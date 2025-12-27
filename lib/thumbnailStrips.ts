@@ -211,15 +211,19 @@ export const sanitizeThumbnailStrips = (
   THUMBNAIL_STRIP_ORDER.forEach((id) => {
     next[id] = (next[id] || []).filter((itemId) => validIds.has(itemId));
   });
-  const sanitizedPins = snapshot.pinnedStripIds.filter((id) =>
-    THUMBNAIL_STRIP_ORDER.includes(id)
+  const rawPins = (snapshot as unknown as { pinnedStripIds?: unknown })
+    .pinnedStripIds;
+  const hasPins = Array.isArray(rawPins);
+  const sanitizedPins = (hasPins ? rawPins : []).filter(
+    (id): id is ThumbnailStripId =>
+      typeof id === "string" && THUMBNAIL_STRIP_ORDER.includes(id as any)
   );
   const active = THUMBNAIL_STRIP_ORDER.includes(snapshot.activeStripId)
     ? snapshot.activeStripId
     : "history";
   return {
     activeStripId: active,
-    pinnedStripIds: sanitizedPins.length ? sanitizedPins : ["history"],
+    pinnedStripIds: hasPins ? sanitizedPins : ["history"],
     itemIdsByStrip: next,
   };
 };

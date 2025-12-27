@@ -128,7 +128,7 @@ export const TOOLS: ToolDefinition[] = [
       }
       return `${styledPrompt}\n\nExtra instructions: ${extraInstructions}`;
     },
-    referenceImages: "0",
+    referenceImages: "0+",
   },
   {
     id: "change_text",

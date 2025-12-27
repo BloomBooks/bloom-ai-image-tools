@@ -193,12 +193,53 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     readStoredSplitters()
   );
 
+  type IdleFriendlyWindow = Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+
+  const splitterPersistRef = React.useRef<{
+    idleHandle: number | null;
+    timeoutHandle: number | null;
+  }>({ idleHandle: null, timeoutHandle: null });
+
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      SPLITTER_STORAGE_KEY,
-      JSON.stringify(splitters)
-    );
+
+    const clearPending = () => {
+      const handles = splitterPersistRef.current;
+      if (handles.idleHandle !== null) {
+        (window as IdleFriendlyWindow).cancelIdleCallback?.(handles.idleHandle);
+        handles.idleHandle = null;
+      }
+      if (handles.timeoutHandle !== null) {
+        window.clearTimeout(handles.timeoutHandle);
+        handles.timeoutHandle = null;
+      }
+    };
+
+    const persist = () => {
+      try {
+        window.localStorage.setItem(SPLITTER_STORAGE_KEY, JSON.stringify(splitters));
+      } catch {
+        // ignore
+      }
+    };
+
+    // Splitters update rapidly during drag; defer persistence until the browser is idle.
+    clearPending();
+    const win = window as IdleFriendlyWindow;
+    if (typeof win.requestIdleCallback === "function") {
+      splitterPersistRef.current.idleHandle = win.requestIdleCallback(persist, {
+        timeout: 500,
+      });
+    } else {
+      splitterPersistRef.current.timeoutHandle = window.setTimeout(persist, 150);
+    }
+
+    return () => {
+      clearPending();
+    };
   }, [splitters]);
 
   const updateHorizontalSplit = React.useCallback((clientX: number) => {
@@ -366,6 +407,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   isDropZone={true}
                   onDrop={onSetTarget}
                   onClear={onClearTarget}
+                  showCopyButton={false}
+                  showDownloadButton={false}
                   draggableImageId={undefined}
                   dndDropId="panel:target"
                   dndDragId={

@@ -5,6 +5,11 @@ import {
   isPngBlob,
 } from "copy-image-clipboard";
 
+import {
+  injectPngTextMetadataIntoBlob,
+  type PngTextMetadata,
+} from "./pngMetadata";
+
 export type ClipboardUploadHandler = (file: File) => void | Promise<void>;
 
 export const getDataUrlMimeType = (
@@ -56,31 +61,49 @@ export const getBlobFromDataUrl = async (dataUrl: string): Promise<Blob> => {
 
 export const getTypeFromMime = (mime: string | null): string | null => {
   if (!mime) return null;
-  const lowered = mime.toLowerCase().replace("image/", "");
-  if (lowered === "jpg" || lowered === "pjpeg") {
-    return "jpeg";
+  const lowered = mime.toLowerCase().trim();
+  if (!lowered) return null;
+
+  // Normalize common variants.
+  if (lowered === "image/jpg" || lowered === "image/pjpeg") {
+    return "image/jpeg";
   }
-  if (lowered === "x-png") {
-    return "png";
+  if (lowered === "image/x-png") {
+    return "image/png";
   }
-  return lowered;
+
+  // If already a full MIME type, keep it.
+  if (lowered.startsWith("image/")) {
+    return lowered;
+  }
+
+  // Handle extension-like values.
+  if (lowered === "jpg" || lowered === "jpeg" || lowered === "pjpeg") {
+    return "image/jpeg";
+  }
+  if (lowered === "png" || lowered === "x-png") {
+    return "image/png";
+  }
+
+  // Best-effort for other image extensions.
+  return `image/${lowered}`;
 };
 
 export const getNormalizedImageBlob = async (dataUrl: string): Promise<Blob> => {
   const blobFromSource = await (dataUrl.startsWith("data:")
     ? getBlobFromDataUrl(dataUrl)
     : getBlobFromImageSource(dataUrl));
-  const type =
-    getTypeFromMime(blobFromSource.type) ||
-    getTypeFromMime(getDataUrlMimeType(dataUrl)) ||
-    "png";
 
-  if (blobFromSource.type === type) {
+  const normalizedSourceType = getTypeFromMime(blobFromSource.type);
+  const normalizedDataUrlType = getTypeFromMime(getDataUrlMimeType(dataUrl));
+  const mime = normalizedSourceType || normalizedDataUrlType || "image/png";
+
+  if ((blobFromSource.type || "").toLowerCase() === mime.toLowerCase()) {
     return blobFromSource;
   }
 
   const buffer = await blobFromSource.arrayBuffer();
-  return new Blob([buffer], { type });
+  return new Blob([buffer], { type: mime });
 };
 
 export const clipboardSupportsMime = (mime: string): boolean => {
@@ -150,7 +173,7 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
 };
 
 export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
-  const mime = blob.type || "image/png";
+  const mime = getTypeFromMime(blob.type) || "image/png";
   const canUseOriginal = clipboardSupportsMime(mime);
 
   if (canUseOriginal) {
@@ -173,12 +196,46 @@ export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
 };
 
 export const handleCopy = async (
-  imageData: string | null | undefined
+  imageData: string | null | undefined,
+  pngTextMetadata?: PngTextMetadata
 ): Promise<boolean> => {
   if (!imageData) return false;
-  const normalizedBlob = await getNormalizedImageBlob(imageData);
-  await copyWithFallbackIfNeeded(normalizedBlob);
-  return true;
+
+  try {
+    const normalizedBlob = await getNormalizedImageBlob(imageData);
+
+    const hasMetadata =
+      !!pngTextMetadata &&
+      Object.values(pngTextMetadata).some(
+        (v) => typeof v === "string" && v.trim().length > 0
+      );
+
+    if (hasMetadata) {
+      const pngBlob = await convertBlobToPngWithFallback(normalizedBlob);
+      const pngWithMetadata = await injectPngTextMetadataIntoBlob(
+        pngBlob,
+        pngTextMetadata || {}
+      );
+      await copyBlobToClipboard(pngWithMetadata);
+    } else {
+      await copyWithFallbackIfNeeded(normalizedBlob);
+    }
+    return true;
+  } catch (error) {
+    // Some browsers/environments can't write image types to the clipboard.
+    // As a last resort, copy the image as text (data URL / URL) so the
+    // clipboard is at least updated and users get something usable.
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(imageData);
+        return true;
+      }
+    } catch {
+      // ignore and rethrow original error
+    }
+
+    throw error;
+  }
 };
 
 export const readClipboardImageFile = async (): Promise<File | null> => {

@@ -173,6 +173,65 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     null
   );
 
+  const dragPerfRef = React.useRef<{
+    startT: number | null;
+    lastMoveT: number | null;
+    moveCount: number;
+    maxMoveDeltaMs: number;
+  }>({ startT: null, lastMoveT: null, moveCount: 0, maxMoveDeltaMs: 0 });
+
+  const flushDragPerf = React.useCallback(
+    (phase: "end" | "cancel") => {
+      try {
+        if (typeof window === "undefined" || !(window as any).__E2E_VERBOSE) {
+          return;
+        }
+        const perf = dragPerfRef.current;
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const durationMs = perf.startT != null ? Math.round(now - perf.startT) : null;
+        const summary = {
+          phase,
+          durationMs,
+          moveCount: perf.moveCount,
+          maxMoveDeltaMs: Math.round(perf.maxMoveDeltaMs),
+        };
+        (window as any).__BLOOM_DND_PERF_LAST = summary;
+        debugLog("perf", summary);
+      } catch {
+        // ignore
+      }
+    },
+    [debugLog]
+  );
+
+  const DragPreview: React.FC<{ image: ImageRecord }> = ({ image }) => {
+    return (
+      <div
+        style={{
+          width: 112,
+          height: 112,
+          borderRadius: 18,
+          overflow: "hidden",
+          boxShadow: theme.colors.panelShadow,
+          background: theme.colors.surface,
+          pointerEvents: "none",
+        }}
+      >
+        <img
+          src={image.imageData}
+          alt=""
+          draggable={false}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      </div>
+    );
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragImage(null);
     const imageId = (event.active.data.current as any)?.imageId as
@@ -281,6 +340,12 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           collisionDetection={closestCenter}
           onDragStart={(event) => {
             const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+            dragPerfRef.current.startT = now;
+            dragPerfRef.current.lastMoveT = now;
+            dragPerfRef.current.moveCount = 0;
+            dragPerfRef.current.maxMoveDeltaMs = 0;
+
             const last = lastPointerDownRef.current;
             if (last) {
               debugLog(
@@ -300,8 +365,24 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             const match = historyItems.find((item) => item.id === imageId) || null;
             setActiveDragImage(match);
           }}
-          onDragCancel={() => setActiveDragImage(null)}
-          onDragEnd={handleDragEnd}
+          onDragMove={() => {
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const perf = dragPerfRef.current;
+            if (perf.lastMoveT != null) {
+              const delta = now - perf.lastMoveT;
+              if (delta > perf.maxMoveDeltaMs) perf.maxMoveDeltaMs = delta;
+            }
+            perf.lastMoveT = now;
+            perf.moveCount += 1;
+          }}
+          onDragCancel={() => {
+            setActiveDragImage(null);
+            flushDragPerf("cancel");
+          }}
+          onDragEnd={(event) => {
+            handleDragEnd(event);
+            flushDragPerf("end");
+          }}
         >
           <Box
             onPointerDownCapture={(event) => {
@@ -374,22 +455,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           </Box>
 
           <DragOverlay>
-            {activeDragImage ? (
-              <div style={{ width: 112, flexShrink: 0 }}>
-                <ImageSlot
-                  image={activeDragImage}
-                  variant="thumb"
-                  dataTestId="history-card"
-                  controls={{
-                    upload: false,
-                    paste: false,
-                    copy: true,
-                    download: true,
-                    remove: false,
-                  }}
-                />
-              </div>
-            ) : null}
+            {activeDragImage ? <DragPreview image={activeDragImage} /> : null}
           </DragOverlay>
         </DndContext>
       </Box>

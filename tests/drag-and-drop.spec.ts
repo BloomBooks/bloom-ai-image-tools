@@ -6,6 +6,9 @@ import {
 
 test.describe("history drag-and-drop", () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as any).__E2E_VERBOSE = true;
+    });
     await resetImageToolsPersistence(page);
   });
 
@@ -44,6 +47,14 @@ test.describe("history drag-and-drop", () => {
       });
       await page.mouse.up();
     }
+
+    // Performance sanity check: the app should not have long stalls while dragging.
+    const perf1 = await page.evaluate(() => (window as any).__BLOOM_DND_PERF_LAST);
+    expect(perf1).toBeTruthy();
+    expect(perf1.moveCount).toBeGreaterThan(3);
+    // Threshold is intentionally conservative to avoid CI flakes.
+    expect(perf1.maxMoveDeltaMs).toBeLessThan(150);
+
     await expect(
       targetPanel.getByRole("img", { name: "Image to Edit" })
     ).toHaveCount(1);

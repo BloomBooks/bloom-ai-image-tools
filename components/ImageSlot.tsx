@@ -37,6 +37,7 @@ import {
 } from "../lib/dragUtils";
 import { TOOLS } from "./tools/tools-registry";
 import { getModelNameById } from "../lib/modelsCatalog";
+import { useDndContext } from "@dnd-kit/core";
 
 let transparentDragImage: HTMLImageElement | null = null;
 const getTransparentDragImage = (): HTMLImageElement | null => {
@@ -265,6 +266,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   actionLabels,
   starState,
 }) => {
+  const { active } = useDndContext();
+  const isDndDragging = Boolean(active);
   const ACTION_ICON_SIZE = 16;
   const ACTION_BUTTON_PADDING = 6;
   const OVERLAY_CORNER_OFFSET = 4;
@@ -530,11 +533,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   };
 
   const handleMouseEnter = () => {
+    if (isDndDragging) return;
     if (disabled) return;
     setIsHovered(true);
   };
 
   const handleMouseLeave = () => {
+    if (isDndDragging) return;
     setIsHovered(false);
   };
 
@@ -750,6 +755,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           if (variant !== "thumb") return;
           if (!isHovered) return;
           if (disabled) return;
+          // When dnd-kit is actively dragging, avoid hover-intent state churn.
+          if (isDndDragging) return;
 
           // Hover-intent: only reveal the "..." trigger after the pointer has
           // settled for 500ms. Any movement resets the timer.

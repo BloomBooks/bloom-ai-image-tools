@@ -1,6 +1,7 @@
 import React from "react";
 import { ClickAwayListener, IconButton, Popper, Tooltip } from "@mui/material";
 import type { SxProps, Theme as MuiTheme } from "@mui/material/styles";
+import { useDndContext } from "@dnd-kit/core";
 import { ImageRecord } from "../types";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
@@ -101,6 +102,9 @@ export const ImageSlotActions = React.forwardRef<
     onToggleMagnifier,
   } = props;
 
+  const { active } = useDndContext();
+  const isDndDragging = Boolean(active);
+
   const moreButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const closeTimeoutRef = React.useRef<number | null>(null);
   const moreDelayTimeoutRef = React.useRef<number | null>(null);
@@ -140,6 +144,15 @@ export const ImageSlotActions = React.forwardRef<
   React.useEffect(() => {
     if (variant !== "thumb") return;
 
+    // During active dnd-kit drags, avoid hover-intent churn from pointer moves.
+    if (isDndDragging) {
+      setIsThumbOverflowOpen(false);
+      setIsThumbMoreReady(false);
+      clearMoreDelayTimeout();
+      clearCloseTimeout();
+      return;
+    }
+
     if (!isHovered) {
       setIsThumbOverflowOpen(false);
       setIsThumbMoreReady(false);
@@ -157,6 +170,7 @@ export const ImageSlotActions = React.forwardRef<
   }, [
     variant,
     isHovered,
+    isDndDragging,
     scheduleMoreReady,
     clearMoreDelayTimeout,
     clearCloseTimeout,
@@ -174,6 +188,7 @@ export const ImageSlotActions = React.forwardRef<
     () => ({
       notifyPointerMove: () => {
         if (variant !== "thumb") return;
+        if (isDndDragging) return;
         if (!isHovered) return;
         if (isThumbOverflowOpen) return;
 
@@ -184,6 +199,7 @@ export const ImageSlotActions = React.forwardRef<
     [
       variant,
       isHovered,
+      isDndDragging,
       isThumbOverflowOpen,
       isThumbMoreReady,
       scheduleMoreReady,

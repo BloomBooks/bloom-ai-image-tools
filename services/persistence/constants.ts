@@ -6,4 +6,6 @@ export const IMAGE_TOOLS_FS_DB_NAME = "bloom-image-tools-fs";
 export const IMAGE_TOOLS_FS_HANDLE_STORE = "imageToolsFsHandles";
 export const IMAGE_TOOLS_FS_HANDLE_KEY = "fsDirectoryHandle";
 export const IMAGE_TOOLS_FS_IMAGES_DIR = "images";
+export const IMAGE_TOOLS_FS_MANIFEST_FILE = "history-manifest.json";
+export const IMAGE_TOOLS_FS_MANIFEST_VERSION = 1;
 export const LOCAL_HISTORY_CACHE_LIMIT = 6;

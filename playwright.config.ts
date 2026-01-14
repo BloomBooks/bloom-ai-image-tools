@@ -16,7 +16,7 @@ export default defineConfig({
     navigationTimeout: 3_000,
   },
   webServer: {
-    command: "pnpm dev --host --port 3000",
+    command: "corepack pnpm dev --host --port 3000",
     url: "http://localhost:3000",
     reuseExistingServer: true,
     timeout: 10_000,

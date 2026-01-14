@@ -19,6 +19,7 @@ import {
   AppState,
   ImageRecord,
   ImageToolsStatePersistence,
+  HistoryManifest,
   ModelInfo,
   PersistedAppState,
   ThumbnailStripId,
@@ -61,10 +62,13 @@ import {
   deleteImageFile,
   deriveImageFileName,
   forgetFileSystemImageBinding,
+  listHistoryImageFiles,
+  readHistoryManifest,
   readImageFile,
   requestFileSystemImageBinding,
   restoreFileSystemImageBinding,
   supportsFileSystemAccess,
+  writeHistoryManifest,
   writeImageFile,
 } from "../services/persistence/fileSystemAccess";
 import {
@@ -183,6 +187,29 @@ const buildEnvironmentEntry = (url: string, index: number): ImageRecord => ({
   origin: "environment",
 });
 
+const buildRecoveredHistoryEntry = (entry: {
+  id: string;
+  fileName: string;
+  lastModified: number;
+}): ImageRecord => ({
+  id: entry.id,
+  parentId: null,
+  imageData: "",
+  imageFileName: entry.fileName,
+  toolId: "unknown",
+  parameters: {},
+  sourceStyleId: null,
+  durationMs: 0,
+  cost: 0,
+  model: "",
+  timestamp: entry.lastModified || 0,
+  promptUsed: "Recovered image",
+  sourceSummary: "Recovered from folder",
+  resolution: undefined,
+  isStarred: false,
+  origin: "generated",
+});
+
 const sanitizePersistedAppState = (
   persisted: PersistedAppState | null | undefined
 ): PersistedAppState => {
@@ -190,7 +217,9 @@ const sanitizePersistedAppState = (
     ? (persisted?.history as ImageRecord[])
     : [];
   const accessibleIds = new Set(
-    history.filter((item) => !!item.imageData).map((item) => item.id)
+    history
+      .filter((item) => !!item.imageData || !!item.imageFileName)
+      .map((item) => item.id)
   );
 
   const normalizeId = (id: string | null) =>
@@ -206,6 +235,60 @@ const sanitizePersistedAppState = (
     referenceImageIds,
     rightPanelImageId: normalizeId(persisted?.rightPanelImageId ?? null),
     history,
+  };
+};
+
+const mergeImageRecord = (current: ImageRecord, incoming: ImageRecord) => {
+  return {
+    ...incoming,
+    ...current,
+    imageData: current.imageData || incoming.imageData,
+    imageFileName: current.imageFileName || incoming.imageFileName,
+    isStarred: current.isStarred ?? incoming.isStarred,
+  };
+};
+
+const mergeHistoryFields = (
+  current: AppState,
+  incoming: PersistedAppState
+): Pick<
+  AppState,
+  "history" | "targetImageId" | "referenceImageIds" | "rightPanelImageId"
+> => {
+  const incomingById = new Map(incoming.history.map((item) => [item.id, item]));
+  const mergedHistory = current.history.map((item) => {
+    const incomingItem = incomingById.get(item.id);
+    if (!incomingItem) {
+      return item;
+    }
+    incomingById.delete(item.id);
+    return mergeImageRecord(item, incomingItem);
+  });
+  incomingById.forEach((item) => mergedHistory.push(item));
+
+  const validIds = new Set(mergedHistory.map((item) => item.id));
+  const resolveId = (primary: string | null, fallback: string | null) => {
+    if (primary && validIds.has(primary)) {
+      return primary;
+    }
+    if (fallback && validIds.has(fallback)) {
+      return fallback;
+    }
+    return null;
+  };
+
+  const mergedReferences = Array.from(
+    new Set([...current.referenceImageIds, ...incoming.referenceImageIds])
+  ).filter((id) => validIds.has(id));
+
+  return {
+    history: mergedHistory,
+    targetImageId: resolveId(current.targetImageId, incoming.targetImageId),
+    rightPanelImageId: resolveId(
+      current.rightPanelImageId,
+      incoming.rightPanelImageId
+    ),
+    referenceImageIds: mergedReferences,
   };
 };
 export interface ImageToolsWorkspaceProps {
@@ -797,6 +880,7 @@ export function ImageToolsWorkspace({
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
   const thumbnailStripsRef = useRef(thumbnailStrips);
+  const fsManifestHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -825,6 +909,73 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     thumbnailStripsRef.current = thumbnailStrips;
   }, [thumbnailStrips]);
+
+  useEffect(() => {
+    if (!fsBinding) {
+      fsManifestHandleRef.current = null;
+    }
+  }, [fsBinding]);
+
+  useEffect(() => {
+    if (!fsBinding || !isHydrated) {
+      return;
+    }
+    if (fsManifestHandleRef.current === fsBinding.directoryHandle) {
+      return;
+    }
+    fsManifestHandleRef.current = fsBinding.directoryHandle;
+
+    let cancelled = false;
+    (async () => {
+      const manifest = await readHistoryManifest(fsBinding);
+      if (cancelled) {
+        return;
+      }
+
+      let incomingAppState: PersistedAppState | null = null;
+      let incomingStrips: ThumbnailStripsSnapshot | null | undefined = null;
+
+      if (manifest) {
+        incomingAppState = sanitizePersistedAppState(manifest.appState);
+        incomingStrips = manifest.thumbnailStrips;
+      } else if (stateRef.current.history.length === 0) {
+        const files = await listHistoryImageFiles(fsBinding);
+        if (cancelled) {
+          return;
+        }
+        if (files.length) {
+          const recoveredHistory = files
+            .sort((a, b) => a.lastModified - b.lastModified)
+            .map((file) => buildRecoveredHistoryEntry(file));
+          incomingAppState = sanitizePersistedAppState({
+            targetImageId: null,
+            referenceImageIds: [],
+            rightPanelImageId: null,
+            history: recoveredHistory,
+          });
+        }
+      }
+
+      if (!incomingAppState) {
+        return;
+      }
+
+      const mergedFields = mergeHistoryFields(stateRef.current, incomingAppState);
+      if (cancelled) {
+        return;
+      }
+      setState((prev) => ({ ...prev, ...mergedFields }));
+
+      const baseStrips = incomingStrips ?? thumbnailStripsRef.current;
+      setThumbnailStrips(
+        hydrateThumbnailStripsSnapshot(baseStrips, mergedFields.history)
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fsBinding, isHydrated]);
 
   const persistenceScheduleRef = useRef<{
     idleHandle: number | null;
@@ -904,6 +1055,25 @@ export function ImageToolsWorkspace({
       };
     };
 
+    const buildHistoryManifest = (): Omit<HistoryManifest, "version"> => {
+      const currentState = stateRef.current;
+      const historyForManifest = currentState.history.map((item) => {
+        if (item.imageFileName && item.imageData) {
+          return { ...item, imageData: "" };
+        }
+        return item;
+      });
+      return {
+        appState: {
+          targetImageId: currentState.targetImageId,
+          referenceImageIds: currentState.referenceImageIds,
+          rightPanelImageId: currentState.rightPanelImageId,
+          history: historyForManifest,
+        },
+        thumbnailStrips: thumbnailStripsRef.current,
+      };
+    };
+
     const runSave = async () => {
       const sched = persistenceScheduleRef.current;
       clearPending();
@@ -920,6 +1090,15 @@ export function ImageToolsWorkspace({
 
       try {
         await persistence.save(buildPersistableState());
+        const currentBinding = fsBindingRef.current;
+        if (currentBinding) {
+          try {
+            await writeHistoryManifest(currentBinding, buildHistoryManifest());
+          } catch (error) {
+            console.error("Failed to persist history manifest", error);
+            setFsError("Could not save history metadata to folder.");
+          }
+        }
       } finally {
         const end = typeof performance !== "undefined" ? performance.now() : Date.now();
         debugLog(`save(done) dt=${Math.round(end - start)}ms`);

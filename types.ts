@@ -149,6 +149,12 @@ export interface PersistedImageToolsState {
   thumbnailStrips?: ThumbnailStripsSnapshot;
 }
 
+export interface HistoryManifest {
+  version: number;
+  appState: PersistedAppState;
+  thumbnailStrips?: ThumbnailStripsSnapshot;
+}
+
 export interface ImageToolsStatePersistence {
   load: () => Promise<PersistedImageToolsState | null>;
   save: (state: PersistedImageToolsState) => Promise<void>;

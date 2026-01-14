@@ -4,7 +4,10 @@ import {
   IMAGE_TOOLS_FS_HANDLE_KEY,
   IMAGE_TOOLS_FS_HANDLE_STORE,
   IMAGE_TOOLS_FS_IMAGES_DIR,
+  IMAGE_TOOLS_FS_MANIFEST_FILE,
+  IMAGE_TOOLS_FS_MANIFEST_VERSION,
 } from "./constants";
+import { HistoryManifest } from "../../types";
 
 export interface FileSystemImageBinding {
   directoryHandle: FileSystemDirectoryHandle;
@@ -165,6 +168,36 @@ const dataUrlToBlob = async (dataUrl: string) => {
   return { blob: new Blob([buffer], { type: mime }), mime };
 };
 
+const writeJsonFile = async (
+  handle: FileSystemDirectoryHandle,
+  fileName: string,
+  data: unknown
+) => {
+  const fileHandle = await handle.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  const payload = JSON.stringify(data, null, 2);
+  await writable.write(new Blob([payload], { type: "application/json" }));
+  await writable.close();
+};
+
+const readJsonFile = async <T>(
+  handle: FileSystemDirectoryHandle,
+  fileName: string
+): Promise<T | null> => {
+  try {
+    const fileHandle = await handle.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    return JSON.parse(text) as T;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return null;
+    }
+    console.error("Failed to read json file", error);
+    return null;
+  }
+};
+
 const blobToDataUrl = (blob: Blob) => {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -302,4 +335,53 @@ export const deriveImageFileName = (
 ) => {
   const extension = getFileExtension(mime);
   return `${historyId}.${extension}`;
+};
+
+export const listHistoryImageFiles = async (
+  binding: FileSystemImageBinding
+) => {
+  try {
+    const dir = await getImagesDirectoryHandle(binding.directoryHandle);
+    const entries: Array<{ id: string; fileName: string; lastModified: number }> =
+      [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind !== "file") {
+        continue;
+      }
+      const fileHandle = handle as FileSystemFileHandle;
+      const file = await fileHandle.getFile();
+      const id = name.replace(/\.[^.]+$/, "");
+      if (!id) {
+        continue;
+      }
+      entries.push({ id, fileName: name, lastModified: file.lastModified });
+    }
+    return entries;
+  } catch (error) {
+    console.error("Failed to list history images", error);
+    return [];
+  }
+};
+
+export const readHistoryManifest = async (
+  binding: FileSystemImageBinding
+): Promise<HistoryManifest | null> => {
+  const manifest = await readJsonFile<HistoryManifest>(
+    binding.directoryHandle,
+    IMAGE_TOOLS_FS_MANIFEST_FILE
+  );
+  if (!manifest || manifest.version !== IMAGE_TOOLS_FS_MANIFEST_VERSION) {
+    return null;
+  }
+  return manifest;
+};
+
+export const writeHistoryManifest = async (
+  binding: FileSystemImageBinding,
+  manifest: Omit<HistoryManifest, "version">
+) => {
+  await writeJsonFile(binding.directoryHandle, IMAGE_TOOLS_FS_MANIFEST_FILE, {
+    ...manifest,
+    version: IMAGE_TOOLS_FS_MANIFEST_VERSION,
+  });
 };

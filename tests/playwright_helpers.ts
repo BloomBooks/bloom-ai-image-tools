@@ -155,3 +155,172 @@ export const uploadImageToTarget = async (page: Page, filePath: string) => {
 export const uploadSampleImageToTarget = async (page: Page) => {
 	await uploadImageToTarget(page, SAMPLE_IMAGE_PATH);
 };
+
+export const installMockFileSystemAccess = async (page: Page) => {
+	await page.addInitScript(() => {
+		const STORAGE_KEY = "__mockFsState";
+		const ROOT_NAME = "mock-history";
+		const ensureState = () => {
+			const raw = window.localStorage?.getItem(STORAGE_KEY);
+			if (raw) {
+				try {
+					return JSON.parse(raw);
+				} catch {
+					// ignore parse errors
+				}
+			}
+			const next = {
+				root: {
+					name: ROOT_NAME,
+					files: {},
+					dirs: {
+						images: {
+							files: {},
+							dirs: {},
+						},
+					},
+				},
+			};
+			window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(next));
+			return next;
+		};
+
+		let state = ensureState();
+
+		const persist = () => {
+			try {
+				window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state));
+			} catch {
+				// ignore
+			}
+		};
+
+		const notFoundError = () => {
+			throw new DOMException("Not found", "NotFoundError");
+		};
+
+		const dataUrlFromBlob = (blob: Blob) =>
+			new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onloadend = () => {
+					if (typeof reader.result === "string") {
+						resolve(reader.result);
+					} else {
+						reject(new Error("Failed to read blob"));
+					}
+				};
+				reader.onerror = () => reject(new Error("Failed to read blob"));
+				reader.readAsDataURL(blob);
+			});
+
+		const blobFromDataUrl = async (dataUrl: string) => {
+			const response = await fetch(dataUrl);
+			return await response.blob();
+		};
+
+		const toBlob = (data: any) => {
+			if (data instanceof Blob) return data;
+			if (data instanceof ArrayBuffer) return new Blob([data]);
+			if (ArrayBuffer.isView(data)) return new Blob([data.buffer]);
+			if (typeof data === "string") return new Blob([data]);
+			return new Blob([String(data)]);
+		};
+
+		const createFileHandle = (dirState: any, name: string) => ({
+			kind: "file",
+			name,
+			getFile: async () => {
+				const record = dirState.files[name];
+				if (!record) {
+					notFoundError();
+				}
+				let blob: Blob;
+				if (record.text != null && record.type === "application/json") {
+					blob = new Blob([record.text], { type: record.type });
+				} else if (record.dataUrl) {
+					blob = await blobFromDataUrl(record.dataUrl);
+				} else {
+					blob = new Blob([], { type: record.type || "" });
+				}
+				return new File([blob], name, {
+					type: record.type || blob.type,
+					lastModified: record.lastModified || Date.now(),
+				});
+			},
+			createWritable: async () => {
+				return {
+					write: async (data: any) => {
+						const blob = toBlob(data);
+						const record = {
+							type: blob.type || "",
+							lastModified: Date.now(),
+							dataUrl: await dataUrlFromBlob(blob),
+							text: await blob.text().catch(() => null),
+						};
+						dirState.files[name] = record;
+						persist();
+					},
+					close: async () => undefined,
+				};
+			},
+		});
+
+		const createDirectoryHandle = (dirState: any, name: string) => ({
+			kind: "directory",
+			name,
+			queryPermission: async () => "granted",
+			requestPermission: async () => "granted",
+			getDirectoryHandle: async (dirName: string, options?: { create?: boolean }) => {
+				const existing = dirState.dirs[dirName];
+				if (existing) {
+					return createDirectoryHandle(existing, dirName);
+				}
+				if (!options?.create) {
+					notFoundError();
+				}
+				const next = { files: {}, dirs: {} };
+				dirState.dirs[dirName] = next;
+				persist();
+				return createDirectoryHandle(next, dirName);
+			},
+			getFileHandle: async (fileName: string, options?: { create?: boolean }) => {
+				if (!dirState.files[fileName]) {
+					if (!options?.create) {
+						notFoundError();
+					}
+					dirState.files[fileName] = {
+						type: "",
+						lastModified: Date.now(),
+						dataUrl: "",
+						text: "",
+					};
+					persist();
+				}
+				return createFileHandle(dirState, fileName);
+			},
+			removeEntry: async (fileName: string) => {
+				if (!dirState.files[fileName]) {
+					notFoundError();
+				}
+				delete dirState.files[fileName];
+				persist();
+			},
+			entries: async function* () {
+				for (const fileName of Object.keys(dirState.files)) {
+					yield [fileName, createFileHandle(dirState, fileName)];
+				}
+			},
+		});
+
+		const rootHandle = createDirectoryHandle(state.root, state.root.name);
+
+		(window as any).showDirectoryPicker = async () => rootHandle;
+		(window as any).__getMockFsState = () => {
+			try {
+				return JSON.parse(window.localStorage?.getItem(STORAGE_KEY) || "{}");
+			} catch {
+				return {};
+			}
+		};
+	});
+};

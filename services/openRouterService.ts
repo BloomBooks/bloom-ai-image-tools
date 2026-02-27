@@ -69,6 +69,23 @@ export interface FetchOpenRouterCreditsOptions {
   signal?: AbortSignal;
 }
 
+function normalizeErrorString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function getOpenRouterErrorDetail(data: any): string | undefined {
+  return (
+    normalizeErrorString(data?.error?.metadata?.raw) ||
+    normalizeErrorString(data?.error?.message) ||
+    normalizeErrorString(data?.message)
+  );
+}
+
 function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
   const match = dataUrl.match(/^data:(.*?);base64,(.*)$/);
   if (!match) {
@@ -217,10 +234,7 @@ export const editImage = async (
   }
 
   if (!response.ok) {
-    const detailMessage =
-      typeof data?.error?.message === "string"
-        ? data.error.message.trim()
-        : undefined;
+    const detailMessage = getOpenRouterErrorDetail(data);
 
     if (response.status === 402 && detailMessage) {
       throw new OpenRouterApiError(detailMessage, {
@@ -320,10 +334,7 @@ export const fetchOpenRouterCredits = async (
   }
 
   if (!response.ok) {
-    const detailMessage =
-      typeof data?.error?.message === "string"
-        ? data.error.message.trim()
-        : undefined;
+    const detailMessage = getOpenRouterErrorDetail(data);
     const message = detailMessage || rawText || response.statusText || "";
     const preview =
       message.length > 500 ? `${message.slice(0, 500)}…` : message;

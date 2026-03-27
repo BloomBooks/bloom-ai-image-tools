@@ -6,6 +6,7 @@ import React, {
   useState,
   startTransition,
 } from "react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   Box,
   Button,
@@ -36,6 +37,16 @@ import {
   getReferenceConstraints,
   toolRequiresEditImage,
 } from "../../lib/toolHelpers";
+
+const ADVANCED_TOOL_IDS = new Set([
+  "generate_image",
+  "change_style",
+  "custom",
+  "remove_object",
+  "remove_background",
+]);
+
+const TEXT_TOOL_IDS = new Set(["change_text", "stylized_title"]);
 
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
@@ -187,11 +198,38 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
 
   useEffect(() => {
     if (!multiline) return;
-    if (!persistHeightKey) return;
     if (typeof window === "undefined") return;
 
     const textarea = textareaRef.current;
     if (!textarea) return;
+
+    const getMinimumHeight = () => {
+      const styles = window.getComputedStyle(textarea);
+      const lineHeight = Number.parseFloat(styles.lineHeight);
+      const fontSize = Number.parseFloat(styles.fontSize);
+      const resolvedLineHeight = Number.isFinite(lineHeight)
+        ? lineHeight
+        : Number.isFinite(fontSize)
+          ? fontSize * 1.5
+          : 20;
+      const paddingTop = Number.parseFloat(styles.paddingTop);
+      const paddingBottom = Number.parseFloat(styles.paddingBottom);
+      const borderTopWidth = Number.parseFloat(styles.borderTopWidth);
+      const borderBottomWidth = Number.parseFloat(styles.borderBottomWidth);
+
+      return Math.ceil(
+        resolvedLineHeight * 2 +
+          (Number.isFinite(paddingTop) ? paddingTop : 0) +
+          (Number.isFinite(paddingBottom) ? paddingBottom : 0) +
+          (Number.isFinite(borderTopWidth) ? borderTopWidth : 0) +
+          (Number.isFinite(borderBottomWidth) ? borderBottomWidth : 0)
+      );
+    };
+
+    const minimumHeight = getMinimumHeight();
+    textarea.style.minHeight = `${minimumHeight}px`;
+
+    if (!persistHeightKey) return;
 
     const applyPersistedHeight = () => {
       let storedRaw: string | null = null;
@@ -205,7 +243,10 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       if (!Number.isFinite(stored) || stored <= 0) return;
 
       const maxReasonable = Math.max(160, Math.floor(window.innerHeight * 0.9));
-      const clamped = Math.max(120, Math.min(Math.round(stored), maxReasonable));
+      const clamped = Math.max(
+        minimumHeight,
+        Math.min(Math.round(stored), maxReasonable)
+      );
       textarea.style.height = `${clamped}px`;
     };
 
@@ -275,7 +316,6 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
               "& textarea": {
                 resize: "vertical",
                 overflow: "auto",
-                minHeight: "8rem",
                 maxHeight: "60vh",
                 fontWeight: 400,
               },
@@ -305,7 +345,16 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
-  const resolvedActiveToolId = activeToolId ?? TOOLS[0]?.id ?? null;
+  const resolvedActiveToolId = activeToolId;
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(() =>
+    activeToolId ? ADVANCED_TOOL_IDS.has(activeToolId) : false
+  );
+
+  useEffect(() => {
+    if (activeToolId && ADVANCED_TOOL_IDS.has(activeToolId)) {
+      setIsAdvancedOpen(true);
+    }
+  }, [activeToolId]);
 
   const artStyleOptionsByParam = useMemo(() => {
     const map = new Map<string, ReturnType<typeof getArtStylesByCategories>>();
@@ -324,8 +373,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     return map;
   }, []);
 
-  const handleToolSelect = (toolId: string, isDisabled: boolean) => {
-    if (isDisabled) return;
+  const handleToolSelect = (toolId: string) => {
     const timingLabel = `tool-panel-open:${toolId}`;
     selectionTimingRef.current = timingLabel;
     if (typeof console !== "undefined" && console.time) {
@@ -372,6 +420,25 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       onParamChange(toolId, name, value);
     },
     [onParamChange]
+  );
+
+  const defaultTools = useMemo(
+    () =>
+      TOOLS.filter(
+        (tool) =>
+          !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id)
+      ),
+    []
+  );
+
+  const advancedTools = useMemo(
+    () => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)),
+    []
+  );
+
+  const textTools = useMemo(
+    () => TOOLS.filter((tool) => TEXT_TOOL_IDS.has(tool.id)),
+    []
   );
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
@@ -478,7 +545,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             value={value}
             disabled={isProcessing}
             multiline
-            rows={6}
+            rows={3}
             persistHeightKey={persistHeightKey}
             inputTestId={inputTestId}
             onCommit={(nextValue) =>
@@ -598,6 +665,234 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     ]
   );
 
+  const renderSectionHeader = (label: string) => (
+    <Typography
+      variant="caption"
+      sx={{
+        px: 0.5,
+        fontWeight: 700,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        color: alpha(muiTheme.palette.text.secondary, 0.9),
+      }}
+    >
+      {label}
+    </Typography>
+  );
+
+  const renderToolCard = (tool: ToolDefinition) => {
+    const isSelected = resolvedActiveToolId === tool.id;
+    const referenceConstraints = getReferenceConstraints(tool.referenceImages);
+    const needsReference = referenceConstraints.min > referenceImageCount;
+    const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
+    const missingRequired = hasUnfilledRequiredParams(tool);
+    const submitDisabledReason = !isAuthenticated
+      ? "Connect to OpenRouter"
+      : needsTarget
+      ? "Add an image to edit first"
+      : needsReference
+      ? "Add reference images"
+      : missingRequired
+      ? "Fill in required fields"
+      : undefined;
+    const isSubmitDisabled =
+      isProcessing ||
+      !isAuthenticated ||
+      needsTarget ||
+      needsReference ||
+      missingRequired;
+
+    const effectiveCapabilities = isSelected
+      ? tool.referenceImages === "1+" && referenceImageCount > 1
+        ? {
+            ...(tool.capabilities ?? {}),
+            "edit-with-reference-image": true,
+          }
+        : tool.capabilities
+      : tool.capabilities;
+
+    const cardBackground = isSelected
+      ? "transparent"
+      : muiTheme.palette.background.paper;
+    const cardBorderColor = isSelected
+      ? muiTheme.palette.primary.main
+      : muiTheme.palette.divider;
+    const cardBorderWidth = isSelected ? 2 : 1;
+    const ToolIcon = tool.icon;
+
+    return (
+      <Paper
+        key={tool.id}
+        data-tool-id={tool.id}
+        variant="outlined"
+        sx={{
+          borderRadius: 3,
+          border: `${cardBorderWidth}px solid ${cardBorderColor}`,
+          bgcolor: cardBackground,
+          boxShadow: "none",
+          transition: "all 0.2s ease",
+        }}
+      >
+        <ButtonBase
+          onClick={() => handleToolSelect(tool.id)}
+          disableRipple
+          sx={{
+            width: "100%",
+            textAlign: "left",
+            p: 2,
+            display: "grid",
+            gridTemplateColumns: "48px 1fr",
+            columnGap: 2,
+            alignItems: "center",
+            borderRadius: 3,
+          }}
+        >
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: alpha(muiTheme.palette.background.default, 0.7),
+              color: muiTheme.palette.text.secondary,
+            }}
+          >
+            <ToolIcon sx={{ fontSize: 26 }} />
+          </Box>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 600,
+                color: alpha(muiTheme.palette.text.primary, 0.75),
+              }}
+            >
+              {tool.title}
+            </Typography>
+            {isSelected && tool.description && (
+              <Typography
+                variant="body2"
+                sx={{ mt: 0.5, color: muiTheme.palette.text.secondary }}
+              >
+                {tool.description}
+              </Typography>
+            )}
+          </Box>
+        </ButtonBase>
+
+        {isSelected && (
+          <Box
+            component="form"
+            onSubmit={(event) => handleSubmit(event, tool)}
+            sx={{
+              px: 2,
+              pb: 2.5,
+              pt: 0,
+              borderTop: `1px solid ${muiTheme.palette.divider}`,
+            }}
+          >
+            <Stack spacing={2} mt={2}>
+              {(() => {
+                const params = tool.parameters;
+                const toolParams = paramsByTool[tool.id] || {};
+                const elements: React.ReactNode[] = [];
+                let i = 0;
+                while (i < params.length) {
+                  const param = params[i];
+                  const nextParam = params[i + 1];
+                  const paramValue = toolParams[param.name] ?? "";
+                  if (param.name === "shape" && nextParam?.name === "size") {
+                    const nextParamValue = toolParams[nextParam.name] ?? "";
+                    elements.push(
+                      <Box
+                        key="shape-size-row"
+                        sx={{
+                          display: "flex",
+                          gap: 2,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <Box sx={{ flex: 1 }}>
+                          {renderParameterField(tool, param, paramValue)}
+                        </Box>
+                        <Box sx={{ width: 80, flexShrink: 0 }}>
+                          {renderParameterField(tool, nextParam, nextParamValue)}
+                        </Box>
+                      </Box>
+                    );
+                    i += 2;
+                  } else {
+                    elements.push(renderParameterField(tool, param, paramValue));
+                    i += 1;
+                  }
+                }
+                return elements;
+              })()}
+
+              <CapabilityPanel
+                capabilities={effectiveCapabilities}
+                selectedModel={selectedModel}
+              />
+
+              <Stack spacing={1.5}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  fullWidth
+                  disabled={isSubmitDisabled}
+                  title={submitDisabledReason}
+                  sx={{
+                    minHeight: 44,
+                    fontWeight: 600,
+                    gap: 1,
+                  }}
+                >
+                  {isProcessing ? (
+                    <>
+                      <CircularProgress size={18} color="inherit" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        {tool.id === "generate_image"
+                          ? "Generate Image"
+                          : "Apply Changes"}
+                      </span>
+                      <Icon
+                        path={Icons.ArrowRight}
+                        style={{ width: 18, height: 18 }}
+                      />
+                    </>
+                  )}
+                </Button>
+                {submitDisabledReason && !isProcessing && (
+                  <FormHelperText sx={{ textAlign: "center" }}>
+                    {submitDisabledReason}
+                  </FormHelperText>
+                )}
+                {isProcessing && (
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    color="inherit"
+                    fullWidth
+                    onClick={onCancelProcessing}
+                  >
+                    Cancel Generation
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+          </Box>
+        )}
+      </Paper>
+    );
+  };
+
   return (
     <Box
       component="aside"
@@ -630,231 +925,41 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           },
         }}
       >
-        {TOOLS.map((tool) => {
-          const isSelected = resolvedActiveToolId === tool.id;
-          const referenceConstraints = getReferenceConstraints(
-            tool.referenceImages
-          );
-          const needsReference = referenceConstraints.min > referenceImageCount;
-          const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
-          // Tools can always be selected, but authentication is still required
-          const isDisabled = !isAuthenticated;
-          const disabledReason = !isAuthenticated
-            ? "Connect to OpenRouter"
-            : undefined;
-          const missingRequired = hasUnfilledRequiredParams(tool);
-          // Submit button is disabled if missing requirements
-          const submitDisabledReason = needsTarget
-            ? "Add an image to edit first"
-            : needsReference
-            ? "Add reference images"
-            : missingRequired
-            ? "Fill in required fields"
-            : undefined;
-          const isSubmitDisabled =
-            isProcessing || needsTarget || needsReference || missingRequired;
+        {defaultTools.map(renderToolCard)}
 
-          const effectiveCapabilities = isSelected
-            ? tool.referenceImages === "1+" && referenceImageCount > 1
-              ? {
-                  ...(tool.capabilities ?? {}),
-                  "edit-with-reference-image": true,
-                }
-              : tool.capabilities
-            : tool.capabilities;
+        {textTools.length > 0 && (
+          <Stack spacing={1.25}>
+            {renderSectionHeader("Text")}
+            {textTools.map(renderToolCard)}
+          </Stack>
+        )}
 
-          const cardBackground = isDisabled
-            ? alpha(muiTheme.palette.background.paper, 0.4)
-            : isSelected
-            ? "transparent"
-            : muiTheme.palette.background.paper;
-          const cardBorderColor = isSelected
-            ? muiTheme.palette.primary.main
-            : muiTheme.palette.divider;
-          const cardBorderWidth = isSelected ? 2 : 1;
-          const ToolIcon = tool.icon;
-
-          return (
-            <Paper
-              key={tool.id}
-              data-tool-id={tool.id}
-              variant="outlined"
+        {advancedTools.length > 0 && (
+          <Stack spacing={1.25}>
+            <ButtonBase
+              onClick={() => setIsAdvancedOpen((current) => !current)}
               sx={{
-                borderRadius: 3,
-                border: `${cardBorderWidth}px solid ${cardBorderColor}`,
-                bgcolor: cardBackground,
-                opacity: isDisabled ? 0.6 : 1,
-                boxShadow: "none",
-                transition: "all 0.2s ease",
+                width: "100%",
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              <ButtonBase
-                onClick={() => handleToolSelect(tool.id, isDisabled)}
-                disabled={isDisabled}
-                title={disabledReason}
-                disableRipple
+              {renderSectionHeader("Advanced")}
+              <ExpandMoreIcon
                 sx={{
-                  width: "100%",
-                  textAlign: "left",
-                  p: 2,
-                  display: "grid",
-                  gridTemplateColumns: "48px 1fr",
-                  columnGap: 2,
-                  alignItems: "center",
-                  borderRadius: 3,
+                  transition: "transform 0.2s ease",
+                  transform: isAdvancedOpen ? "rotate(0deg)" : "rotate(-90deg)",
                 }}
-              >
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: alpha(muiTheme.palette.background.default, 0.7),
-                    color: muiTheme.palette.text.secondary,
-                  }}
-                >
-                  <ToolIcon sx={{ fontSize: 26 }} />
-                </Box>
-                <Box
-                  sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}
-                >
-                  <Typography
-                    variant="subtitle1"
-                    sx={{
-                      fontWeight: 600,
-                      color: alpha(muiTheme.palette.text.primary, 0.75),
-                    }}
-                  >
-                    {tool.title}
-                  </Typography>
-                  {isSelected && tool.description && (
-                    <Typography
-                      variant="body2"
-                      sx={{ mt: 0.5, color: muiTheme.palette.text.secondary }}
-                    >
-                      {tool.description}
-                    </Typography>
-                  )}
-                </Box>
-              </ButtonBase>
-
-              {isSelected && (
-                <Box
-                  component="form"
-                  onSubmit={(event) => handleSubmit(event, tool)}
-                  sx={{
-                    px: 2,
-                    pb: 2.5,
-                    pt: 0,
-                    borderTop: `1px solid ${muiTheme.palette.divider}`,
-                  }}
-                >
-                  <Stack spacing={2} mt={2}>
-                    {(() => {
-                      const params = tool.parameters;
-                      const toolParams = paramsByTool[tool.id] || {};
-                      const elements: React.ReactNode[] = [];
-                      let i = 0;
-                      while (i < params.length) {
-                        const param = params[i];
-                        const nextParam = params[i + 1];
-                        const paramValue = toolParams[param.name] ?? "";
-                        // Group shape and size parameters in the same row
-                        if (
-                          param.name === "shape" &&
-                          nextParam?.name === "size"
-                        ) {
-                          const nextParamValue = toolParams[nextParam.name] ?? "";
-                          elements.push(
-                            <Box
-                              key="shape-size-row"
-                              sx={{
-                                display: "flex",
-                                gap: 2,
-                                alignItems: "flex-start",
-                              }}
-                            >
-                              <Box sx={{ flex: 1 }}>
-                                {renderParameterField(tool, param, paramValue)}
-                              </Box>
-                              <Box sx={{ width: 80, flexShrink: 0 }}>
-                                {renderParameterField(tool, nextParam, nextParamValue)}
-                              </Box>
-                            </Box>
-                          );
-                          i += 2;
-                        } else {
-                          elements.push(renderParameterField(tool, param, paramValue));
-                          i += 1;
-                        }
-                      }
-                      return elements;
-                    })()}
-
-                    <CapabilityPanel
-                      capabilities={effectiveCapabilities}
-                      selectedModel={selectedModel}
-                    />
-
-                    <Stack spacing={1.5}>
-                      <Button
-                        type="submit"
-                        variant="contained"
-                        color="primary"
-                        fullWidth
-                        disabled={isSubmitDisabled}
-                        title={submitDisabledReason}
-                        sx={{
-                          minHeight: 44,
-                          fontWeight: 600,
-                          gap: 1,
-                        }}
-                      >
-                        {isProcessing ? (
-                          <>
-                            <CircularProgress size={18} color="inherit" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <span>
-                              {tool.id === "generate_image"
-                                ? "Generate Image"
-                                : "Apply Changes"}
-                            </span>
-                            <Icon
-                              path={Icons.ArrowRight}
-                              style={{ width: 18, height: 18 }}
-                            />
-                          </>
-                        )}
-                      </Button>
-                      {submitDisabledReason && !isProcessing && (
-                        <FormHelperText sx={{ textAlign: "center" }}>
-                          {submitDisabledReason}
-                        </FormHelperText>
-                      )}
-                      {isProcessing && (
-                        <Button
-                          type="button"
-                          variant="outlined"
-                          color="inherit"
-                          fullWidth
-                          onClick={onCancelProcessing}
-                        >
-                          Cancel Generation
-                        </Button>
-                      )}
-                    </Stack>
-                  </Stack>
-                </Box>
-              )}
-            </Paper>
-          );
-        })}
+              />
+            </ButtonBase>
+            {isAdvancedOpen && advancedTools.map(renderToolCard)}
+          </Stack>
+        )}
       </Box>
     </Box>
   );

@@ -27,11 +27,7 @@
       label: "Central Asian",
       description: "Central Asian appearance blending East Asian and Western Eurasian traits, including mixed eye shapes, medium skin tones, and straight to wavy hair textures.",
     },
-    {
-      id: "black_general",
-      label: "Black (General)",
-      description: "Broad Sub-Saharan African visual characteristics including darker skin tones, tightly curled to coiled hair textures, fuller lips, and strong facial bone structure.",
-    },
+
     {
       id: "west_african",
       label: "Sub-Saharan African – West African",

@@ -19,7 +19,7 @@ import {
 } from "../../lib/ethnicities";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map(
-  (category) => category.label
+  (category) => category.label,
 );
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
 const SHAPE_OPTIONS = [
@@ -219,7 +219,7 @@ export const TOOLS: ToolDefinition[] = [
       },
       {
         name: "character",
-        label: "Target Character",
+        label: "Target Character (optional)",
         type: "text",
         placeholder: "e.g. the boy, the girl",
         optional: true,

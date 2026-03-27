@@ -9,12 +9,7 @@ const FALLBACK_CATEGORIES: EthnicityCategory[] = [
     description:
       "Asian visual traits including straighter dark hair, softer facial profiles, and medium to lighter warm skin tones.",
   },
-  {
-    id: "black_general",
-    label: "Black (General)",
-    description:
-      "Sub-Saharan African traits such as deeper skin tones, tightly coiled hair, and fuller lips.",
-  },
+
   {
     id: "hispanic",
     label: "Hispanic / Latino",
@@ -49,7 +44,7 @@ interface EthnicityCatalogFile {
 }
 
 const normalizeCategory = (
-  entry: Partial<EthnicityCategory> | undefined
+  entry: Partial<EthnicityCategory> | undefined,
 ): EthnicityCategory | null => {
   if (!entry) return null;
   const label = isNonEmptyString(entry.label) ? entry.label.trim() : "";
@@ -94,30 +89,30 @@ const normalizeValue = (value?: string | null): string | null => {
 };
 
 export const getEthnicityById = (
-  id?: string | null
+  id?: string | null,
 ): EthnicityCategory | null => {
   const normalized = normalizeValue(id);
   if (!normalized) return null;
   return (
     ETHNICITY_CATEGORIES.find(
-      (category) => category.id.trim().toLowerCase() === normalized
+      (category) => category.id.trim().toLowerCase() === normalized,
     ) ?? null
   );
 };
 
 export const getEthnicityByLabel = (
-  label?: string | null
+  label?: string | null,
 ): EthnicityCategory | null => {
   const normalized = normalizeValue(label);
   if (!normalized) return null;
   return (
     ETHNICITY_CATEGORIES.find(
-      (category) => category.label.trim().toLowerCase() === normalized
+      (category) => category.label.trim().toLowerCase() === normalized,
     ) ?? null
   );
 };
 
 export const getEthnicityByValue = (
-  value?: string | null
+  value?: string | null,
 ): EthnicityCategory | null =>
   getEthnicityById(value) ?? getEthnicityByLabel(value);

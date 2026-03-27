@@ -1,4 +1,5 @@
 import React from "react";
+import imagePlaceholder from "../assets/image_placeholder.svg";
 import { ImageRecord } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { kBloomBlue, theme } from "../themes";
@@ -635,7 +636,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       }
     >
       <img
-        src="/assets/image_placeholder.svg"
+        src={imagePlaceholder}
         alt="Placeholder"
         style={{ width: 48, height: 48, opacity: 0.3 }}
       />

@@ -1,6 +1,7 @@
 import React from "react";
 import { Box } from "@mui/material";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import imagePlaceholder from "../assets/image_placeholder.svg";
 import { ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
@@ -244,7 +245,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         >
           <Box
             component="img"
-            src="/assets/image_placeholder.svg"
+            src={imagePlaceholder}
             alt="Placeholder"
             sx={{
               maxHeight: "60%",
@@ -266,7 +267,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         <Box sx={{ textAlign: "center", p: 3 }}>
           <Box
             component="img"
-            src="/assets/image_placeholder.svg"
+            src={imagePlaceholder}
             alt="Placeholder"
             sx={{ width: 48, height: 48, mb: 1.5, mx: "auto", opacity: 0.3 }}
           />

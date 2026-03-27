@@ -20,7 +20,12 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     // Prefer process.env (set by Playwright via webServer.env) over loadEnv (from .env files)
     const e2eApiKey = process.env.E2E_OPENROUTER_API_KEY || env.E2E_OPENROUTER_API_KEY || '';
+    const configuredBasePath = process.env.VITE_BASE_PATH || env.VITE_BASE_PATH || '/';
+    const basePath = configuredBasePath.endsWith('/')
+      ? configuredBasePath
+      : `${configuredBasePath}/`;
     return {
+      base: basePath,
       server: {
         port: 3000,
         host: '0.0.0.0',

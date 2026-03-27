@@ -66,7 +66,7 @@ interface ToolPanelProps {
 type IdleFriendlyWindow = Window & {
   requestIdleCallback?: (
     callback: () => void,
-    options?: { timeout?: number }
+    options?: { timeout?: number },
   ) => number;
   cancelIdleCallback?: (handle: number) => void;
 };
@@ -184,7 +184,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       setDraft(nextValue);
       // Don't commit on change - only on blur to avoid re-render cascade
     },
-    []
+    [],
   );
 
   const handleBlur = useCallback(
@@ -193,7 +193,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       draftRef.current = nextValue;
       commitRef.current(nextValue);
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -210,8 +210,8 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       const resolvedLineHeight = Number.isFinite(lineHeight)
         ? lineHeight
         : Number.isFinite(fontSize)
-          ? fontSize * 1.5
-          : 20;
+        ? fontSize * 1.5
+        : 20;
       const paddingTop = Number.parseFloat(styles.paddingTop);
       const paddingBottom = Number.parseFloat(styles.paddingBottom);
       const borderTopWidth = Number.parseFloat(styles.borderTopWidth);
@@ -222,7 +222,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
           (Number.isFinite(paddingTop) ? paddingTop : 0) +
           (Number.isFinite(paddingBottom) ? paddingBottom : 0) +
           (Number.isFinite(borderTopWidth) ? borderTopWidth : 0) +
-          (Number.isFinite(borderBottomWidth) ? borderBottomWidth : 0)
+          (Number.isFinite(borderBottomWidth) ? borderBottomWidth : 0),
       );
     };
 
@@ -245,7 +245,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       const maxReasonable = Math.max(160, Math.floor(window.innerHeight * 0.9));
       const clamped = Math.max(
         minimumHeight,
-        Math.min(Math.round(stored), maxReasonable)
+        Math.min(Math.round(stored), maxReasonable),
       );
       textarea.style.height = `${clamped}px`;
     };
@@ -302,7 +302,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       disabled={disabled}
       inputRef={(node) => {
         // When multiline, MUI renders a <textarea>.
-        textareaRef.current = (node as unknown as HTMLTextAreaElement | null);
+        textareaRef.current = node as unknown as HTMLTextAreaElement | null;
       }}
       sx={
         multiline
@@ -342,12 +342,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   selectedArtStyleId,
   onArtStyleChange,
 }) => {
-
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(() =>
-    activeToolId ? ADVANCED_TOOL_IDS.has(activeToolId) : false
+    activeToolId ? ADVANCED_TOOL_IDS.has(activeToolId) : false,
   );
 
   useEffect(() => {
@@ -366,7 +365,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           cacheKey,
           getArtStylesByCategories(param.artStyleCategories, {
             excludeNone: param.excludeNoneStyle,
-          })
+          }),
         );
       });
     });
@@ -401,12 +400,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     // Use a small delay to ensure the form is rendered
     const timeoutId = setTimeout(() => {
       const toolPanel = document.querySelector(
-        `[data-tool-id="${resolvedActiveToolId}"]`
+        `[data-tool-id="${resolvedActiveToolId}"]`,
       );
       if (toolPanel) {
-        const firstInput = toolPanel.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-          'input:not([type="hidden"]), textarea'
-        );
+        const firstInput = toolPanel.querySelector<
+          HTMLInputElement | HTMLTextAreaElement
+        >('input:not([type="hidden"]), textarea');
         if (firstInput) {
           firstInput.focus();
         }
@@ -419,26 +418,26 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     (toolId: string, name: string, value: string) => {
       onParamChange(toolId, name, value);
     },
-    [onParamChange]
+    [onParamChange],
   );
 
   const defaultTools = useMemo(
     () =>
       TOOLS.filter(
         (tool) =>
-          !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id)
+          !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id),
       ),
-    []
+    [],
   );
 
   const advancedTools = useMemo(
     () => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)),
-    []
+    [],
   );
 
   const textTools = useMemo(
     () => TOOLS.filter((tool) => TEXT_TOOL_IDS.has(tool.id)),
-    []
+    [],
   );
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
@@ -450,18 +449,18 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       if (param.type === "art-style") {
         const stylesForPicker = getArtStylesByCategories(
           param.artStyleCategories,
-          { excludeNone: param.excludeNoneStyle }
+          { excludeNone: param.excludeNoneStyle },
         );
         const candidate =
-          selectedArtStyleId ??
           toolParams[param.name] ??
           param.defaultValue ??
+          selectedArtStyleId ??
           "";
         if (!candidate.trim()) {
           return true;
         }
         const hasMatch = stylesForPicker.some(
-          (style) => style.id === candidate
+          (style) => style.id === candidate,
         );
         return !hasMatch;
       }
@@ -471,7 +470,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const handleSubmit = (
     event: React.FormEvent<HTMLFormElement>,
-    tool: ToolDefinition
+    tool: ToolDefinition,
   ) => {
     event.preventDefault();
     if (isProcessing) return;
@@ -487,7 +486,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     tool.parameters.forEach((param) => {
       if (param.type === "art-style") {
         const styleValue =
-          selectedArtStyleId ?? payload[param.name] ?? param.defaultValue ?? "";
+          payload[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
         payload[param.name] = styleValue;
       }
     });
@@ -504,7 +503,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const cacheKey = `${tool.id}:${param.name}`;
         const stylesForPicker = artStyleOptionsByParam.get(cacheKey) ?? [];
         const pickerValue =
-          selectedArtStyleId ?? (storedValue || param.defaultValue || "");
+          storedValue || param.defaultValue || selectedArtStyleId || "";
 
         return (
           <Stack key={param.name} spacing={1} sx={{ width: "100%" }}>
@@ -662,7 +661,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       onArtStyleChange,
       selectedArtStyleId,
       handleParamChange,
-    ]
+    ],
   );
 
   const renderSectionHeader = (label: string) => (
@@ -689,7 +688,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const submitDisabledReason = !isAuthenticated
       ? "Connect to OpenRouter"
       : needsTarget
-      ? "Add an image to edit first"
+      ? "Add an image to edit -->"
       : needsReference
       ? "Add reference images"
       : missingRequired
@@ -711,13 +710,10 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         : tool.capabilities
       : tool.capabilities;
 
-    const cardBackground = isSelected
-      ? "transparent"
-      : muiTheme.palette.background.paper;
-    const cardBorderColor = isSelected
-      ? muiTheme.palette.primary.main
-      : muiTheme.palette.divider;
-    const cardBorderWidth = isSelected ? 2 : 1;
+    const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
+    const cardBorderColor = isSelected ? "#f0d59a" : "transparent";
+    const cardBorderWidth = isSelected ? 2 : 0;
+    const labelColor = "#fff7ec";
     const ToolIcon = tool.icon;
 
     return (
@@ -727,9 +723,13 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         variant="outlined"
         sx={{
           borderRadius: 3,
-          border: `${cardBorderWidth}px solid ${cardBorderColor}`,
-          bgcolor: cardBackground,
-          boxShadow: "none",
+          borderStyle: "solid",
+          borderWidth: `${cardBorderWidth}px`,
+          borderColor: cardBorderColor,
+          background: cardBackground,
+          boxShadow: isSelected
+            ? "0 0 0 2px rgba(240, 213, 154, 0.42), 0 0 24px rgba(166, 128, 74, 0.18), 0 10px 24px rgba(8,10,20,0.2), inset 0 1px 0 rgba(255,255,255,0.07)"
+            : "0 8px 18px rgba(8,10,20,0.16), inset 0 1px 0 rgba(255,255,255,0.04)",
           transition: "all 0.2s ease",
         }}
       >
@@ -741,7 +741,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             textAlign: "left",
             p: 2,
             display: "grid",
-            gridTemplateColumns: "48px 1fr",
+            gridTemplateColumns: "32px 1fr",
             columnGap: 2,
             alignItems: "center",
             borderRadius: 3,
@@ -749,14 +749,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         >
           <Box
             sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2,
+              width: 32,
+              height: 32,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              bgcolor: alpha(muiTheme.palette.background.default, 0.7),
-              color: muiTheme.palette.text.secondary,
+              color: labelColor,
             }}
           >
             <ToolIcon sx={{ fontSize: 26 }} />
@@ -765,8 +763,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             <Typography
               variant="subtitle1"
               sx={{
-                fontWeight: 600,
-                color: alpha(muiTheme.palette.text.primary, 0.75),
+                fontWeight: 400,
+                color: labelColor,
               }}
             >
               {tool.title}
@@ -774,7 +772,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             {isSelected && tool.description && (
               <Typography
                 variant="body2"
-                sx={{ mt: 0.5, color: muiTheme.palette.text.secondary }}
+                sx={{ mt: 0.5, color: "rgba(255, 247, 236, 0.82)" }}
               >
                 {tool.description}
               </Typography>
@@ -790,7 +788,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               px: 2,
               pb: 2.5,
               pt: 0,
-              borderTop: `1px solid ${muiTheme.palette.divider}`,
             }}
           >
             <Stack spacing={2} mt={2}>
@@ -818,13 +815,19 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                           {renderParameterField(tool, param, paramValue)}
                         </Box>
                         <Box sx={{ width: 80, flexShrink: 0 }}>
-                          {renderParameterField(tool, nextParam, nextParamValue)}
+                          {renderParameterField(
+                            tool,
+                            nextParam,
+                            nextParamValue,
+                          )}
                         </Box>
-                      </Box>
+                      </Box>,
                     );
                     i += 2;
                   } else {
-                    elements.push(renderParameterField(tool, param, paramValue));
+                    elements.push(
+                      renderParameterField(tool, param, paramValue),
+                    );
                     i += 1;
                   }
                 }
@@ -846,7 +849,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   title={submitDisabledReason}
                   sx={{
                     minHeight: 44,
-                    fontWeight: 600,
+                    fontWeight: 400,
                     gap: 1,
                   }}
                 >
@@ -870,7 +873,13 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   )}
                 </Button>
                 {submitDisabledReason && !isProcessing && (
-                  <FormHelperText sx={{ textAlign: "center" }}>
+                  <FormHelperText
+                    sx={{
+                      textAlign: "center",
+                      fontSize: "1rem",
+                      color: muiTheme.palette.error.main,
+                    }}
+                  >
                     {submitDisabledReason}
                   </FormHelperText>
                 )}
@@ -901,8 +910,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        borderRight: `1px solid ${muiTheme.palette.divider}`,
-        boxShadow: muiTheme.shadows[8],
         zIndex: 20,
         bgcolor: muiTheme.palette.background.default,
       }}

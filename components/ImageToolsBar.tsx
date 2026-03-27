@@ -61,6 +61,8 @@ const parsePanelDrop = (id: unknown):
 interface ImageToolsPanelBar {
   appState: AppState;
   selectedModel: ModelInfo | null;
+  isToolRailDisabled: boolean;
+  onDisabledToolRailClick: () => void;
   targetImage: ImageRecord | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
@@ -104,6 +106,8 @@ interface ImageToolsPanelBar {
 export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   appState,
   selectedModel,
+  isToolRailDisabled,
+  onDisabledToolRailClick,
   targetImage,
   referenceImages,
   rightImage,
@@ -138,6 +142,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onToggleHistoryStar,
   onDismissError,
 }) => {
+  const majorElementGap = "30px";
   const hasTargetImage = !!targetImage;
   const debugLog = React.useCallback((...args: any[]) => {
     try {
@@ -318,22 +323,57 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
         </Stack>
       )}
 
-      <Box sx={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
-        <ImageTool
-          onApplyTool={onApplyTool}
-          isProcessing={appState.isProcessing}
-          onCancelProcessing={onCancelProcessing}
-          onToolSelect={onToolSelect}
-          referenceImageCount={referenceImages.length}
-          hasTargetImage={hasTargetImage}
-          isAuthenticated={appState.isAuthenticated}
-          selectedModel={selectedModel}
-          activeToolId={activeToolId}
-          paramsByTool={toolParams}
-          onParamChange={onParamChange}
-          selectedArtStyleId={selectedArtStyleId}
-          onArtStyleChange={onArtStyleChange}
-        />
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          overflow: "hidden",
+          minHeight: 0,
+          columnGap: majorElementGap,
+        }}
+      >
+        <Box
+          sx={{
+            position: "relative",
+            display: "flex",
+            opacity: isToolRailDisabled ? 0.45 : 1,
+            transition: "opacity 180ms ease",
+          }}
+        >
+          <ImageTool
+            onApplyTool={onApplyTool}
+            isProcessing={appState.isProcessing}
+            onCancelProcessing={onCancelProcessing}
+            onToolSelect={onToolSelect}
+            referenceImageCount={referenceImages.length}
+            hasTargetImage={hasTargetImage}
+            isAuthenticated={appState.isAuthenticated}
+            selectedModel={selectedModel}
+            activeToolId={activeToolId}
+            paramsByTool={toolParams}
+            onParamChange={onParamChange}
+            selectedArtStyleId={selectedArtStyleId}
+            onArtStyleChange={onArtStyleChange}
+          />
+          {isToolRailDisabled && (
+            <Box
+              component="button"
+              type="button"
+              aria-label="Connect to OpenRouter to use tools"
+              onClick={onDisabledToolRailClick}
+              sx={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 2,
+                cursor: "not-allowed",
+                background: "transparent",
+                border: 0,
+                m: 0,
+                p: 0,
+              }}
+            />
+          )}
+        </Box>
 
         <DndContext
           sensors={sensors}
@@ -415,6 +455,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               flex: 1,
               display: "flex",
               flexDirection: "column",
+              rowGap: majorElementGap,
               minWidth: 0,
               minHeight: 0,
             }}

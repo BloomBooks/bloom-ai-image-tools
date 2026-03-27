@@ -1,11 +1,31 @@
-import type * as React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
+import { keyframes } from "@emotion/react";
 
 const OPENROUTER_CREDITS_URL = "https://openrouter.ai/settings/credits";
+const wiggle = keyframes`
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(-6px) rotate(-4deg);
+  }
+  36% {
+    transform: translateX(6px) rotate(4deg);
+  }
+  54% {
+    transform: translateX(-4px) rotate(-3deg);
+  }
+  72% {
+    transform: translateX(4px) rotate(3deg);
+  }
+`;
 
 export type OpenRouterCreditsHeaderProps = {
   shouldShowConnectToOpenRouterCTA: boolean;
   onOpenSettingsDialog: () => void;
+  connectCtaAttentionKey?: number;
 
   // Credits UI state (only used when shouldShowConnectToOpenRouterCTA=false)
   creditsTooltipLabel: string;
@@ -34,6 +54,7 @@ export type OpenRouterCreditsHeaderProps = {
 export function OpenRouterCreditsHeader({
   shouldShowConnectToOpenRouterCTA,
   onOpenSettingsDialog,
+  connectCtaAttentionKey = 0,
   creditsTooltipLabel,
   creditsTooltipLines,
   creditsProgressFraction,
@@ -44,11 +65,48 @@ export function OpenRouterCreditsHeader({
   progressFillColor,
   appColors,
 }: OpenRouterCreditsHeaderProps) {
+  const [isWiggling, setIsWiggling] = useState(false);
+  const wiggleTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!shouldShowConnectToOpenRouterCTA || connectCtaAttentionKey === 0) {
+      return;
+    }
+
+    if (wiggleTimeoutRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(wiggleTimeoutRef.current);
+    }
+
+    setIsWiggling(false);
+
+    let rafId = 0;
+    if (typeof window !== "undefined") {
+      rafId = window.requestAnimationFrame(() => {
+        setIsWiggling(true);
+        wiggleTimeoutRef.current = window.setTimeout(() => {
+          setIsWiggling(false);
+          wiggleTimeoutRef.current = null;
+        }, 560);
+      });
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.cancelAnimationFrame(rafId);
+        if (wiggleTimeoutRef.current !== null) {
+          window.clearTimeout(wiggleTimeoutRef.current);
+          wiggleTimeoutRef.current = null;
+        }
+      }
+    };
+  }, [connectCtaAttentionKey, shouldShowConnectToOpenRouterCTA]);
+
   if (shouldShowConnectToOpenRouterCTA) {
     return (
       <Button
         type="button"
         onClick={onOpenSettingsDialog}
+        data-testid="openrouter-connect-cta"
         variant="contained"
         disableElevation
         sx={{
@@ -56,12 +114,14 @@ export function OpenRouterCreditsHeader({
           py: 1.25,
           borderRadius: "999px",
           fontSize: "0.75rem",
-          fontWeight: 600,
+          fontWeight: 400,
           letterSpacing: "0.28em",
           textTransform: "uppercase",
           backgroundColor: appColors.accent,
           color: appColors.surface,
           boxShadow: appColors.accentShadow,
+          transformOrigin: "center",
+          animation: isWiggling ? `${wiggle} 560ms ease` : "none",
           transition: "transform 150ms ease, background-color 150ms ease",
           "&:hover": {
             transform: "translateY(-2px)",

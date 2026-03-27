@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Box, Stack, Typography, Button } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
@@ -186,7 +187,9 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
             opacity: disabled ? 0.4 : 1,
             cursor: disabled ? "not-allowed" : "pointer",
             color: theme.colors.textPrimary,
+            transition: "transform 150ms ease, background-color 150ms ease",
             "&:hover": {
+              transform: "translateY(-1px)",
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
             },
@@ -213,15 +216,40 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
               />
             )}
           </Box>
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+            <Typography
+              variant="caption"
+              sx={{
+                display: "block",
+                mb: 0.25,
+                color: theme.colors.accent,
+                fontWeight: 400,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Style:
+            </Typography>
             <Typography
               variant="subtitle1"
-              fontWeight={600}
+              fontWeight={400}
               color={theme.colors.textPrimary}
+              sx={{
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+                lineHeight: 1.3,
+              }}
             >
               {selected ? selected.name : "Choose an art style"}
             </Typography>
           </Box>
+          <ExpandMoreIcon
+            sx={{
+              flexShrink: 0,
+              color: theme.colors.textMuted,
+              fontSize: 24,
+            }}
+          />
         </Button>
       </Stack>
       {hasOpenedDialog && (

@@ -103,7 +103,7 @@ export const TOOLS: ToolDefinition[] = [
     parameters: [
       {
         name: "styleId",
-        label: "New Style",
+        label: "",
         type: "art-style",
         defaultValue: "cleanup-line-art",
         artStyleCategories: ["Line Art"],
@@ -162,7 +162,7 @@ export const TOOLS: ToolDefinition[] = [
     parameters: [
       {
         name: "styleId",
-        label: "New Style",
+        label: "",
         type: "art-style",
         defaultValue: DEFAULT_ART_STYLE_ID,
         excludeNoneStyle: true,

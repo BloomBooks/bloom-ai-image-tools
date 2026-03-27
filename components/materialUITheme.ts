@@ -5,9 +5,9 @@ import { theme as appTheme } from "../themes";
 export const kBloomToolboxWhite = "#ffffff88"; //See @bloom-toolboxWhite
 export const kBloomDisabledOpacity = 0.38;
 export const kBloomDisabledText = `rgba(0, 0, 0, ${kBloomDisabledOpacity})`;
-export const kBloomBlue = "#1d94a4";
-export const kBloomBlueTextBackground = "#19818f"; // darker for better contrast
-export const kBloomBlue50Transparent = "#8ecad280";
+export const kBloomBlue = "#d6bb7b";
+export const kBloomBlueTextBackground = "#7a6538"; // darker for better contrast
+export const kBloomBlue50Transparent = "#d6bb7b80";
 export const kBloomPurple = "#96668f";
 export const kTextOnPurple = "#31202eff";
 export const kDisabledTextOnPurple = "#724a6aff";

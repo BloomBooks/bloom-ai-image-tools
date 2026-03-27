@@ -10,7 +10,7 @@ import {
 
 const DIALOG_MAX_WIDTH = "min(1000px, 92vw)";
 const DIALOG_MAX_HEIGHT = "min(900px, 90vh)";
-const SELECTED_CARD_BACKGROUND = "rgba(29, 148, 164, 0.16)";
+const SELECTED_CARD_BACKGROUND = "rgba(214, 187, 123, 0.18)";
 
 interface ArtStyleChooserDialogProps {
   isOpen: boolean;

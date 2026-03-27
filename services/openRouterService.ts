@@ -1,3 +1,5 @@
+import type { ModelReasoningLevel } from "../types";
+
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
 
@@ -16,7 +18,7 @@ export class OpenRouterApiError extends Error {
       reason?: OpenRouterApiErrorReason;
       detailMessage?: string;
       infoUrl?: string;
-    }
+    },
   ) {
     super(message);
     this.name = "OpenRouterApiError";
@@ -57,6 +59,7 @@ export interface ImageConfig {
 export interface EditImageOptions {
   signal?: AbortSignal;
   imageConfig?: ImageConfig;
+  reasoningLevel?: ModelReasoningLevel;
 }
 
 export interface OpenRouterCredits {
@@ -161,16 +164,17 @@ export const editImage = async (
   prompt: string,
   apiKey: string,
   modelId?: string,
-  options?: EditImageOptions
+  options?: EditImageOptions,
 ): Promise<EditImageResult> => {
   const key = apiKey?.trim();
   if (!key) {
     throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue."
+      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
     );
   }
 
   const { signal, imageConfig } = options ?? {};
+  const reasoningLevel = options?.reasoningLevel ?? "default";
   const startTime = performance.now();
   const images = (base64Images || []).filter((x) => !!x);
   const hasImage = images.length > 0;
@@ -213,6 +217,14 @@ export const editImage = async (
     },
   };
 
+  if (reasoningLevel !== "default") {
+    body.reasoning = {
+      effort: reasoningLevel === "none" ? "none" : reasoningLevel,
+      // We only need the image output, not the model's reasoning text.
+      exclude: true,
+    };
+  }
+
   const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -253,7 +265,7 @@ export const editImage = async (
       {
         status: response.status,
         detailMessage,
-      }
+      },
     );
   }
 
@@ -285,8 +297,8 @@ export const editImage = async (
   const b64 = imageUrl?.startsWith("data:image")
     ? imageUrl
     : (data?.data?.[0]?.b64_json as string | undefined)
-    ? `data:image/png;base64,${data.data[0].b64_json}`
-    : null;
+      ? `data:image/png;base64,${data.data[0].b64_json}`
+      : null;
 
   if (!b64) {
     throw new Error("OpenRouter did not return an image.");
@@ -306,12 +318,12 @@ export const editImage = async (
 
 export const fetchOpenRouterCredits = async (
   apiKey: string,
-  options?: FetchOpenRouterCreditsOptions
+  options?: FetchOpenRouterCreditsOptions,
 ): Promise<OpenRouterCredits> => {
   const key = apiKey?.trim();
   if (!key) {
     throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue."
+      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
     );
   }
 
@@ -343,7 +355,7 @@ export const fetchOpenRouterCredits = async (
       {
         status: response.status,
         detailMessage,
-      }
+      },
     );
   }
 

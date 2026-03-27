@@ -10,31 +10,63 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Typography,
 } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import type { ModelInfo } from "../types";
+import type {
+  ModelInfo,
+  ModelReasoningLevel,
+  ModelReasoningLevelByModelId,
+} from "../types";
 import { isMacPlatform } from "../lib/platformUtils";
-import { darkTheme, lightTheme } from "./materialUITheme";
+import { darkTheme } from "./materialUITheme";
 
 interface ModelChooserDialogProps {
   isOpen: boolean;
   models: ModelInfo[];
   selectedModelId: string;
-  onSelect: (modelId: string) => void;
+  modelReasoningLevels: ModelReasoningLevelByModelId;
+  onSelect: (
+    modelId: string,
+    reasoningLevels: ModelReasoningLevelByModelId,
+  ) => void;
   onClose: () => void;
 }
+
+const REASONING_LEVEL_OPTIONS: Array<{
+  value: ModelReasoningLevel;
+  label: string;
+}> = [
+  { value: "default", label: "Default" },
+  { value: "none", label: "None" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const isModelReasoningLevel = (
+  value: unknown,
+): value is ModelReasoningLevel => {
+  return REASONING_LEVEL_OPTIONS.some((option) => option.value === value);
+};
 
 export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   isOpen,
   models,
   selectedModelId,
+  modelReasoningLevels,
   onSelect,
   onClose,
 }) => {
   const [pendingModelId, setPendingModelId] = useState(selectedModelId);
+  const [pendingModelReasoningLevels, setPendingModelReasoningLevels] =
+    useState<ModelReasoningLevelByModelId>({ ...modelReasoningLevels });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -50,13 +82,35 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   useEffect(() => {
     if (isOpen) {
       setPendingModelId(selectedModelId);
+      setPendingModelReasoningLevels({ ...modelReasoningLevels });
     }
-  }, [isOpen, selectedModelId]);
+  }, [isOpen, selectedModelId, modelReasoningLevels]);
 
   const handleConfirm = () => {
     if (!pendingModelId) return;
-    onSelect(pendingModelId);
+    onSelect(pendingModelId, pendingModelReasoningLevels);
     onClose();
+  };
+
+  const getReasoningLevelForModel = (modelId: string): ModelReasoningLevel => {
+    const configuredLevel = pendingModelReasoningLevels[modelId];
+    if (configuredLevel) {
+      return configuredLevel;
+    }
+
+    const model = models.find((item) => item.id === modelId);
+    const initialLevel = model?.initialReasoningLevel;
+    return isModelReasoningLevel(initialLevel) ? initialLevel : "default";
+  };
+
+  const handleReasoningChange = (
+    modelId: string,
+    value: ModelReasoningLevel,
+  ) => {
+    setPendingModelReasoningLevels((prev) => ({
+      ...prev,
+      [modelId]: value,
+    }));
   };
 
   const actionButtons = (() => {
@@ -133,6 +187,8 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                       variant="outlined"
                       sx={{
                         height: "100%",
+                        display: "flex",
+                        flexDirection: "column",
                         borderColor: isSelected ? "primary.main" : "divider",
                         boxShadow: isSelected ? 6 : "none",
                         transition: (themeInstance) =>
@@ -141,13 +197,13 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                             {
                               duration:
                                 themeInstance.transitions.duration.short,
-                            }
+                            },
                           ),
                       }}
                     >
                       <CardActionArea
                         onClick={() => setPendingModelId(model.id)}
-                        sx={{ height: "100%" }}
+                        sx={{ flex: "0 0 auto" }}
                       >
                         <CardContent>
                           <Stack
@@ -201,6 +257,37 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                           </Box>
                         </CardContent>
                       </CardActionArea>
+                      <Box sx={{ px: 2, pb: 2 }}>
+                        <FormControl
+                          fullWidth
+                          size="small"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                        >
+                          <InputLabel id={`reasoning-label-${model.id}`}>
+                            Reasoning
+                          </InputLabel>
+                          <Select
+                            labelId={`reasoning-label-${model.id}`}
+                            value={getReasoningLevelForModel(model.id)}
+                            label="Reasoning"
+                            data-testid={`model-reasoning-${model.id}`}
+                            onChange={(event) =>
+                              handleReasoningChange(
+                                model.id,
+                                event.target.value as ModelReasoningLevel,
+                              )
+                            }
+                          >
+                            {REASONING_LEVEL_OPTIONS.map((option) => (
+                              <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
                     </Card>
                   </Grid>
                 );

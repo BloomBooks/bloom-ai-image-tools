@@ -27,6 +27,18 @@ export type ModelCapabilities = Partial<
 // Tool capability flags are boolean: true means the tool uses that capability.
 export type ToolCapabilities = Partial<Record<CapabilityName, boolean>>;
 
+export type ModelReasoningLevel =
+  | "default"
+  | "none"
+  | "low"
+  | "medium"
+  | "high";
+
+export type ModelReasoningLevelByModelId = Record<
+  string,
+  ModelReasoningLevel
+>;
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -35,6 +47,7 @@ export interface ModelInfo {
   default?: boolean;
   badge?: string;
   capabilities?: ModelCapabilities;
+  initialReasoningLevel?: ModelReasoningLevel;
 }
 
 export interface ArtStyleDefinition {
@@ -84,6 +97,7 @@ export interface ImageRecordData {
   durationMs: number;
   cost: number;
   model: string; // Model ID used (e.g., "google/gemini-2.5-flash-image")
+  reasoningLevel?: ModelReasoningLevel | null;
   timestamp: number;
   promptUsed: string;
   sourceSummary?: string | null;
@@ -142,6 +156,7 @@ export interface PersistedImageToolsState {
   paramsByTool: ToolParamsById;
   activeToolId: string | null;
   selectedModelId: string | null;
+  modelReasoningLevels?: ModelReasoningLevelByModelId;
   auth: AuthState;
   /** When true, the persisted history array is ordered newest -> oldest. */
   historyNewestFirst?: boolean;

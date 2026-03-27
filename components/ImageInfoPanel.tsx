@@ -26,6 +26,25 @@ interface ImageInfoPanelProps {
   item: ImageRecord;
 }
 
+const formatReasoningLevel = (
+  value: ImageRecord["reasoningLevel"]
+): string | null => {
+  switch (value) {
+    case "default":
+      return "Default";
+    case "none":
+      return "None";
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+    default:
+      return null;
+  }
+};
+
 const resolveStyleSummary = (item: ImageRecord): string | null => {
   const paramStyleId = item.parameters?.styleId;
   const candidates = [item.sourceStyleId, paramStyleId];
@@ -104,6 +123,11 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       label: "Model",
       value: item.model || null,
       testId: "history-model",
+    },
+    {
+      label: "Reasoning",
+      value: formatReasoningLevel(item.reasoningLevel),
+      testId: "history-reasoning",
     },
     {
       label: "Art Style",

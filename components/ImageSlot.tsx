@@ -389,15 +389,18 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       const isNewImageTool = tool?.editImage === false;
       const modelId = (image.model || "").trim();
       const modelName = getModelNameById(modelId) || modelId;
+      const reasoningLevel = (image.reasoningLevel || "").trim();
       const pngMetadata = modelId
         ? isNewImageTool
           ? {
               IllustratorModel: modelName,
               IllustratorModelId: modelId,
+              IllustratorReasoningLevel: reasoningLevel,
             }
           : {
               EditorModel: modelName,
               EditorModelId: modelId,
+              EditorReasoningLevel: reasoningLevel,
             }
         : undefined;
 

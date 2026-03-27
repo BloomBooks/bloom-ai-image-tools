@@ -40,7 +40,21 @@ test.describe("state persistence", () => {
     // Wait for dialog to open
     const modelOption = page.getByRole("button", { name: /GPT-5 Image Mini/i });
     await expect(modelOption).toBeVisible();
+
+    // If the user hasn't chosen a level for a model yet, use the model's
+    // initialReasoningLevel from the registry.
+    await expect(
+      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview")
+    ).toContainText(/Medium/i);
+
     await modelOption.click();
+
+    const miniReasoning = page.getByTestId(
+      "model-reasoning-openai/gpt-5-image-mini"
+    );
+    await expect(miniReasoning).toBeVisible();
+    await miniReasoning.click();
+    await page.getByRole("option", { name: /^High$/i }).click();
 
     const okButton = page.getByRole("button", { name: /^OK$/i });
     await expect(okButton).toBeVisible();
@@ -84,6 +98,15 @@ test.describe("state persistence", () => {
     await expect(page.getByRole("button", { name: /Model:/i })).toHaveText(
       /GPT-5 Image Mini/
     );
+
+    await page.getByRole("button", { name: /Model:/i }).click();
+    await expect(
+      page.getByTestId("model-reasoning-openai/gpt-5-image-mini")
+    ).toContainText(/High/i);
+    await expect(
+      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview")
+    ).toContainText(/Medium/i);
+    await page.getByRole("button", { name: /^Cancel$/i }).click();
   });
 
 

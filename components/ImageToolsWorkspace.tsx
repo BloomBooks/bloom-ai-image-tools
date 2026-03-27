@@ -20,7 +20,8 @@ import {
   ImageRecord,
   ImageToolsStatePersistence,
   HistoryManifest,
-  ModelInfo,
+  ModelReasoningLevel,
+  ModelReasoningLevelByModelId,
   PersistedAppState,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
@@ -166,6 +167,43 @@ const hashString = (value: string) => {
     hash |= 0;
   }
   return Math.abs(hash).toString(36);
+};
+
+const MODEL_REASONING_LEVEL_VALUES: ModelReasoningLevel[] = [
+  "default",
+  "none",
+  "low",
+  "medium",
+  "high",
+];
+
+const isModelReasoningLevel = (
+  value: unknown
+): value is ModelReasoningLevel => {
+  return (
+    typeof value === "string" &&
+    MODEL_REASONING_LEVEL_VALUES.includes(value as ModelReasoningLevel)
+  );
+};
+
+const normalizeModelReasoningLevels = (
+  value: unknown
+): ModelReasoningLevelByModelId => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized: ModelReasoningLevelByModelId = {};
+  Object.entries(value as Record<string, unknown>).forEach(([modelId, level]) => {
+    const cleanModelId = modelId.trim();
+    if (!cleanModelId || !isModelReasoningLevel(level)) {
+      return;
+    }
+
+    normalized[cleanModelId] = level;
+  });
+
+  return normalized;
 };
 
 const buildEnvironmentEntry = (url: string, index: number): ImageRecord => ({
@@ -340,6 +378,8 @@ export function ImageToolsWorkspace({
   const [selectedModelId, setSelectedModelId] = useState<string>(
     DEFAULT_MODEL?.id || ""
   );
+  const [modelReasoningLevels, setModelReasoningLevels] =
+    useState<ModelReasoningLevelByModelId>({});
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -815,6 +855,9 @@ export function ImageToolsWorkspace({
           ) {
             setSelectedModelId(persisted.selectedModelId);
           }
+          setModelReasoningLevels(
+            normalizeModelReasoningLevels(persisted.modelReasoningLevels)
+          );
           if (persisted.auth?.apiKey) {
             setApiKey(persisted.auth.apiKey);
             setAuthMethod(persisted.auth.authMethod ?? null);
@@ -876,6 +919,7 @@ export function ImageToolsWorkspace({
   const paramsByToolRef = useRef(paramsByTool);
   const activeToolIdRef = useRef(activeToolId);
   const selectedModelIdRef = useRef(selectedModelId);
+  const modelReasoningLevelsRef = useRef(modelReasoningLevels);
   const selectedArtStyleIdRef = useRef(selectedArtStyleId);
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
@@ -897,6 +941,9 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     selectedModelIdRef.current = selectedModelId;
   }, [selectedModelId]);
+  useEffect(() => {
+    modelReasoningLevelsRef.current = modelReasoningLevels;
+  }, [modelReasoningLevels]);
   useEffect(() => {
     selectedArtStyleIdRef.current = selectedArtStyleId;
   }, [selectedArtStyleId]);
@@ -1046,6 +1093,7 @@ export function ImageToolsWorkspace({
         paramsByTool: paramsByToolRef.current,
         activeToolId: activeToolIdRef.current,
         selectedModelId: selectedModelIdRef.current || null,
+        modelReasoningLevels: modelReasoningLevelsRef.current,
         selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
         auth: {
           apiKey: apiKeyRef.current,
@@ -1152,6 +1200,7 @@ export function ImageToolsWorkspace({
     paramsByTool,
     activeToolId,
     selectedModelId,
+    modelReasoningLevels,
     selectedArtStyleId,
     apiKey,
     authMethod,
@@ -1351,6 +1400,16 @@ export function ImageToolsWorkspace({
       // rather than whatever the UI's default model happens to be.
       const modelIdForRequest =
         envApiKey && !apiKey ? undefined : selectedModel?.id;
+      const selectedModelIdForReasoning = selectedModel?.id || "";
+      const configuredReasoningLevel =
+        modelReasoningLevels[selectedModelIdForReasoning];
+      const initialReasoningLevel = isModelReasoningLevel(
+        selectedModel?.initialReasoningLevel,
+      )
+        ? selectedModel.initialReasoningLevel
+        : "default";
+      const reasoningLevelForRequest: ModelReasoningLevel =
+        configuredReasoningLevel ?? initialReasoningLevel;
 
       // Build image configuration from tool parameters (shape/size)
       const imageConfig: ImageConfig = {
@@ -1363,7 +1422,11 @@ export function ImageToolsWorkspace({
         prompt,
         resolvedApiKey,
         modelIdForRequest,
-        { signal: abortController.signal, imageConfig }
+        {
+          signal: abortController.signal,
+          imageConfig,
+          reasoningLevel: reasoningLevelForRequest,
+        }
       );
 
       const processedImageData = await applyPostProcessingPipeline(
@@ -1385,6 +1448,7 @@ export function ImageToolsWorkspace({
         durationMs: result.duration,
         cost: result.cost,
         model: result.model,
+        reasoningLevel: reasoningLevelForRequest,
         timestamp: Date.now(),
         promptUsed: prompt,
         sourceStyleId: derivedSourceStyleId,
@@ -1805,8 +1869,12 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, error: null }));
   };
 
-  const handleSelectModel = (modelId: string) => {
+  const handleSelectModel = (
+    modelId: string,
+    reasoningLevels: ModelReasoningLevelByModelId,
+  ) => {
     setSelectedModelId(modelId);
+    setModelReasoningLevels(normalizeModelReasoningLevels(reasoningLevels));
   };
 
   const targetImage = state.targetImageId
@@ -2130,6 +2198,7 @@ export function ImageToolsWorkspace({
           isOpen={isModelDialogOpen}
           models={MODEL_CATALOG}
           selectedModelId={selectedModel?.id || ""}
+          modelReasoningLevels={modelReasoningLevels}
           onSelect={handleSelectModel}
           onClose={() => setIsModelDialogOpen(false)}
         />

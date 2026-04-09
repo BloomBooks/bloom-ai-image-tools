@@ -42,6 +42,9 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      optimizeDeps: {
+        exclude: ['rembg-webgpu'],
+      },
       build: {
         outDir: 'demo-dist',
       }

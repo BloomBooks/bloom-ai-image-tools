@@ -280,13 +280,11 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: "remove_background",
     title: "Remove Background",
-    description: "Isolate the subject on a transparent background.",
+    description: "Replace the background with transparency.",
     icon: CropFreeOutlinedIcon,
     parameters: [],
     promptTemplate: () =>
-      `Replace the background with a perfectly flat chroma key green screen (#00FF66) while keeping the subject, lighting, and shadows untouched. Ensure the background is a solid, even fill with no checkerboard or transparency.`,
+      `Replace the background with transparency.`,
     referenceImages: "0",
-    capabilities: { "transparent-background": true },
-    postProcessingFunctions: ["green-screen-to-alpha"],
   },
 ];

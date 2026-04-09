@@ -681,11 +681,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
+    const requiresOpenRouter = tool.id !== "remove_background";
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
     const missingRequired = hasUnfilledRequiredParams(tool);
-    const submitDisabledReason = !isAuthenticated
+    const submitDisabledReason = !isAuthenticated && requiresOpenRouter
       ? "Connect to OpenRouter"
       : needsTarget
       ? "Add an image to edit -->"
@@ -696,7 +697,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       : undefined;
     const isSubmitDisabled =
       isProcessing ||
-      !isAuthenticated ||
+      (requiresOpenRouter && !isAuthenticated) ||
       needsTarget ||
       needsReference ||
       missingRequired;
@@ -834,10 +835,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 return elements;
               })()}
 
-              <CapabilityPanel
-                capabilities={effectiveCapabilities}
-                selectedModel={selectedModel}
-              />
+              {requiresOpenRouter && (
+                <CapabilityPanel
+                  capabilities={effectiveCapabilities}
+                  selectedModel={selectedModel}
+                />
+              )}
 
               <Stack spacing={1.5}>
                 <Button

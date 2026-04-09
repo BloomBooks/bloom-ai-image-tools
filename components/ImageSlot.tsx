@@ -207,7 +207,7 @@ const VARIANT_LAYOUT_STYLES: Record<
 };
 
 const TRANSPARENCY_TILE_SIZE = 16;
-const TRANSPARENCY_BLOOM_BLUE = "#8ecad2"; // 50% blend of Bloom blue + white
+const TRANSPARENCY_BLOOM_BLUE = "rgba(29, 143, 175, 0.2)";
 const TRANSPARENCY_PATTERN_SIZE = TRANSPARENCY_TILE_SIZE * 2;
 const TRANSPARENCY_CHECKERBOARD_IMAGE = (() => {
   const tile = TRANSPARENCY_TILE_SIZE;
@@ -298,15 +298,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
   }, []);
 
-  const lastDragPointerDownRef = React.useRef<
-    | {
-        t: number;
-        x: number;
-        y: number;
-        pointerType: string;
-      }
-    | null
-  >(null);
+  const lastDragPointerDownRef = React.useRef<{
+    t: number;
+    x: number;
+    y: number;
+    pointerType: string;
+  } | null>(null);
 
   const mergedControls: Required<ImageSlotControls> = {
     upload: controls?.upload ?? true,
@@ -510,10 +507,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   };
 
   const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
     if (lastDragPointerDownRef.current) {
       debugLog(
-        `dragstart(img) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`
+        `dragstart(img) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`,
       );
     } else {
       debugLog("dragstart(img) (no prior pointerdown recorded)");
@@ -524,10 +522,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
   const handleContainerDragStart = (event: React.DragEvent<HTMLDivElement>) => {
     if (variant !== "thumb") return;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
     if (lastDragPointerDownRef.current) {
       debugLog(
-        `dragstart(container) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`
+        `dragstart(container) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`,
       );
     } else {
       debugLog("dragstart(container) (no prior pointerdown recorded)");
@@ -695,15 +694,18 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             (variant === "thumb" && !!draggableImageId && !disabled);
           if (!isPotentiallyDraggable) return;
           lastDragPointerDownRef.current = {
-            t: typeof performance !== "undefined" ? performance.now() : Date.now(),
+            t:
+              typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now(),
             x: event.clientX,
             y: event.clientY,
             pointerType: (event as any).pointerType || "unknown",
           };
           debugLog(
             `pointerDown(${lastDragPointerDownRef.current.pointerType}) @(${Math.round(
-              event.clientX
-            )},${Math.round(event.clientY)}) variant=${variant}`
+              event.clientX,
+            )},${Math.round(event.clientY)}) variant=${variant}`,
           );
         }}
         draggable={variant === "thumb" && !!draggableImageId && !disabled}
@@ -714,19 +716,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             variant === "thumb"
               ? "transparent"
               : isDragOver
-              ? theme.colors.dropZone
-              : isHovered
-              ? hoverBackgroundColor
-              : baseBackgroundColor,
+                ? theme.colors.dropZone
+                : isHovered
+                  ? hoverBackgroundColor
+                  : baseBackgroundColor,
           opacity: disabled
             ? 0.4
             : variant === "thumb"
-            ? isSelected
-              ? 1
-              : isHovered
-              ? 1
-              : 0.8
-            : 1,
+              ? isSelected
+                ? 1
+                : isHovered
+                  ? 1
+                  : 0.8
+              : 1,
           cursor:
             !disabled && (onClick || variant === "thumb")
               ? "pointer"
@@ -736,10 +738,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           borderColor: isDragOver
             ? theme.colors.dropZoneBorder
             : variant === "thumb"
-            ? isSelected
-              ? theme.colors.accent
-              : theme.colors.border
-            : theme.colors.panelBorder,
+              ? isSelected
+                ? theme.colors.accent
+                : theme.colors.border
+              : theme.colors.panelBorder,
           boxShadow:
             variant === "thumb"
               ? isSelected

@@ -86,6 +86,7 @@ import {
   getToolReferenceMode,
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
+import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import {
   addItemToStrip,
@@ -1413,56 +1414,84 @@ export function ImageToolsWorkspace({
           ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
           : basePrompt;
 
-      const resolvedApiKey = effectiveApiKey;
-      if (!resolvedApiKey) {
-        setState((prev) => ({
-          ...prev,
-          isProcessing: false,
-          error: "Connect to OpenRouter before running tools.",
-        }));
-        return;
-      }
+      const usesLocalBackgroundRemoval = tool.id === "remove_background";
 
-      shouldRefreshCredits = true;
+      let processedImageData: string;
+      let durationMs = 0;
+      let cost = 0;
+      let model = "";
+      let reasoningLevelForRequest: ModelReasoningLevel | null = null;
 
-      // In E2E, we authenticate via an env key. In that mode we want the model
-      // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
-      // rather than whatever the UI's default model happens to be.
-      const modelIdForRequest =
-        envApiKey && !apiKey ? undefined : selectedModel?.id;
-      const selectedModelIdForReasoning = selectedModel?.id || "";
-      const configuredReasoningLevel =
-        modelReasoningLevels[selectedModelIdForReasoning];
-      const initialReasoningLevel = isModelReasoningLevel(
-        selectedModel?.initialReasoningLevel,
-      )
-        ? selectedModel.initialReasoningLevel
-        : "default";
-      const reasoningLevelForRequest: ModelReasoningLevel =
-        configuredReasoningLevel ?? initialReasoningLevel;
+      if (usesLocalBackgroundRemoval) {
+        if (!targetImage) {
+          throw new Error("Select an image to edit before applying this tool.");
+        }
 
-      // Build image configuration from tool parameters (shape/size)
-      const imageConfig: ImageConfig = {
-        shape: params.shape,
-        size: params.size,
-      };
-
-      const result = await editImage(
-        sourceImages,
-        prompt,
-        resolvedApiKey,
-        modelIdForRequest,
-        {
+        const result = await removeBackgroundFromImage(targetImage.imageData, {
           signal: abortController.signal,
-          imageConfig,
-          reasoningLevel: reasoningLevelForRequest,
-        },
-      );
+        });
 
-      const processedImageData = await applyPostProcessingPipeline(
-        result.imageData,
-        tool.postProcessingFunctions,
-      );
+        processedImageData = await applyPostProcessingPipeline(
+          result.imageData,
+          tool.postProcessingFunctions,
+        );
+        durationMs = result.durationMs;
+        model = result.model;
+      } else {
+        const resolvedApiKey = effectiveApiKey;
+        if (!resolvedApiKey) {
+          setState((prev) => ({
+            ...prev,
+            isProcessing: false,
+            error: "Connect to OpenRouter before running tools.",
+          }));
+          return;
+        }
+
+        shouldRefreshCredits = true;
+
+        // In E2E, we authenticate via an env key. In that mode we want the model
+        // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
+        // rather than whatever the UI's default model happens to be.
+        const modelIdForRequest =
+          envApiKey && !apiKey ? undefined : selectedModel?.id;
+        const selectedModelIdForReasoning = selectedModel?.id || "";
+        const configuredReasoningLevel =
+          modelReasoningLevels[selectedModelIdForReasoning];
+        const initialReasoningLevel = isModelReasoningLevel(
+          selectedModel?.initialReasoningLevel,
+        )
+          ? selectedModel.initialReasoningLevel
+          : "default";
+        reasoningLevelForRequest =
+          configuredReasoningLevel ?? initialReasoningLevel;
+
+        // Build image configuration from tool parameters (shape/size)
+        const imageConfig: ImageConfig = {
+          shape: params.shape,
+          size: params.size,
+        };
+
+        const result = await editImage(
+          sourceImages,
+          prompt,
+          resolvedApiKey,
+          modelIdForRequest,
+          {
+            signal: abortController.signal,
+            imageConfig,
+            reasoningLevel: reasoningLevelForRequest,
+          },
+        );
+
+        processedImageData = await applyPostProcessingPipeline(
+          result.imageData,
+          tool.postProcessingFunctions,
+        );
+        durationMs = result.duration;
+        cost = result.cost;
+        model = result.model;
+      }
 
       const resolution = await getImageDimensions(processedImageData);
 
@@ -1475,9 +1504,9 @@ export function ImageToolsWorkspace({
         imageData: processedImageData,
         toolId: tool.id,
         parameters: params,
-        durationMs: result.duration,
-        cost: result.cost,
-        model: result.model,
+        durationMs,
+        cost,
+        model,
         reasoningLevel: reasoningLevelForRequest,
         timestamp: Date.now(),
         promptUsed: prompt,

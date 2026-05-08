@@ -11,6 +11,7 @@ import {
 } from "@dnd-kit/core";
 import {
   AppState,
+  GenerationProgressState,
   ImageRecord,
   ModelInfo,
   ToolParamsById,
@@ -98,6 +99,7 @@ interface ImageToolsPanelBar {
   onClearTarget: () => void;
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
+  generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
   onDismissError: () => void;
@@ -138,6 +140,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onClearTarget,
   onClearRight,
   onUploadRight,
+  generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
   onDismissError,
@@ -474,6 +477,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onClearRight={onClearRight}
               onUploadRight={onUploadRight}
               isProcessing={appState.isProcessing}
+              generationProgress={generationProgress}
               activeToolId={activeToolId}
               onToggleHistoryStar={onToggleHistoryStar}
             />

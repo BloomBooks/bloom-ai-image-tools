@@ -1,6 +1,6 @@
 import React from "react";
 import imagePlaceholder from "../assets/image_placeholder.svg";
-import { ImageRecord } from "../types";
+import { GenerationProgressState, ImageRecord } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { kBloomBlue, theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
@@ -86,6 +86,7 @@ export interface ImageSlotProps {
   dragEffectAllowed?: DataTransfer["effectAllowed"];
   onImageDragStart?: (event: React.DragEvent) => void;
   isLoading?: boolean;
+  loadingProgress?: GenerationProgressState | null;
   uploadInputTestId?: string;
   controls?: ImageSlotControls;
   variant?: "panel" | "tile" | "thumb";
@@ -257,6 +258,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dragEffectAllowed,
   onImageDragStart,
   isLoading = false,
+  loadingProgress = null,
   uploadInputTestId,
   controls,
   variant = "panel",
@@ -815,7 +817,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                   onDragStart={handleImageDragStart}
                 />
               </div>
-            ) : (
+            ) : isLoading ? null : (
               emptyStateContent
             )}
 
@@ -861,7 +863,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               borderRadius={18}
             />
 
-            <ImageSlotLoadingOverlay isVisible={isLoading} borderRadius={18} />
+            <ImageSlotLoadingOverlay
+              isVisible={isLoading}
+              borderRadius={18}
+              progress={loadingProgress ?? null}
+            />
           </div>
         </div>
 

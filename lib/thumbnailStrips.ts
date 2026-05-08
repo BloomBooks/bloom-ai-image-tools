@@ -114,6 +114,16 @@ const uniqueInsert = (
   return without;
 };
 
+const mergeUniqueIds = (primary: string[], secondary: string[]): string[] => {
+  const merged = [...primary];
+  secondary.forEach((itemId) => {
+    if (!merged.includes(itemId)) {
+      merged.push(itemId);
+    }
+  });
+  return merged;
+};
+
 export const addItemToStrip = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
@@ -299,4 +309,49 @@ export const hydrateThumbnailStripsSnapshot = (
     fallback.itemIdsByStrip.history
   );
   return sanitized;
+};
+
+export const mergeThumbnailStripsSnapshots = (
+  current: ThumbnailStripsSnapshot | null | undefined,
+  incoming: ThumbnailStripsSnapshot | null | undefined,
+  entries: ImageRecord[]
+): ThumbnailStripsSnapshot => {
+  if (!current) {
+    return hydrateThumbnailStripsSnapshot(incoming, entries);
+  }
+  if (!incoming) {
+    return hydrateThumbnailStripsSnapshot(current, entries);
+  }
+
+  const validIds = new Set(entries.map((entry) => entry.id));
+  const currentSanitized = sanitizeThumbnailStrips(current, validIds);
+  const incomingSanitized = sanitizeThumbnailStrips(incoming, validIds);
+
+  const merged: ThumbnailStripsSnapshot = {
+    activeStripId: currentSanitized.activeStripId || incomingSanitized.activeStripId,
+    pinnedStripIds: mergeUniqueIds(
+      currentSanitized.pinnedStripIds,
+      incomingSanitized.pinnedStripIds
+    ),
+    itemIdsByStrip: {
+      history: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.history || [],
+        incomingSanitized.itemIdsByStrip.history || []
+      ),
+      starred: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.starred || [],
+        incomingSanitized.itemIdsByStrip.starred || []
+      ),
+      reference: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.reference || [],
+        incomingSanitized.itemIdsByStrip.reference || []
+      ),
+      environment: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.environment || [],
+        incomingSanitized.itemIdsByStrip.environment || []
+      ),
+    },
+  };
+
+  return hydrateThumbnailStripsSnapshot(merged, entries);
 };

@@ -2,7 +2,7 @@ import React from "react";
 import { Box } from "@mui/material";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import imagePlaceholder from "../assets/image_placeholder.svg";
-import { ImageRecord } from "../types";
+import { GenerationProgressState, ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
 import { ImageSlotHeader } from "./ImageSlotHeader";
@@ -37,6 +37,7 @@ type SingleImagePanelProps = {
   showDownloadButton?: boolean;
   draggableImageId?: string;
   isLoading?: boolean;
+  loadingProgress?: GenerationProgressState | null;
   uploadInputTestId?: string;
   onToggleStar?: () => void;
   dndDropId?: string;
@@ -202,6 +203,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     showDownloadButton = true,
     draggableImageId,
     isLoading = false,
+    loadingProgress = null,
     uploadInputTestId,
     panelTestId,
     onToggleStar,
@@ -314,6 +316,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         onRemove={onClear}
         draggableImageId={undefined}
         isLoading={isLoading}
+        loadingProgress={loadingProgress}
         uploadInputTestId={uploadInputTestId}
         dropLabel={isDropZone ? "Drop to set as Source" : ""}
         controls={{

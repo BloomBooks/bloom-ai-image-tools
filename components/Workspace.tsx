@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "@mui/material";
-import { ImageRecord } from "../types";
+import { GenerationProgressState, ImageRecord } from "../types";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -133,6 +133,7 @@ interface WorkspaceProps {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   isProcessing: boolean;
+  generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
   onToggleHistoryStar: (id: string) => void;
 }
@@ -151,6 +152,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onClearRight,
   onUploadRight,
   isProcessing,
+  generationProgress,
   activeToolId,
   onToggleHistoryStar,
 }) => {
@@ -493,6 +495,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             dndDropId="panel:result"
             dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
             isLoading={isProcessing}
+            loadingProgress={generationProgress}
             onToggleStar={
               rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined
             }

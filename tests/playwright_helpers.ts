@@ -83,7 +83,7 @@ export const resetImageToolsPersistence = async (page: Page) => {
 
 export const openSettingsDialog = async (page: Page) => {
 	// Prefer the CTA when present; it is the most stable entry point.
-	const connectCta = page.getByRole("button", { name: /Connect to OpenRouter/i });
+	const connectCta = page.getByTestId("openrouter-connect-cta");
 	if ((await connectCta.count()) > 0 && (await connectCta.isVisible())) {
 		await connectCta.click();
 		return;

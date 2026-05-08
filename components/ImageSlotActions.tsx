@@ -301,6 +301,7 @@ export const ImageSlotActions = React.forwardRef<
       borderRadius: "50%",
       border: "none",
       bgcolor: isActive ? theme.colors.accent : theme.colors.overlay,
+      backgroundColor: isActive ? theme.colors.accent : theme.colors.overlay,
       color: isActive ? theme.colors.appBackground : theme.colors.textPrimary,
       boxShadow: theme.colors.panelShadow,
       backdropFilter: "blur(6px)",
@@ -308,12 +309,21 @@ export const ImageSlotActions = React.forwardRef<
         "background-color 120ms ease, color 120ms ease, transform 70ms ease, filter 120ms ease",
       WebkitTapHighlightColor: "transparent",
       "&:hover": {
+        bgcolor: isActive ? theme.colors.accent : theme.colors.overlay,
+        backgroundColor: isActive ? theme.colors.accent : theme.colors.overlay,
+        color: isActive ? theme.colors.appBackground : theme.colors.textPrimary,
         filter: "brightness(1.08)",
       },
       "&:active": {
+        bgcolor: isActive ? theme.colors.accent : theme.colors.overlay,
+        backgroundColor: isActive ? theme.colors.accent : theme.colors.overlay,
+        color: isActive ? theme.colors.appBackground : theme.colors.textPrimary,
         transform: "translateY(1px)",
       },
       "&.Mui-focusVisible": {
+        bgcolor: isActive ? theme.colors.accent : theme.colors.overlay,
+        backgroundColor: isActive ? theme.colors.accent : theme.colors.overlay,
+        color: isActive ? theme.colors.appBackground : theme.colors.textPrimary,
         filter: "brightness(1.1)",
       },
       "&.Mui-disabled": {
@@ -382,24 +392,63 @@ export const ImageSlotActions = React.forwardRef<
 
   // overlay placement
   if (variant === "tile") {
-    const shouldShowActions = isHovered && orderedActions.length > 0;
+    const tileActionOrder: Record<SlotActionKey, number> = {
+      info: 0,
+      copy: 1,
+      paste: 2,
+      upload: 3,
+      download: 4,
+      remove: 5,
+      magnifier: 6,
+      more: 7,
+    };
+    const removeAction = orderedActions.find(
+      (action) => action.key === "remove"
+    );
+    const primaryActions = orderedActions
+      .filter((action) => action.key !== "remove")
+      .sort((left, right) => tileActionOrder[left.key] - tileActionOrder[right.key]);
+
+    const shouldShowActions =
+      isHovered && (primaryActions.length > 0 || !!removeAction);
     if (!shouldShowActions) return null;
 
     return (
-      <div
-        style={{
-          position: "absolute",
-          top: cornerOffset,
-          right: cornerOffset,
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-          zIndex: 20,
-          pointerEvents: disabled ? "none" : "auto",
-        }}
-      >
-        {orderedActions.map((action) => renderActionButton(action))}
-      </div>
+      <>
+        {primaryActions.length > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              top: cornerOffset,
+              left: cornerOffset,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              zIndex: 20,
+              pointerEvents: disabled ? "none" : "auto",
+            }}
+          >
+            {primaryActions.map((action) => renderActionButton(action))}
+          </div>
+        ) : null}
+
+        {removeAction ? (
+          <div
+            style={{
+              position: "absolute",
+              top: cornerOffset,
+              right: cornerOffset,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              zIndex: 20,
+              pointerEvents: disabled ? "none" : "auto",
+            }}
+          >
+            {renderActionButton(removeAction)}
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -504,6 +553,7 @@ export const ImageSlotActions = React.forwardRef<
                     borderRadius: "50%",
                     border: "none",
                     bgcolor: theme.colors.overlay,
+                    backgroundColor: theme.colors.overlay,
                     color: theme.colors.textPrimary,
                     boxShadow: theme.colors.panelShadow,
                     backdropFilter: "blur(6px)",
@@ -513,12 +563,21 @@ export const ImageSlotActions = React.forwardRef<
                     pointerEvents: showMoreTrigger ? "auto" : "none",
                     WebkitTapHighlightColor: "transparent",
                     "&:hover": {
+                      bgcolor: theme.colors.overlay,
+                      backgroundColor: theme.colors.overlay,
+                      color: theme.colors.textPrimary,
                       filter: "brightness(1.08)",
                     },
                     "&:active": {
+                      bgcolor: theme.colors.overlay,
+                      backgroundColor: theme.colors.overlay,
+                      color: theme.colors.textPrimary,
                       transform: "translateY(1px)",
                     },
                     "&.Mui-focusVisible": {
+                      bgcolor: theme.colors.overlay,
+                      backgroundColor: theme.colors.overlay,
+                      color: theme.colors.textPrimary,
                       filter: "brightness(1.1)",
                     },
                   }}

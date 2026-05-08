@@ -126,6 +126,17 @@ export interface AppState {
   error: ReactNode | null; // Error message to display to user
 }
 
+export interface GenerationProgressState {
+  startedAt: number;
+  estimatedDurationMs: number;
+}
+
+export interface GenerationTimingState {
+  lastDurationMs: number | null;
+  promptDurationsByKey: Record<string, number>;
+  toolDurationsByKey: Record<string, number>;
+}
+
 export type ThumbnailStripId =
   | "history"
   | "starred"
@@ -157,6 +168,7 @@ export interface PersistedImageToolsState {
   activeToolId: string | null;
   selectedModelId: string | null;
   modelReasoningLevels?: ModelReasoningLevelByModelId;
+  generationTiming?: GenerationTimingState;
   auth: AuthState;
   /** When true, the persisted history array is ordered newest -> oldest. */
   historyNewestFirst?: boolean;

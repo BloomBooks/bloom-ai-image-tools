@@ -17,6 +17,8 @@ import { ThemeProvider } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import {
   AppState,
+  GenerationProgressState,
+  GenerationTimingState,
   ImageRecord,
   ImageToolsStatePersistence,
   HistoryManifest,
@@ -92,6 +94,7 @@ import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
   hydrateThumbnailStripsSnapshot,
+  mergeThumbnailStripsSnapshots,
   removeItemFromStrip,
   reorderItemInStrip,
   replaceStripItems,
@@ -177,6 +180,126 @@ const MODEL_REASONING_LEVEL_VALUES: ModelReasoningLevel[] = [
   "medium",
   "high",
 ];
+
+const DEFAULT_GENERATION_ESTIMATE_MS = 30000;
+const MAX_PROMPT_DURATION_ESTIMATES = 40;
+const MAX_TOOL_DURATION_ESTIMATES = 24;
+const PESSIMISTIC_MS = 3000;
+
+const getNowMs = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now();
+
+const clampDurationMs = (value: number | null | undefined) => {
+  if (!Number.isFinite(value) || (value ?? 0) <= 0) {
+    return DEFAULT_GENERATION_ESTIMATE_MS;
+  }
+
+  return Math.max(1000, Math.min(300000, Math.round(value as number)));
+};
+
+const limitDurationMap = (
+  durationsByKey: Record<string, number>,
+  maxEntries: number,
+) => {
+  const entries = Object.entries(durationsByKey);
+  if (entries.length <= maxEntries) {
+    return durationsByKey;
+  }
+
+  return Object.fromEntries(entries.slice(-maxEntries));
+};
+
+const normalizeDurationMap = (
+  value: unknown,
+  maxEntries: number,
+): Record<string, number> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized = Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, number>
+  >((result, [key, durationMs]) => {
+    const cleanKey = key.trim();
+    if (!cleanKey || typeof durationMs !== "number" || durationMs <= 0) {
+      return result;
+    }
+
+    result[cleanKey] = clampDurationMs(durationMs);
+    return result;
+  }, {});
+
+  return limitDurationMap(normalized, maxEntries);
+};
+
+const normalizeGenerationTiming = (value: unknown): GenerationTimingState => {
+  const raw = value as Partial<GenerationTimingState> | null | undefined;
+
+  return {
+    lastDurationMs:
+      typeof raw?.lastDurationMs === "number" && raw.lastDurationMs > 0
+        ? clampDurationMs(raw.lastDurationMs)
+        : null,
+    promptDurationsByKey: normalizeDurationMap(
+      raw?.promptDurationsByKey,
+      MAX_PROMPT_DURATION_ESTIMATES,
+    ),
+    toolDurationsByKey: normalizeDurationMap(
+      raw?.toolDurationsByKey,
+      MAX_TOOL_DURATION_ESTIMATES,
+    ),
+  };
+};
+
+const createPromptDurationKey = (
+  toolId: string,
+  modelId: string,
+  prompt: string,
+) => `${toolId}:${modelId}:${hashString(prompt.trim())}`;
+
+const createToolDurationKey = (toolId: string, modelId: string) =>
+  `${toolId}:${modelId}`;
+
+const resolveEstimatedDurationMs = (
+  timing: GenerationTimingState,
+  promptKey: string,
+  toolKey: string,
+) =>
+  (timing.promptDurationsByKey[promptKey] ||
+    timing.toolDurationsByKey[toolKey] ||
+    timing.lastDurationMs ||
+    DEFAULT_GENERATION_ESTIMATE_MS) + PESSIMISTIC_MS;
+
+const updateGenerationTiming = (
+  current: GenerationTimingState,
+  promptKey: string,
+  toolKey: string,
+  durationMs: number,
+): GenerationTimingState => {
+  const normalizedDurationMs = clampDurationMs(durationMs);
+  const previousToolDuration = current.toolDurationsByKey[toolKey];
+  const nextToolDuration = previousToolDuration
+    ? Math.round(previousToolDuration * 0.65 + normalizedDurationMs * 0.35)
+    : normalizedDurationMs;
+
+  return {
+    lastDurationMs: normalizedDurationMs,
+    promptDurationsByKey: limitDurationMap(
+      {
+        ...current.promptDurationsByKey,
+        [promptKey]: normalizedDurationMs,
+      },
+      MAX_PROMPT_DURATION_ESTIMATES,
+    ),
+    toolDurationsByKey: limitDurationMap(
+      {
+        ...current.toolDurationsByKey,
+        [toolKey]: clampDurationMs(nextToolDuration),
+      },
+      MAX_TOOL_DURATION_ESTIMATES,
+    ),
+  };
+};
 
 const isModelReasoningLevel = (
   value: unknown,
@@ -381,6 +504,14 @@ export function ImageToolsWorkspace({
   const [selectedModelId, setSelectedModelId] = useState<string>(
     DEFAULT_MODEL?.id || "",
   );
+  const [generationTiming, setGenerationTiming] =
+    useState<GenerationTimingState>({
+      lastDurationMs: null,
+      promptDurationsByKey: {},
+      toolDurationsByKey: {},
+    });
+  const [generationProgress, setGenerationProgress] =
+    useState<GenerationProgressState | null>(null);
   const [modelReasoningLevels, setModelReasoningLevels] =
     useState<ModelReasoningLevelByModelId>({});
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
@@ -417,8 +548,8 @@ export function ImageToolsWorkspace({
     ? usingEnvKey
       ? "OpenRouter key supplied by environment"
       : authMethod === "oauth"
-      ? "OpenRouter connected via OAuth"
-      : "OpenRouter API key linked"
+        ? "OpenRouter connected via OAuth"
+        : "OpenRouter API key linked"
     : "OpenRouter not connected";
   const historyStatusLabel = isFolderPersistenceActive
     ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
@@ -875,6 +1006,9 @@ export function ImageToolsWorkspace({
           ) {
             setSelectedModelId(persisted.selectedModelId);
           }
+          setGenerationTiming(
+            normalizeGenerationTiming(persisted.generationTiming),
+          );
           setModelReasoningLevels(
             normalizeModelReasoningLevels(persisted.modelReasoningLevels),
           );
@@ -942,12 +1076,16 @@ export function ImageToolsWorkspace({
   const paramsByToolRef = useRef(paramsByTool);
   const activeToolIdRef = useRef(activeToolId);
   const selectedModelIdRef = useRef(selectedModelId);
+  const generationTimingRef = useRef(generationTiming);
   const modelReasoningLevelsRef = useRef(modelReasoningLevels);
   const selectedArtStyleIdRef = useRef(selectedArtStyleId);
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
   const thumbnailStripsRef = useRef(thumbnailStrips);
   const fsManifestHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const fsManifestReadyHandleRef = useRef<FileSystemDirectoryHandle | null>(
+    null,
+  );
 
   useEffect(() => {
     stateRef.current = state;
@@ -964,6 +1102,9 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     selectedModelIdRef.current = selectedModelId;
   }, [selectedModelId]);
+  useEffect(() => {
+    generationTimingRef.current = generationTiming;
+  }, [generationTiming]);
   useEffect(() => {
     modelReasoningLevelsRef.current = modelReasoningLevels;
   }, [modelReasoningLevels]);
@@ -983,11 +1124,15 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     if (!fsBinding) {
       fsManifestHandleRef.current = null;
+      fsManifestReadyHandleRef.current = null;
     }
   }, [fsBinding]);
 
   useEffect(() => {
     if (!fsBinding || !isHydrated) {
+      return;
+    }
+    if (fsManifestReadyHandleRef.current === fsBinding.directoryHandle) {
       return;
     }
     if (fsManifestHandleRef.current === fsBinding.directoryHandle) {
@@ -1039,10 +1184,14 @@ export function ImageToolsWorkspace({
       }
       setState((prev) => ({ ...prev, ...mergedFields }));
 
-      const baseStrips = incomingStrips ?? thumbnailStripsRef.current;
       setThumbnailStrips(
-        hydrateThumbnailStripsSnapshot(baseStrips, mergedFields.history),
+        mergeThumbnailStripsSnapshots(
+          thumbnailStripsRef.current,
+          incomingStrips,
+          mergedFields.history,
+        ),
       );
+      fsManifestReadyHandleRef.current = fsBinding.directoryHandle;
     })();
 
     return () => {
@@ -1119,6 +1268,7 @@ export function ImageToolsWorkspace({
         paramsByTool: paramsByToolRef.current,
         activeToolId: activeToolIdRef.current,
         selectedModelId: selectedModelIdRef.current || null,
+        generationTiming: generationTimingRef.current,
         modelReasoningLevels: modelReasoningLevelsRef.current,
         selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
         auth: {
@@ -1166,7 +1316,10 @@ export function ImageToolsWorkspace({
       try {
         await persistence.save(buildPersistableState());
         const currentBinding = fsBindingRef.current;
-        if (currentBinding) {
+        if (
+          currentBinding &&
+          fsManifestReadyHandleRef.current === currentBinding.directoryHandle
+        ) {
           try {
             await writeHistoryManifest(currentBinding, buildHistoryManifest());
           } catch (error) {
@@ -1272,24 +1425,55 @@ export function ImageToolsWorkspace({
       if (!binding) {
         return;
       }
+      const existingManifest = await readHistoryManifest(binding);
+      const incomingAppState = existingManifest
+        ? sanitizePersistedAppState(existingManifest.appState)
+        : null;
+      const mergedFields = incomingAppState
+        ? mergeHistoryFields(stateRef.current, incomingAppState)
+        : null;
+      const historyToPersist =
+        mergedFields?.history ?? stateRef.current.history;
       const migratedHistory = await Promise.all(
-        state.history.map((item) => persistHistoryImage(item, binding)),
+        historyToPersist.map((item) => persistHistoryImage(item, binding)),
       );
       const migratedMap = new Map(
         migratedHistory.map((item) => [item.id, item] as const),
       );
+      const nextHistory = historyToPersist.map(
+        (item) => migratedMap.get(item.id) ?? item,
+      );
+      const nextThumbnailStrips = mergeThumbnailStripsSnapshots(
+        thumbnailStripsRef.current,
+        existingManifest?.thumbnailStrips,
+        nextHistory,
+      );
+      fsManifestHandleRef.current = binding.directoryHandle;
+      fsManifestReadyHandleRef.current = binding.directoryHandle;
       setFsBinding(binding);
-      setState((prev) => ({
-        ...prev,
-        history: prev.history.map((item) => migratedMap.get(item.id) ?? item),
-      }));
+      setState((prev) => {
+        if (!mergedFields) {
+          return {
+            ...prev,
+            history: prev.history.map(
+              (item) => migratedMap.get(item.id) ?? item,
+            ),
+          };
+        }
+        return {
+          ...prev,
+          ...mergedFields,
+          history: nextHistory,
+        };
+      });
+      setThumbnailStrips(nextThumbnailStrips);
     } catch (error) {
       console.error("Failed to enable folder storage", error);
       setFsError("Could not enable folder storage.");
     } finally {
       setFsLoading(false);
     }
-  }, [fsSupported, state.history, persistHistoryImage]);
+  }, [fsSupported, persistHistoryImage]);
 
   const handleDisableFolderStorage = useCallback(async () => {
     if (!fsBinding) {
@@ -1334,6 +1518,7 @@ export function ImageToolsWorkspace({
     }
     controller.abort();
     requestAbortControllerRef.current = null;
+    setGenerationProgress(null);
     setState((prev) => ({ ...prev, isProcessing: false }));
   }, []);
 
@@ -1415,17 +1600,39 @@ export function ImageToolsWorkspace({
           : basePrompt;
 
       const usesLocalBackgroundRemoval = tool.id === "remove_background";
+      const modelTimingKey = usesLocalBackgroundRemoval
+        ? "local-background-removal"
+        : envApiKey && !apiKey
+          ? "default-image-model"
+          : selectedModel?.id || "default-image-model";
+      const promptDurationKey = createPromptDurationKey(
+        tool.id,
+        modelTimingKey,
+        prompt,
+      );
+      const toolDurationKey = createToolDurationKey(tool.id, modelTimingKey);
 
       let processedImageData: string;
       let durationMs = 0;
       let cost = 0;
       let model = "";
       let reasoningLevelForRequest: ModelReasoningLevel | null = null;
+      let progressStartedAt = 0;
 
       if (usesLocalBackgroundRemoval) {
         if (!targetImage) {
           throw new Error("Select an image to edit before applying this tool.");
         }
+
+        progressStartedAt = getNowMs();
+        setGenerationProgress({
+          startedAt: progressStartedAt,
+          estimatedDurationMs: resolveEstimatedDurationMs(
+            generationTimingRef.current,
+            promptDurationKey,
+            toolDurationKey,
+          ),
+        });
 
         const result = await removeBackgroundFromImage(targetImage.imageData, {
           signal: abortController.signal,
@@ -1440,6 +1647,7 @@ export function ImageToolsWorkspace({
       } else {
         const resolvedApiKey = effectiveApiKey;
         if (!resolvedApiKey) {
+          setGenerationProgress(null);
           setState((prev) => ({
             ...prev,
             isProcessing: false,
@@ -1471,6 +1679,16 @@ export function ImageToolsWorkspace({
           shape: params.shape,
           size: params.size,
         };
+
+        progressStartedAt = getNowMs();
+        setGenerationProgress({
+          startedAt: progressStartedAt,
+          estimatedDurationMs: resolveEstimatedDurationMs(
+            generationTimingRef.current,
+            promptDurationKey,
+            toolDurationKey,
+          ),
+        });
 
         const result = await editImage(
           sourceImages,
@@ -1520,7 +1738,20 @@ export function ImageToolsWorkspace({
         newItem = await persistHistoryImage(newItem);
       }
 
+      if (progressStartedAt > 0) {
+        const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
+        setGenerationTiming((prev) =>
+          updateGenerationTiming(
+            prev,
+            promptDurationKey,
+            toolDurationKey,
+            observedDurationMs,
+          ),
+        );
+      }
+
       appendHistoryEntry(newItem);
+      setGenerationProgress(null);
       setState((prev) => ({
         ...prev,
         rightPanelImageId: newItem.id, // Result goes to right panel
@@ -1531,6 +1762,7 @@ export function ImageToolsWorkspace({
         error instanceof DOMException
           ? error.name === "AbortError"
           : (error as any)?.name === "AbortError";
+      setGenerationProgress(null);
       if (isAbortError) {
         shouldRefreshCredits = false;
         setState((prev) => ({ ...prev, isProcessing: false }));
@@ -2028,8 +2260,8 @@ export function ImageToolsWorkspace({
   const progressTrackBackground = creditsError
     ? "rgba(239, 68, 68, 0.15)"
     : isCreditsLow
-    ? theme.colors.dangerSubtle
-    : theme.colors.surfaceAlt;
+      ? theme.colors.dangerSubtle
+      : theme.colors.surfaceAlt;
 
   const progressBorderColor = isCreditsLow
     ? theme.colors.danger
@@ -2038,8 +2270,8 @@ export function ImageToolsWorkspace({
   const progressFillColor = creditsError
     ? "#ef4444"
     : isCreditsLow
-    ? theme.colors.danger
-    : theme.colors.accent;
+      ? theme.colors.danger
+      : theme.colors.accent;
 
   const shouldShowConnectToOpenRouterCTA = !effectiveApiKey;
   const prototypeNoticeColor = theme.colors.accent;
@@ -2107,8 +2339,7 @@ export function ImageToolsWorkspace({
                   lineHeight: 1.4,
                 }}
               >
-                Prototype only, shared with you by John. Please do not share
-                this link with others.
+                This is prototype. It is useful, but it has rough edges!
               </Typography>
             </Stack>
           </Stack>
@@ -2255,6 +2486,7 @@ export function ImageToolsWorkspace({
             onUploadRight={handleUploadRight}
             onSelectHistoryItem={handleSelectHistoryItem}
             onToggleHistoryStar={handleToggleHistoryStar}
+            generationProgress={generationProgress}
             onDismissError={handleDismissError}
           />
         </Box>

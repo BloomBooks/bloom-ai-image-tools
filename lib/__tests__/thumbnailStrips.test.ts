@@ -3,6 +3,7 @@ import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
   hydrateThumbnailStripsSnapshot,
+  mergeThumbnailStripsSnapshots,
   removeItemFromStrip,
   reorderItemInStrip,
 } from "../thumbnailStrips";
@@ -90,5 +91,42 @@ describe("thumbnail strip helpers", () => {
 
     const hydrated = hydrateThumbnailStripsSnapshot(persisted, entries);
     expect(hydrated.pinnedStripIds).toEqual([]);
+  });
+
+  it("merges strip membership from current and incoming snapshots", () => {
+    const entries = [
+      makeEntry("folder"),
+      makeEntry("local", { isStarred: true }),
+      makeEntry("ref"),
+    ];
+    const current = {
+      ...createDefaultThumbnailStripsSnapshot(),
+      activeStripId: "reference" as const,
+      pinnedStripIds: ["history" as const],
+      itemIdsByStrip: {
+        history: ["local"],
+        starred: ["local"],
+        reference: ["ref"],
+        environment: [],
+      },
+    };
+    const incoming = {
+      ...createDefaultThumbnailStripsSnapshot(),
+      pinnedStripIds: ["starred" as const],
+      itemIdsByStrip: {
+        history: ["folder"],
+        starred: [],
+        reference: [],
+        environment: [],
+      },
+    };
+
+    const merged = mergeThumbnailStripsSnapshots(current, incoming, entries);
+
+    expect(merged.activeStripId).toBe("reference");
+    expect(merged.pinnedStripIds).toEqual(["history", "starred"]);
+    expect(merged.itemIdsByStrip.history).toEqual(["ref", "local", "folder"]);
+    expect(merged.itemIdsByStrip.starred).toEqual(["local"]);
+    expect(merged.itemIdsByStrip.reference).toEqual(["ref"]);
   });
 });

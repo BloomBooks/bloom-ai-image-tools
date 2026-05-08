@@ -73,6 +73,7 @@ export interface ToolDefinition {
   icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
+  actionButtonLabel?: string;
   referenceImages: "0" | "0+" | "1" | "1+";
   editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
   capabilities?: ToolCapabilities;

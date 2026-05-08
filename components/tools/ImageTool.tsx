@@ -42,6 +42,7 @@ const ADVANCED_TOOL_IDS = new Set([
   "generate_image",
   "change_style",
   "custom",
+  "generate_pallet",
   "remove_object",
   "remove_background",
 ]);
@@ -864,9 +865,10 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   ) : (
                     <>
                       <span>
-                        {tool.id === "generate_image"
-                          ? "Generate Image"
-                          : "Apply Changes"}
+                        {tool.actionButtonLabel ||
+                          (tool.id === "generate_image"
+                            ? "Generate Image"
+                            : "Apply Changes")}
                       </span>
                       <Icon
                         path={Icons.ArrowRight}

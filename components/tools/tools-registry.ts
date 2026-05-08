@@ -1,6 +1,7 @@
 import AddPhotoAlternateOutlinedIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
 import BrushOutlinedIcon from "@mui/icons-material/BrushOutlined";
+import ColorLensOutlinedIcon from "@mui/icons-material/ColorLensOutlined";
 import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
 import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
@@ -41,6 +42,8 @@ const SIZE_HINTS: Record<string, string> = {
   "2k": "2k image (2048px on the long edge.)",
   "4k": "4k image (4096px on the long edge.)",
 };
+
+const PALETTE_COLOR_OPTIONS = ["3", "4", "5", "6", "7"] as const;
 
 export const TOOLS: ToolDefinition[] = [
   {
@@ -259,6 +262,41 @@ export const TOOLS: ToolDefinition[] = [
     ],
     promptTemplate: (params) => params.prompt,
     referenceImages: "0+",
+  },
+  {
+    id: "generate_pallet",
+    title: "Generate Pallet",
+    description:
+      "Create a simple reference color pallet, optionally based on a reference image.",
+    icon: ColorLensOutlinedIcon,
+    parameters: [
+      {
+        name: "instructions",
+        label: "Instructions",
+        type: "textarea",
+        placeholder: "Add any extra instructions...",
+        optional: true,
+      },
+      {
+        name: "numberOfColors",
+        label: "number of colors",
+        type: "select",
+        options: [...PALETTE_COLOR_OPTIONS],
+        defaultValue: "5",
+      },
+    ],
+    promptTemplate: (params) => {
+      const numberOfColors = params.numberOfColors?.trim() || "5";
+      const instructions = params.instructions?.trim();
+      const basePrompt = `Create a numbered row of exactly ${numberOfColors} square color swatches on a plain white background. Fill each square with one distinct solid color. Choose colors that form a cohesive, representative palette drawn from the reference image when one is provided. If additional instructions are provided, treat them as a primary art-direction brief for the palette and let them strongly influence the color choices. Prefer distinctive, nuanced, theme-appropriate colors instead of generic default primaries unless the reference or instructions clearly call for them. Do not draw objects, scenes, gradients, shadows, textures, or extra decoration; output only the numbered swatches.`;
+      if (!instructions) {
+        return basePrompt;
+      }
+      return `${basePrompt}\n\nTheme and palette guidance to follow closely: ${instructions}`;
+    },
+    actionButtonLabel: "Generate Pallet",
+    referenceImages: "0+",
+    editImage: false,
   },
   {
     id: "remove_object",

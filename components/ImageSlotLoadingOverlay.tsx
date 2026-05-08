@@ -84,19 +84,7 @@ export const ImageSlotLoadingOverlay: React.FC<
             padding: 24,
             textAlign: "center",
           }}
-        >
-          <span
-            style={{
-              fontSize: "clamp(1.2rem, 3vw, 1.8rem)",
-              fontWeight: 700,
-              lineHeight: 1,
-              color: theme.colors.textPrimary,
-              letterSpacing: "0.04em",
-            }}
-          >
-            Generating
-          </span>
-        </div>
+        ></div>
         <div
           style={{
             position: "absolute",

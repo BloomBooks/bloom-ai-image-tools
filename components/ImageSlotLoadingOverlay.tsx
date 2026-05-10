@@ -38,6 +38,7 @@ export const ImageSlotLoadingOverlay: React.FC<
   const elapsedMs = progress ? Math.max(0, now - progress.startedAt) : 0;
   const progressValue = Math.min(100, (elapsedMs / estimatedDurationMs) * 100);
   const isIndeterminate = !progress || elapsedMs >= estimatedDurationMs;
+  const progressVariant = isIndeterminate ? "indeterminate" : "determinate";
   return (
     <div
       style={{
@@ -65,8 +66,8 @@ export const ImageSlotLoadingOverlay: React.FC<
         }}
       >
         <CircularProgress
-          variant="determinate"
-          value={isIndeterminate ? 100 : progressValue}
+          variant={progressVariant}
+          value={progressVariant === "determinate" ? progressValue : undefined}
           thickness={1.6}
           size="clamp(160px, 46%, 300px)"
           sx={{ color: theme.colors.accent }}

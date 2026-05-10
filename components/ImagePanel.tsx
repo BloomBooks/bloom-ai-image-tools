@@ -129,6 +129,8 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                 download: true,
                 remove: slot.canRemove,
               };
+              const isSlotDropZone =
+                !disabled && Boolean(slot.dndDropId || slotControls.upload);
 
               return (
                 <Box
@@ -154,10 +156,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                     <ImageSlot
                       image={slot.image}
                       disabled={disabled}
-                      isDropZone={!disabled}
+                      isDropZone={isSlotDropZone}
                       onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
                       onUpload={
-                        disabled
+                        disabled || !slotControls.upload
                           ? undefined
                           : (file) => onSlotUpload(file, slot.slotIndex)
                       }

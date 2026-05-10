@@ -89,6 +89,7 @@ import {
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
+import { segmentImageIntoPieces } from "../lib/imageSegmentation";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import {
   addItemToStrip,
@@ -512,6 +513,7 @@ export function ImageToolsWorkspace({
     });
   const [generationProgress, setGenerationProgress] =
     useState<GenerationProgressState | null>(null);
+  const [resultImageIds, setResultImageIds] = useState<string[]>([]);
   const [modelReasoningLevels, setModelReasoningLevels] =
     useState<ModelReasoningLevelByModelId>({});
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
@@ -1559,6 +1561,7 @@ export function ImageToolsWorkspace({
 
     if (state.isProcessing) return;
 
+    setResultImageIds([]);
     setState((prev) => ({
       ...prev,
       isProcessing: true,
@@ -1711,32 +1714,91 @@ export function ImageToolsWorkspace({
         model = result.model;
       }
 
-      const resolution = await getImageDimensions(processedImageData);
+      const createHistoryItem = async (
+        imageData: string,
+        parentIdOverride?: string | null,
+      ): Promise<ImageRecord> => {
+        const resolution = await getImageDimensions(imageData);
 
-      let newItem: ImageRecord = {
-        id: uuid(),
-        parentId:
-          requiresEditImage && targetImage
-            ? targetImage.id
-            : constrainedReferences[0]?.id || null,
-        imageData: processedImageData,
-        toolId: tool.id,
-        parameters: params,
-        durationMs,
-        cost,
-        model,
-        reasoningLevel: reasoningLevelForRequest,
-        timestamp: Date.now(),
-        promptUsed: prompt,
-        sourceStyleId: derivedSourceStyleId,
-        sourceSummary,
-        resolution,
-        isStarred: false,
+        let item: ImageRecord = {
+          id: uuid(),
+          parentId:
+            parentIdOverride !== undefined
+              ? parentIdOverride
+              : requiresEditImage && targetImage
+                ? targetImage.id
+                : constrainedReferences[0]?.id || null,
+          imageData,
+          toolId: tool.id,
+          parameters: params,
+          durationMs,
+          cost,
+          model,
+          reasoningLevel: reasoningLevelForRequest,
+          timestamp: Date.now(),
+          promptUsed: prompt,
+          sourceStyleId: derivedSourceStyleId,
+          sourceSummary,
+          resolution,
+          isStarred: false,
+        };
+
+        if (fsBinding) {
+          item = await persistHistoryImage(item);
+        }
+
+        return item;
       };
 
-      if (fsBinding) {
-        newItem = await persistHistoryImage(newItem);
+      if (tool.id === "break_into_pieces") {
+        const backgroundRemoved = await removeBackgroundFromImage(
+          processedImageData,
+          {
+            signal: abortController.signal,
+          },
+        );
+        durationMs += backgroundRemoved.durationMs;
+
+        const segmentedPieces = await segmentImageIntoPieces(
+          backgroundRemoved.imageData,
+        );
+        const pieceImages = segmentedPieces.length
+          ? segmentedPieces
+          : [backgroundRemoved.imageData];
+        const createdPieces: ImageRecord[] = [];
+
+        for (const pieceImage of pieceImages) {
+          const pieceItem = await createHistoryItem(
+            pieceImage,
+            constrainedReferences[0]?.id || null,
+          );
+          createdPieces.push(pieceItem);
+          appendHistoryEntry(pieceItem);
+        }
+
+        if (progressStartedAt > 0) {
+          const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
+          setGenerationTiming((prev) =>
+            updateGenerationTiming(
+              prev,
+              promptDurationKey,
+              toolDurationKey,
+              observedDurationMs,
+            ),
+          );
+        }
+
+        setResultImageIds(createdPieces.map((item) => item.id));
+        setGenerationProgress(null);
+        setState((prev) => ({
+          ...prev,
+          rightPanelImageId: createdPieces[0]?.id || null,
+          isProcessing: false,
+        }));
+        return;
       }
+
+      const newItem = await createHistoryItem(processedImageData);
 
       if (progressStartedAt > 0) {
         const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
@@ -1867,6 +1929,7 @@ export function ImageToolsWorkspace({
   );
   const handleUploadRight = useCallback(
     (file: File) => {
+      setResultImageIds([]);
       void handleUpload(file, "right");
     },
     [handleUpload],
@@ -2048,6 +2111,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleSetRightPanel = (id: string) => {
+    setResultImageIds([]);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
@@ -2059,10 +2123,12 @@ export function ImageToolsWorkspace({
   };
 
   const handleClearRightPanel = () => {
+    setResultImageIds([]);
     setState((prev) => ({ ...prev, rightPanelImageId: null }));
   };
 
   const handleSelectHistoryItem = (id: string) => {
+    setResultImageIds([]);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
@@ -2178,6 +2244,9 @@ export function ImageToolsWorkspace({
   const rightItem =
     accessibleHistoryItems.find((h) => h.id === state.rightPanelImageId) ||
     null;
+  const resultItems = resultImageIds
+    .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
+    .filter((item): item is ImageRecord => !!item);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -2451,6 +2520,7 @@ export function ImageToolsWorkspace({
             targetImage={targetImage}
             referenceImages={referenceItems}
             rightImage={rightItem}
+            resultImages={resultItems}
             activeToolId={activeToolId}
             toolParams={paramsByTool}
             historyItems={accessibleHistoryItems}

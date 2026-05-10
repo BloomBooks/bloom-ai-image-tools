@@ -1,6 +1,7 @@
 import AddPhotoAlternateOutlinedIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
 import BrushOutlinedIcon from "@mui/icons-material/BrushOutlined";
+import CallSplitOutlinedIcon from "@mui/icons-material/CallSplitOutlined";
 import ColorLensOutlinedIcon from "@mui/icons-material/ColorLensOutlined";
 import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
@@ -96,6 +97,35 @@ export const TOOLS: ToolDefinition[] = [
       return applyArtStyleToPrompt(combinedPrompt, params.styleId);
     },
     referenceImages: "0+",
+    editImage: false,
+  },
+  {
+    id: "break_into_pieces",
+    title: "Break into Pieces",
+    description:
+      "Turn one or more reference images into a clean sheet of separate game pieces.",
+    icon: CallSplitOutlinedIcon,
+    parameters: [
+      {
+        name: "furtherInstructions",
+        label: "Further Instructions",
+        type: "textarea",
+        placeholder:
+          "Optional: mention what to include, what to skip, or how toy-like the pieces should feel.",
+        optional: true,
+      },
+    ],
+    promptTemplate: (params) => {
+      const furtherInstructions = params.furtherInstructions?.trim();
+      const basePrompt =
+        "Using the supplied reference image or images, design a clean sheet of separate game pieces derived from the visible characters, props, animals, and important objects. Convert the source into distinct standalone pieces that would be useful for a board game or storytelling game. Arrange the finished pieces in a tidy grid on a pure white background with generous spacing between items. Keep every piece fully visible and clearly separated from the others. No borders, no frames, no cut lines, no shadows, no labels, no captions, no numbering, and no extra scene background. Preserve the source design language, colors, and recognizable details while simplifying only as needed so each piece reads clearly as an individual cutout.";
+      if (!furtherInstructions) {
+        return basePrompt;
+      }
+      return `${basePrompt}\n\nAdditional instructions to follow closely: ${furtherInstructions}`;
+    },
+    actionButtonLabel: "Generate Pieces",
+    referenceImages: "1+",
     editImage: false,
   },
   {

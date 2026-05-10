@@ -67,6 +67,7 @@ interface ImageToolsPanelBar {
   targetImage: ImageRecord | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
+  resultImages?: ImageRecord[];
   activeToolId: string | null;
   toolParams: ToolParamsById;
   historyItems: ImageRecord[];
@@ -113,6 +114,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   targetImage,
   referenceImages,
   rightImage,
+  resultImages = [],
   activeToolId,
   toolParams,
   historyItems,
@@ -467,6 +469,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               targetImage={targetImage}
               referenceImages={referenceImages}
               rightImage={rightImage}
+              resultImages={resultImages}
               onSetTarget={onSetTarget}
               onSetReferenceAt={onSetReferenceAt}
               onSetRight={onSetRight}

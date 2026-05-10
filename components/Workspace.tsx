@@ -123,6 +123,7 @@ interface WorkspaceProps {
   targetImage: ImageRecord | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
+  resultImages?: ImageRecord[];
   onSetTarget: (id: string) => void;
   onSetReferenceAt: (index: number, id: string) => void;
   onSetRight: (id: string) => void;
@@ -142,6 +143,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   targetImage,
   referenceImages,
   rightImage,
+  resultImages = [],
   onSetTarget,
   onSetReferenceAt,
   onSetRight,
@@ -188,6 +190,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       ];
 
   const referenceLabel = "Reference Images";
+  const resultSlots: ImagePanelSlot[] = resultImages.map((image, index) => ({
+    image,
+    slotIndex: index,
+    canRemove: false,
+    controls: {
+      upload: false,
+      paste: false,
+      copy: true,
+      download: true,
+      remove: false,
+    },
+    dropLabel: "",
+  }));
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
   const leftColumnRef = React.useRef<HTMLDivElement>(null);
@@ -482,24 +497,37 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             position: "relative",
           }}
         >
-          <ImagePanel
-            image={rightImage}
-            label="Result"
-            panelTestId="result-panel"
-            onUpload={onUploadRight}
-            isDropZone={true}
-            onDrop={onSetRight}
-            showUploadControls={false}
-            onClear={onClearRight}
-            draggableImageId={undefined}
-            dndDropId="panel:result"
-            dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
-            isLoading={isProcessing}
-            loadingProgress={generationProgress}
-            onToggleStar={
-              rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined
-            }
-          />
+          {resultSlots.length ? (
+            <ImagePanel
+              label="Pieces"
+              layout="grid"
+              panelTestId="result-panel"
+              slots={resultSlots}
+              disabled={isProcessing}
+              onSlotUpload={() => undefined}
+              onSlotDrop={() => undefined}
+              onSlotRemove={() => undefined}
+            />
+          ) : (
+            <ImagePanel
+              image={rightImage}
+              label="Result"
+              panelTestId="result-panel"
+              onUpload={onUploadRight}
+              isDropZone={true}
+              onDrop={onSetRight}
+              showUploadControls={false}
+              onClear={onClearRight}
+              draggableImageId={undefined}
+              dndDropId="panel:result"
+              dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
+              isLoading={isProcessing}
+              loadingProgress={generationProgress}
+              onToggleStar={
+                rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined
+              }
+            />
+          )}
         </Box>
       </Box>
     </Box>

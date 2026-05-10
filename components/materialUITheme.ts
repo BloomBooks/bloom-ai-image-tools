@@ -5,9 +5,9 @@ import { theme as appTheme } from "../themes";
 export const kBloomToolboxWhite = "#ffffff88"; //See @bloom-toolboxWhite
 export const kBloomDisabledOpacity = 0.38;
 export const kBloomDisabledText = `rgba(0, 0, 0, ${kBloomDisabledOpacity})`;
-export const kBloomBlue = "#d6bb7b";
-export const kBloomBlueTextBackground = "#7a6538"; // darker for better contrast
-export const kBloomBlue50Transparent = "#d6bb7b80";
+export const kPrimary = "#d6bb7b";
+export const kPrimaryTextBackground = "#7a6538"; // darker for better contrast
+export const kPrimary50Transparent = "#d6bb7b80";
 export const kBloomPurple = "#96668f";
 export const kTextOnPurple = "#31202eff";
 export const kDisabledTextOnPurple = "#724a6aff";
@@ -38,7 +38,7 @@ export const kSelectCss = `
 
         .MuiOutlinedInput-notchedOutline {
             border-width: 1px !important;
-            border-color: ${kBloomBlue} !important; // it usually is anyway, but not before MUI decides to focus it.
+            border-color: ${kPrimary} !important; // it usually is anyway, but not before MUI decides to focus it.
         }
     }
     .MuiSelect-select {padding: 7px 11px;}`;
@@ -63,7 +63,7 @@ export const lightTheme = createTheme({
   // would be spacing{unit:23} but that gives an error saying to use a number
   //spacing: 23,
   palette: {
-    primary: { main: kBloomBlue },
+    primary: { main: kPrimary },
     secondary: { main: kBloomPurple },
     warning: { main: kBloomGold },
     text: { disabled: kBloomDisabledText },
@@ -96,7 +96,7 @@ export const lightTheme = createTheme({
       // components.
       styleOverrides: {
         root: {
-          color: kBloomBlue,
+          color: kPrimary,
         },
       },
     },
@@ -104,7 +104,7 @@ export const lightTheme = createTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
-          backgroundColor: kBloomBlueTextBackground,
+          backgroundColor: kPrimaryTextBackground,
           fontSize: "12px",
           fontWeight: "normal",
           padding: "10px",
@@ -114,7 +114,7 @@ export const lightTheme = createTheme({
           },
         },
         arrow: {
-          color: kBloomBlueTextBackground,
+          color: kPrimaryTextBackground,
         },
       },
     },
@@ -122,10 +122,10 @@ export const lightTheme = createTheme({
       styleOverrides: {
         root: {
           // for some reason,  in Material-UI 4.0 without this, we instead get unchecked boxes having the color of secondary text!!!!
-          color: kBloomBlue,
+          color: kPrimary,
           // In Material-UI 4.0, these just FLAT OUT DON'T WORK, despite the documentation, which I read to say that, if we didn't
           // specify a `color` above, would then let us specify the color you get for primary and secondary. See https://github.com/mui-org/material-ui/issues/13895
-          colorPrimary: "green", //kBloomBlue,
+          colorPrimary: "green", //kPrimary,
           colorSecondary: "pink", //kBloomPurple
         },
       },
@@ -145,7 +145,7 @@ export const lightTheme = createTheme({
 export const darkTheme = createTheme(lightTheme, {
   palette: {
     mode: "dark",
-    primary: { main: kBloomBlue },
+    primary: { main: kPrimary },
     secondary: { main: kBloomPurple },
     background: {
       default: appTheme.colors.appBackground,
@@ -213,7 +213,7 @@ const kToolboxFontSize = 11; // in px
 
 export const toolboxTheme = createTheme({
   palette: {
-    primary: { main: kBloomBlue },
+    primary: { main: kPrimary },
     secondary: { main: kBloomPurple },
     warning: { main: kBloomGold },
     text: { primary: toolboxTextColor, disabled: kBloomDisabledText },
@@ -244,7 +244,7 @@ export const toolboxTheme = createTheme({
       styleOverrides: {
         tooltip: {
           placement: "bottom",
-          backgroundColor: kBloomBlueTextBackground,
+          backgroundColor: kPrimaryTextBackground,
           fontSize: "12px",
           fontWeight: "normal",
 
@@ -264,7 +264,7 @@ export const toolboxTheme = createTheme({
           zIndex: 200000,
         },
         arrow: {
-          color: kBloomBlueTextBackground,
+          color: kPrimaryTextBackground,
         },
       },
     },
@@ -353,7 +353,7 @@ export const toolboxTheme = createTheme({
           marginLeft: "6px",
         },
         track: {
-          backgroundColor: kBloomBlue,
+          backgroundColor: kPrimary,
         },
         thumb: {
           backgroundColor: kBloomToolboxWhite,
@@ -374,7 +374,7 @@ export const toolboxTheme = createTheme({
           },
           // set the color of the icon in the button to red
           "& .MuiButton-startIcon": {
-            color: kBloomBlue,
+            color: kPrimary,
           },
         },
         outlined: {

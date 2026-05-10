@@ -2,7 +2,7 @@ import React from "react";
 import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
-import { kBloomBlue, theme } from "../themes";
+import { kPrimary, theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";

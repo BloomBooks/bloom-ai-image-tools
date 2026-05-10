@@ -67,7 +67,7 @@ export const ImageSlotLoadingOverlay: React.FC<
         <CircularProgress
           variant="determinate"
           value={isIndeterminate ? 100 : progressValue}
-          thickness={2.6}
+          thickness={1.6}
           size="clamp(160px, 46%, 300px)"
           sx={{ color: theme.colors.accent }}
         />

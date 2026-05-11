@@ -21,10 +21,8 @@ import {
   GenerationTimingState,
   ImageRecord,
   ImageToolsStatePersistence,
-  HistoryManifest,
   ModelReasoningLevel,
   ModelReasoningLevelByModelId,
-  PersistedAppState,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
   ToolParamsById,
@@ -56,24 +54,8 @@ import {
   API_KEY_STORAGE_KEY,
   AUTH_METHOD_STORAGE_KEY,
 } from "../lib/authStorage";
-import {
-  IMAGE_TOOLS_STATE_VERSION,
-  LOCAL_HISTORY_CACHE_LIMIT,
-} from "../services/persistence/constants";
-import {
-  FileSystemImageBinding,
-  deleteImageFile,
-  deriveImageFileName,
-  forgetFileSystemImageBinding,
-  listHistoryImageFiles,
-  readHistoryManifest,
-  readImageFile,
-  requestFileSystemImageBinding,
-  restoreFileSystemImageBinding,
-  supportsFileSystemAccess,
-  writeHistoryManifest,
-  writeImageFile,
-} from "../services/persistence/fileSystemAccess";
+import { IMAGE_TOOLS_STATE_VERSION } from "../services/persistence/constants";
+import { useHistoryStore } from "../services/history/useHistoryStore";
 import {
   getStyleIdFromParams,
   getStyleIdFromImageRecord,
@@ -353,110 +335,6 @@ const buildEnvironmentEntry = (url: string, index: number): ImageRecord => ({
   origin: "environment",
 });
 
-const buildRecoveredHistoryEntry = (entry: {
-  id: string;
-  fileName: string;
-  lastModified: number;
-}): ImageRecord => ({
-  id: entry.id,
-  parentId: null,
-  imageData: "",
-  imageFileName: entry.fileName,
-  toolId: "unknown",
-  parameters: {},
-  sourceStyleId: null,
-  durationMs: 0,
-  cost: 0,
-  model: "",
-  timestamp: entry.lastModified || 0,
-  promptUsed: "Recovered image",
-  sourceSummary: "Recovered from folder",
-  resolution: undefined,
-  isStarred: false,
-  origin: "generated",
-});
-
-const sanitizePersistedAppState = (
-  persisted: PersistedAppState | null | undefined,
-): PersistedAppState => {
-  const history = Array.isArray(persisted?.history)
-    ? (persisted?.history as ImageRecord[])
-    : [];
-  const accessibleIds = new Set(
-    history
-      .filter((item) => !!item.imageData || !!item.imageFileName)
-      .map((item) => item.id),
-  );
-
-  const normalizeId = (id: string | null) =>
-    id && accessibleIds.has(id) ? id : null;
-  const referenceImageIds = Array.isArray(persisted?.referenceImageIds)
-    ? (persisted?.referenceImageIds as string[]).filter((id) =>
-        accessibleIds.has(id),
-      )
-    : [];
-
-  return {
-    targetImageId: normalizeId(persisted?.targetImageId ?? null),
-    referenceImageIds,
-    rightPanelImageId: normalizeId(persisted?.rightPanelImageId ?? null),
-    history,
-  };
-};
-
-const mergeImageRecord = (current: ImageRecord, incoming: ImageRecord) => {
-  return {
-    ...incoming,
-    ...current,
-    imageData: current.imageData || incoming.imageData,
-    imageFileName: current.imageFileName || incoming.imageFileName,
-    isStarred: current.isStarred ?? incoming.isStarred,
-  };
-};
-
-const mergeHistoryFields = (
-  current: AppState,
-  incoming: PersistedAppState,
-): Pick<
-  AppState,
-  "history" | "targetImageId" | "referenceImageIds" | "rightPanelImageId"
-> => {
-  const incomingById = new Map(incoming.history.map((item) => [item.id, item]));
-  const mergedHistory = current.history.map((item) => {
-    const incomingItem = incomingById.get(item.id);
-    if (!incomingItem) {
-      return item;
-    }
-    incomingById.delete(item.id);
-    return mergeImageRecord(item, incomingItem);
-  });
-  incomingById.forEach((item) => mergedHistory.push(item));
-
-  const validIds = new Set(mergedHistory.map((item) => item.id));
-  const resolveId = (primary: string | null, fallback: string | null) => {
-    if (primary && validIds.has(primary)) {
-      return primary;
-    }
-    if (fallback && validIds.has(fallback)) {
-      return fallback;
-    }
-    return null;
-  };
-
-  const mergedReferences = Array.from(
-    new Set([...current.referenceImageIds, ...incoming.referenceImageIds]),
-  ).filter((id) => validIds.has(id));
-
-  return {
-    history: mergedHistory,
-    targetImageId: resolveId(current.targetImageId, incoming.targetImageId),
-    rightPanelImageId: resolveId(
-      current.rightPanelImageId,
-      incoming.rightPanelImageId,
-    ),
-    referenceImageIds: mergedReferences,
-  };
-};
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
@@ -467,6 +345,8 @@ export interface ImageToolsWorkspaceProps {
   >;
 }
 
+type WorkspaceState = Omit<AppState, "history">;
+
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
@@ -474,11 +354,12 @@ export function ImageToolsWorkspace({
   environmentStripMode = "host",
   thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
-  const [state, setState] = useState<AppState>({
+  const historyStore = useHistoryStore();
+
+  const [state, setState] = useState<WorkspaceState>({
     targetImageId: null,
     referenceImageIds: [],
     rightPanelImageId: null,
-    history: [],
     isProcessing: false,
     isAuthenticated: false,
     error: null,
@@ -524,14 +405,11 @@ export function ImageToolsWorkspace({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
   const [connectCtaAttentionKey, setConnectCtaAttentionKey] = useState(0);
-  const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(
-    null,
-  );
   const [fsLoading, setFsLoading] = useState(false);
   const [fsError, setFsError] = useState<string | null>(null);
-  const [fsSupported, setFsSupported] = useState(() =>
-    supportsFileSystemAccess(),
-  );
+  const fsSupported = historyStore.folderSupported;
+  const isFolderPersistenceActive = historyStore.folderStatus === "attached";
+  const folderName = historyStore.folderName;
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
   const selectedModel =
@@ -546,7 +424,21 @@ export function ImageToolsWorkspace({
       .filter(({ url }) => Boolean(url))
       .map(({ url, index }) => buildEnvironmentEntry(url as string, index));
   }, [environmentImageUrls]);
-  const isFolderPersistenceActive = !!fsBinding;
+
+  // The unified history list: user images from the HistoryStore plus the
+  // host-provided environment images. Environment items live in memory only
+  // and never get written to the folder.
+  const combinedHistory = useMemo<ImageRecord[]>(
+    () => [...historyStore.history, ...resolvedEnvironmentEntries],
+    [historyStore.history, resolvedEnvironmentEntries],
+  );
+
+  // For child components that expect the legacy `AppState` shape with a
+  // `history` field, materialize one. (Internally we keep `state` slim.)
+  const appStateForChildren: AppState = useMemo(
+    () => ({ ...state, history: combinedHistory }),
+    [state, combinedHistory],
+  );
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
       ? "OpenRouter key supplied by environment"
@@ -555,91 +447,23 @@ export function ImageToolsWorkspace({
         : "OpenRouter API key linked"
     : "OpenRouter not connected";
   const historyStatusLabel = isFolderPersistenceActive
-    ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
+    ? `History syncing to ${folderName || "linked folder"}`
     : "History stored in browser only";
   const settingsButtonTitle = `${openRouterStatusLabel}. ${historyStatusLabel}.`;
   const settingsButtonLabel = `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
 
-  const persistHistoryImage = useCallback(
-    async (
-      item: ImageRecord,
-      bindingOverride?: FileSystemImageBinding | null,
-    ): Promise<ImageRecord> => {
-      const bindingToUse = bindingOverride ?? fsBinding;
-      if (!bindingToUse || !item.imageData) {
-        return item;
-      }
-      try {
-        const mime = getMimeTypeFromUrl(item.imageData) ?? "image/png";
-        const fileName = item.imageFileName
-          ? item.imageFileName
-          : deriveImageFileName(item.id, mime);
-        await writeImageFile(bindingToUse, fileName, item.imageData);
-        return { ...item, imageFileName: fileName };
-      } catch (error) {
-        const errorDetails =
-          error instanceof Error
-            ? {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-              }
-            : error;
-        console.error("Failed to save history image", {
-          historyId: item.id,
-          directoryName: bindingToUse.directoryName,
-          imageFileName: item.imageFileName,
-          derivedMime: getMimeTypeFromUrl(item.imageData) ?? "image/png",
-          derivedFileName: deriveImageFileName(
-            item.id,
-            getMimeTypeFromUrl(item.imageData) ?? "image/png",
-          ),
-          error: errorDetails,
-        });
-        setFsError("Could not save image to folder.");
-        return item;
-      }
-    },
-    [fsBinding],
-  );
-
-  const loadHistoryImageFromFolder = useCallback(
-    async (item: ImageRecord): Promise<ImageRecord> => {
-      if (!fsBinding || item.imageData || !item.imageFileName) {
-        return item;
-      }
-      const dataUrl = await readImageFile(fsBinding, item.imageFileName);
-      if (!dataUrl) {
-        return item;
-      }
-      return { ...item, imageData: dataUrl };
-    },
-    [fsBinding],
-  );
-
-  const deleteHistoryImageFromFolder = useCallback(
-    async (item: ImageRecord) => {
-      if (!fsBinding || !item.imageFileName) {
-        return;
-      }
-      await deleteImageFile(fsBinding, item.imageFileName);
-    },
-    [fsBinding],
-  );
-
   const appendHistoryEntry = useCallback(
-    (entry: ImageRecord, options?: { skipHistoryStrip?: boolean }) => {
+    async (entry: ImageRecord, options?: { skipHistoryStrip?: boolean }) => {
       const { skipHistoryStrip = false } = options || {};
-      setState((prev) => ({ ...prev, history: [...prev.history, entry] }));
+      await historyStore.addImage(entry);
       if (!skipHistoryStrip) {
-        // Keep the history strip ordered newest-first (leftmost), matching
-        // hydrate/build behavior.
+        // Keep the history strip ordered newest-first (leftmost).
         setThumbnailStrips((prev) =>
           addItemToStrip(prev, "history", entry.id, 0),
         );
       }
     },
-    [],
+    [historyStore],
   );
 
   const updateAllArtStyleParams = useCallback(
@@ -694,125 +518,59 @@ export function ImageToolsWorkspace({
   );
 
   useEffect(() => {
-    setFsSupported(supportsFileSystemAccess());
-  }, []);
-
-  useEffect(() => {
     const resolvedIds = resolvedEnvironmentEntries.map((entry) => entry.id);
 
     if (environmentStripMode === "host") {
-      if (!resolvedEnvironmentEntries.length) {
-        setThumbnailStrips((prev) =>
-          replaceStripItems(prev, "environment", []),
-        );
-        return;
-      }
-
-      setState((prev) => {
-        const existingIds = new Set(prev.history.map((item) => item.id));
-        const nextHistory = [...prev.history];
-        let mutated = false;
-        resolvedEnvironmentEntries.forEach((entry) => {
-          if (!existingIds.has(entry.id)) {
-            nextHistory.push(entry);
-            mutated = true;
-          }
-        });
-        return mutated ? { ...prev, history: nextHistory } : prev;
-      });
-
       setThumbnailStrips((prev) =>
         replaceStripItems(prev, "environment", resolvedIds),
       );
-
       return;
     }
 
-    // editable mode: ensure host-provided items exist in history, but don't
-    // overwrite the strip ordering/removals once the user starts editing.
-    if (!isHydrated) {
-      return;
-    }
-
-    if (resolvedEnvironmentEntries.length) {
-      setState((prev) => {
-        const existingIds = new Set(prev.history.map((item) => item.id));
-        const nextHistory = [...prev.history];
-        let mutated = false;
-        resolvedEnvironmentEntries.forEach((entry) => {
-          if (!existingIds.has(entry.id)) {
-            nextHistory.push(entry);
-            mutated = true;
-          }
-        });
-        return mutated ? { ...prev, history: nextHistory } : prev;
-      });
-    }
-
-    // Seed once if the strip has no items yet.
-    if (resolvedIds.length) {
-      setThumbnailStrips((prev) => {
-        const current = prev.itemIdsByStrip.environment || [];
-        if (current.length) {
-          return prev;
-        }
-        return replaceStripItems(prev, "environment", resolvedIds);
-      });
-    }
+    // editable mode: seed the strip once if it's empty (don't overwrite once
+    // the user has started editing it).
+    if (!isHydrated) return;
+    if (!resolvedIds.length) return;
+    setThumbnailStrips((prev) => {
+      const current = prev.itemIdsByStrip.environment || [];
+      if (current.length) return prev;
+      return replaceStripItems(prev, "environment", resolvedIds);
+    });
   }, [resolvedEnvironmentEntries, environmentStripMode, isHydrated]);
 
+  // Drop dangling target/reference/right-panel pointers when their referenced
+  // entries are gone from the store. (No longer deletes orphan entries — that
+  // was the broken multi-tab behavior; deletion is now explicit via the strip
+  // remove handler, which writes a tombstone via the history store.) Skipped
+  // until the store finishes hydrating so we don't wipe a persisted target ID
+  // before its image has had a chance to load.
   useEffect(() => {
-    const referencedIds = new Set<string>();
-    THUMBNAIL_STRIP_ORDER.forEach((stripId) => {
-      (thumbnailStrips.itemIdsByStrip[stripId] || []).forEach((id) =>
-        referencedIds.add(id),
-      );
-    });
-    if (state.targetImageId) {
-      referencedIds.add(state.targetImageId);
-    }
-    state.referenceImageIds.forEach((id) => referencedIds.add(id));
-    if (state.rightPanelImageId) {
-      referencedIds.add(state.rightPanelImageId);
-    }
+    if (!historyStore.hydrated) return;
+    const ids = new Set(historyStore.history.map((e) => e.id));
+    const envIds = new Set(resolvedEnvironmentEntries.map((e) => e.id));
+    const isValid = (id: string | null) =>
+      !!id && (ids.has(id) || envIds.has(id));
 
-    const orphaned = state.history.filter(
-      (entry) => entry.origin !== "environment" && !referencedIds.has(entry.id),
-    );
-    if (!orphaned.length) {
-      return;
-    }
-
-    orphaned.forEach((entry) => {
-      void deleteHistoryImageFromFolder(entry);
-    });
-
-    setState((prev) => ({
-      ...prev,
-      history: prev.history.filter(
-        (entry) =>
-          entry.origin === "environment" || referencedIds.has(entry.id),
-      ),
-      referenceImageIds: prev.referenceImageIds.filter((id) =>
-        referencedIds.has(id),
-      ),
-      targetImageId:
-        prev.targetImageId && referencedIds.has(prev.targetImageId)
-          ? prev.targetImageId
-          : null,
-      rightPanelImageId:
-        prev.rightPanelImageId && referencedIds.has(prev.rightPanelImageId)
+    setState((prev) => {
+      const referenceImageIds = prev.referenceImageIds.filter(isValid);
+      const next: WorkspaceState = {
+        ...prev,
+        referenceImageIds,
+        targetImageId: isValid(prev.targetImageId) ? prev.targetImageId : null,
+        rightPanelImageId: isValid(prev.rightPanelImageId)
           ? prev.rightPanelImageId
           : null,
-    }));
-  }, [
-    deleteHistoryImageFromFolder,
-    state.history,
-    state.targetImageId,
-    state.referenceImageIds,
-    state.rightPanelImageId,
-    thumbnailStrips,
-  ]);
+      };
+      if (
+        next.targetImageId === prev.targetImageId &&
+        next.rightPanelImageId === prev.rightPanelImageId &&
+        next.referenceImageIds.length === prev.referenceImageIds.length
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [historyStore.hydrated, historyStore.history, resolvedEnvironmentEntries]);
 
   const refreshCredits = useCallback(async () => {
     if (creditsRequestAbortControllerRef.current) {
@@ -878,67 +636,12 @@ export function ImageToolsWorkspace({
     };
   }, []);
 
-  useEffect(() => {
-    if (!isHydrated || !fsBinding) {
-      return;
-    }
-
-    const itemsNeedingData = state.history.filter(
-      (item) => !item.imageData && !!item.imageFileName,
-    );
-    if (itemsNeedingData.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      const updatedItems = await Promise.all(
-        itemsNeedingData.map((item) => loadHistoryImageFromFolder(item)),
-      );
-      if (cancelled) {
-        return;
-      }
-      const updateMap = new Map<string, ImageRecord>(
-        updatedItems.map((item) => [item.id, item]),
-      );
-      setState((prev) => {
-        let changed = false;
-        const nextHistory = prev.history.map((item) => {
-          const updated = updateMap.get(item.id);
-          if (updated && updated.imageData && updated !== item) {
-            changed = true;
-            return updated;
-          }
-          return item;
-        });
-        return changed ? { ...prev, history: nextHistory } : prev;
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isHydrated, fsBinding, state.history, loadHistoryImageFromFolder]);
+  // Lazy-loading of folder bytes is handled inside useHistoryStore; nothing
+  // for this component to schedule. The folder binding is also restored by
+  // the store's hydrate() call.
 
   useEffect(() => {
-    if (!fsSupported) {
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      const binding = await restoreFileSystemImageBinding();
-      if (!cancelled && binding) {
-        setFsBinding(binding);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fsSupported]);
-
-  useEffect(() => {
+    if (!historyStore.hydrated) return;
     let cancelled = false;
     (async () => {
       try {
@@ -948,18 +651,43 @@ export function ImageToolsWorkspace({
         }
 
         if (persisted) {
-          const sanitized = sanitizePersistedAppState(persisted.appState);
+          const legacyHistory = Array.isArray(persisted.appState?.history)
+            ? (persisted.appState.history as ImageRecord[])
+            : [];
+
+          // One-shot migration: if the legacy IDB store still has images
+          // embedded as base64 and the new history store is empty, push them
+          // through. The hydrated guard above ensures we don't think the
+          // store is empty when it's merely still loading.
+          if (legacyHistory.length > 0 && historyStore.history.length === 0) {
+            for (const item of legacyHistory) {
+              if (!item?.id || !item.imageData) continue;
+              try {
+                await historyStore.addImage(item);
+              } catch (error) {
+                console.error("Legacy migration: failed to import", item.id, error);
+              }
+            }
+          }
+
           if (cancelled) return;
           setState((prev) => ({
             ...prev,
-            ...sanitized,
+            targetImageId: persisted.appState?.targetImageId ?? null,
+            referenceImageIds: Array.isArray(persisted.appState?.referenceImageIds)
+              ? persisted.appState.referenceImageIds
+              : [],
+            rightPanelImageId: persisted.appState?.rightPanelImageId ?? null,
             isProcessing: false,
             error: null,
           }));
 
+          // Strip ids may reference items in the store (post-migration) or in
+          // the legacy persisted list. Treat both as valid sources.
+          const knownEntries = [...historyStore.history, ...legacyHistory];
           const hydratedStrips = hydrateThumbnailStripsSnapshot(
             persisted.thumbnailStrips,
-            sanitized.history,
+            knownEntries,
           );
           if (!cancelled) {
             setThumbnailStrips(hydratedStrips);
@@ -1033,7 +761,11 @@ export function ImageToolsWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [persistence, envApiKey, updateAllArtStyleParams]);
+    // historyStore.addImage and historyStore.history are read at run-time
+    // via a ref-like pattern; we don't need to refire this effect on every
+    // snapshot. We DO need to refire when the store finishes hydrating.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistence, envApiKey, updateAllArtStyleParams, historyStore.hydrated]);
 
   useEffect(() => {
     if (!isHydrated || apiKey || typeof window === "undefined") {
@@ -1075,7 +807,6 @@ export function ImageToolsWorkspace({
   // Keep the latest inputs for persistence in refs so we can build the persisted object
   // off the critical input-event path (e.g., pointerup/dragend).
   const stateRef = useRef(state);
-  const fsBindingRef = useRef(fsBinding);
   const paramsByToolRef = useRef(paramsByTool);
   const activeToolIdRef = useRef(activeToolId);
   const selectedModelIdRef = useRef(selectedModelId);
@@ -1085,17 +816,10 @@ export function ImageToolsWorkspace({
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
   const thumbnailStripsRef = useRef(thumbnailStrips);
-  const fsManifestHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
-  const fsManifestReadyHandleRef = useRef<FileSystemDirectoryHandle | null>(
-    null,
-  );
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-  useEffect(() => {
-    fsBindingRef.current = fsBinding;
-  }, [fsBinding]);
   useEffect(() => {
     paramsByToolRef.current = paramsByTool;
   }, [paramsByTool]);
@@ -1124,83 +848,9 @@ export function ImageToolsWorkspace({
     thumbnailStripsRef.current = thumbnailStrips;
   }, [thumbnailStrips]);
 
-  useEffect(() => {
-    if (!fsBinding) {
-      fsManifestHandleRef.current = null;
-      fsManifestReadyHandleRef.current = null;
-    }
-  }, [fsBinding]);
-
-  useEffect(() => {
-    if (!fsBinding || !isHydrated) {
-      return;
-    }
-    if (fsManifestReadyHandleRef.current === fsBinding.directoryHandle) {
-      return;
-    }
-    if (fsManifestHandleRef.current === fsBinding.directoryHandle) {
-      return;
-    }
-    fsManifestHandleRef.current = fsBinding.directoryHandle;
-
-    let cancelled = false;
-    (async () => {
-      const manifest = await readHistoryManifest(fsBinding);
-      if (cancelled) {
-        return;
-      }
-
-      let incomingAppState: PersistedAppState | null = null;
-      let incomingStrips: ThumbnailStripsSnapshot | null | undefined = null;
-
-      if (manifest) {
-        incomingAppState = sanitizePersistedAppState(manifest.appState);
-        incomingStrips = manifest.thumbnailStrips;
-      } else if (stateRef.current.history.length === 0) {
-        const files = await listHistoryImageFiles(fsBinding);
-        if (cancelled) {
-          return;
-        }
-        if (files.length) {
-          const recoveredHistory = files
-            .sort((a, b) => a.lastModified - b.lastModified)
-            .map((file) => buildRecoveredHistoryEntry(file));
-          incomingAppState = sanitizePersistedAppState({
-            targetImageId: null,
-            referenceImageIds: [],
-            rightPanelImageId: null,
-            history: recoveredHistory,
-          });
-        }
-      }
-
-      if (!incomingAppState) {
-        return;
-      }
-
-      const mergedFields = mergeHistoryFields(
-        stateRef.current,
-        incomingAppState,
-      );
-      if (cancelled) {
-        return;
-      }
-      setState((prev) => ({ ...prev, ...mergedFields }));
-
-      setThumbnailStrips(
-        mergeThumbnailStripsSnapshots(
-          thumbnailStripsRef.current,
-          incomingStrips,
-          mergedFields.history,
-        ),
-      );
-      fsManifestReadyHandleRef.current = fsBinding.directoryHandle;
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fsBinding, isHydrated]);
+  // Folder attach/detach + sidecar+tombstone reconciliation are owned by
+  // HistoryStore. The component just reflects the current snapshot via
+  // historyStore.history.
 
   const persistenceScheduleRef = useRef<{
     idleHandle: number | null;
@@ -1210,18 +860,14 @@ export function ImageToolsWorkspace({
   }>({ idleHandle: null, timeoutHandle: null, saving: false, dirty: false });
 
   const accessibleHistoryItems = useMemo(
-    () => state.history.filter((item) => !!item.imageData),
-    [state.history],
+    () => combinedHistory.filter((item) => !!item.imageData),
+    [combinedHistory],
   );
 
-  const hasHiddenHistory = useMemo(() => {
-    if (fsBinding || !fsSupported) {
-      return false;
-    }
-    return state.history.some(
-      (item) => !item.imageData && !!item.imageFileName,
-    );
-  }, [fsBinding, fsSupported, state.history]);
+  // With the HistoryStore-backed lazy loading, entries always become accessible
+  // once bytes have streamed in. There is no separate "hidden" state for the UI
+  // to expose.
+  const hasHiddenHistory = false;
 
   useEffect(() => {
     if (!isHydrated || !persistence) return;
@@ -1241,32 +887,18 @@ export function ImageToolsWorkspace({
 
     const buildPersistableState = () => {
       const currentState = stateRef.current;
-      const currentFsBinding = fsBindingRef.current;
 
-      const cacheStart = Math.max(
-        currentState.history.length - LOCAL_HISTORY_CACHE_LIMIT,
-        0,
-      );
-
-      const historyForPersistence = currentState.history.map((item, index) => {
-        const keepImageData =
-          !currentFsBinding ||
-          !item.imageFileName ||
-          !item.imageData ||
-          index >= cacheStart;
-        if (keepImageData) {
-          return item;
-        }
-        return { ...item, imageData: "" };
-      });
-
+      // The persistence prop only carries per-browser preferences now —
+      // image history lives in HistoryStore (a separate IDB database).
+      // We still write an empty history array so the persisted shape stays
+      // backwards-compatible with any older consumer of `persistence.load()`.
       return {
         version: IMAGE_TOOLS_STATE_VERSION,
         appState: {
           targetImageId: currentState.targetImageId,
           referenceImageIds: currentState.referenceImageIds,
           rightPanelImageId: currentState.rightPanelImageId,
-          history: historyForPersistence,
+          history: [],
         },
         paramsByTool: paramsByToolRef.current,
         activeToolId: activeToolIdRef.current,
@@ -1277,25 +909,6 @@ export function ImageToolsWorkspace({
         auth: {
           apiKey: apiKeyRef.current,
           authMethod: authMethodRef.current,
-        },
-        thumbnailStrips: thumbnailStripsRef.current,
-      };
-    };
-
-    const buildHistoryManifest = (): Omit<HistoryManifest, "version"> => {
-      const currentState = stateRef.current;
-      const historyForManifest = currentState.history.map((item) => {
-        if (item.imageFileName && item.imageData) {
-          return { ...item, imageData: "" };
-        }
-        return item;
-      });
-      return {
-        appState: {
-          targetImageId: currentState.targetImageId,
-          referenceImageIds: currentState.referenceImageIds,
-          rightPanelImageId: currentState.rightPanelImageId,
-          history: historyForManifest,
         },
         thumbnailStrips: thumbnailStripsRef.current,
       };
@@ -1318,18 +931,6 @@ export function ImageToolsWorkspace({
 
       try {
         await persistence.save(buildPersistableState());
-        const currentBinding = fsBindingRef.current;
-        if (
-          currentBinding &&
-          fsManifestReadyHandleRef.current === currentBinding.directoryHandle
-        ) {
-          try {
-            await writeHistoryManifest(currentBinding, buildHistoryManifest());
-          } catch (error) {
-            console.error("Failed to persist history manifest", error);
-            setFsError("Could not save history metadata to folder.");
-          }
-        }
       } finally {
         const end =
           typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -1382,8 +983,6 @@ export function ImageToolsWorkspace({
     state.targetImageId,
     state.referenceImageIds,
     state.rightPanelImageId,
-    state.history,
-    fsBinding,
     paramsByTool,
     activeToolId,
     selectedModelId,
@@ -1418,101 +1017,33 @@ export function ImageToolsWorkspace({
   }, []);
 
   const handleEnableFolderStorage = useCallback(async () => {
-    if (!fsSupported) {
-      return;
-    }
+    if (!fsSupported) return;
     setFsLoading(true);
     setFsError(null);
     try {
-      const binding = await requestFileSystemImageBinding();
-      if (!binding) {
-        return;
-      }
-      const existingManifest = await readHistoryManifest(binding);
-      const incomingAppState = existingManifest
-        ? sanitizePersistedAppState(existingManifest.appState)
-        : null;
-      const mergedFields = incomingAppState
-        ? mergeHistoryFields(stateRef.current, incomingAppState)
-        : null;
-      const historyToPersist =
-        mergedFields?.history ?? stateRef.current.history;
-      const migratedHistory = await Promise.all(
-        historyToPersist.map((item) => persistHistoryImage(item, binding)),
-      );
-      const migratedMap = new Map(
-        migratedHistory.map((item) => [item.id, item] as const),
-      );
-      const nextHistory = historyToPersist.map(
-        (item) => migratedMap.get(item.id) ?? item,
-      );
-      const nextThumbnailStrips = mergeThumbnailStripsSnapshots(
-        thumbnailStripsRef.current,
-        existingManifest?.thumbnailStrips,
-        nextHistory,
-      );
-      fsManifestHandleRef.current = binding.directoryHandle;
-      fsManifestReadyHandleRef.current = binding.directoryHandle;
-      setFsBinding(binding);
-      setState((prev) => {
-        if (!mergedFields) {
-          return {
-            ...prev,
-            history: prev.history.map(
-              (item) => migratedMap.get(item.id) ?? item,
-            ),
-          };
-        }
-        return {
-          ...prev,
-          ...mergedFields,
-          history: nextHistory,
-        };
-      });
-      setThumbnailStrips(nextThumbnailStrips);
+      const ok = await historyStore.attachFolder();
+      if (!ok) return;
     } catch (error) {
       console.error("Failed to enable folder storage", error);
       setFsError("Could not enable folder storage.");
     } finally {
       setFsLoading(false);
     }
-  }, [fsSupported, persistHistoryImage]);
+  }, [fsSupported, historyStore]);
 
   const handleDisableFolderStorage = useCallback(async () => {
-    if (!fsBinding) {
-      return;
-    }
+    if (!isFolderPersistenceActive) return;
     setFsLoading(true);
     setFsError(null);
     try {
-      const restoredHistory = await Promise.all(
-        state.history.map(async (item) => {
-          if (item.imageData || !item.imageFileName) {
-            return item.imageFileName ? { ...item, imageFileName: null } : item;
-          }
-          const dataUrl = await readImageFile(fsBinding, item.imageFileName);
-          if (dataUrl) {
-            return { ...item, imageData: dataUrl, imageFileName: null };
-          }
-          return { ...item, imageFileName: null };
-        }),
-      );
-      const restoredMap = new Map(
-        restoredHistory.map((item) => [item.id, item] as const),
-      );
-      await forgetFileSystemImageBinding();
-      setFsBinding(null);
-      setState((prev) => ({
-        ...prev,
-        history: prev.history.map((item) => restoredMap.get(item.id) ?? item),
-      }));
+      await historyStore.detachFolder();
     } catch (error) {
       console.error("Failed to disable folder storage", error);
       setFsError("Could not disable folder storage.");
     } finally {
       setFsLoading(false);
     }
-  }, [fsBinding, state.history]);
+  }, [historyStore, isFolderPersistenceActive]);
 
   const handleCancelProcessing = useCallback(() => {
     const controller = requestAbortControllerRef.current;
@@ -1535,7 +1066,7 @@ export function ImageToolsWorkspace({
     const requiresEditImage = tool.editImage !== false;
     const targetImage =
       requiresEditImage && state.targetImageId
-        ? state.history.find((h) => h.id === state.targetImageId) || null
+        ? combinedHistory.find((h) => h.id === state.targetImageId) || null
         : null;
     if (requiresEditImage && !targetImage) {
       setState((prev) => ({
@@ -1547,7 +1078,7 @@ export function ImageToolsWorkspace({
 
     const { min, max } = getReferenceConstraints(tool.referenceImages);
     const referenceItems = state.referenceImageIds
-      .map((id) => state.history.find((h) => h.id === id) || null)
+      .map((id) => combinedHistory.find((h) => h.id === id) || null)
       .filter((h): h is ImageRecord => !!h);
 
     // Requirements: tools may require 0, 1, or 1+ reference images.
@@ -1720,8 +1251,10 @@ export function ImageToolsWorkspace({
         parentIdOverride?: string | null,
       ): Promise<ImageRecord> => {
         const resolution = await getImageDimensions(imageData);
-
-        let item: ImageRecord = {
+        // The HistoryStore decides the id (timestamp + slug + rand) and
+        // handles folder writes via the WAL, so we no longer call out to
+        // persistHistoryImage here.
+        return {
           id: uuid(),
           parentId:
             parentIdOverride !== undefined
@@ -1743,12 +1276,6 @@ export function ImageToolsWorkspace({
           resolution,
           isStarred: false,
         };
-
-        if (fsBinding) {
-          item = await persistHistoryImage(item);
-        }
-
-        return item;
       };
 
       const finalizeDerivedItems = (
@@ -1796,7 +1323,7 @@ export function ImageToolsWorkspace({
           for (const pieceImage of derivedItemsResult.imageDataItems) {
             const pieceItem = await createHistoryItem(pieceImage, parentId);
             createdPieces.push(pieceItem);
-            appendHistoryEntry(pieceItem);
+            await appendHistoryEntry(pieceItem);
           }
 
           finalizeDerivedItems(createdPieces, { showAsCollection: true });
@@ -1808,7 +1335,7 @@ export function ImageToolsWorkspace({
           { delayMs: 140, repeat: 0 },
         );
         const gifItem = await createHistoryItem(gifImageData, parentId);
-        appendHistoryEntry(gifItem);
+        await appendHistoryEntry(gifItem);
         finalizeDerivedItems([gifItem]);
         return;
       }
@@ -1827,7 +1354,7 @@ export function ImageToolsWorkspace({
         );
       }
 
-      appendHistoryEntry(newItem);
+      await appendHistoryEntry(newItem);
       setGenerationProgress(null);
       setState((prev) => ({
         ...prev,
@@ -1893,7 +1420,7 @@ export function ImageToolsWorkspace({
     async (file: File, targetPanel: "target" | "right") => {
       try {
         const { dataUrl, dimensions } = await prepareImageBlob(file);
-        let newItem: ImageRecord = {
+        const newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
           imageData: dataUrl,
@@ -1909,11 +1436,7 @@ export function ImageToolsWorkspace({
           isStarred: false,
         };
 
-        if (fsBinding) {
-          newItem = await persistHistoryImage(newItem);
-        }
-
-        appendHistoryEntry(newItem);
+        await appendHistoryEntry(newItem);
         setState((prev) => ({
           ...prev,
           targetImageId:
@@ -1933,7 +1456,7 @@ export function ImageToolsWorkspace({
         }));
       }
     },
-    [fsBinding, persistHistoryImage],
+    [appendHistoryEntry],
   );
 
   const handleUploadTarget = useCallback(
@@ -1974,7 +1497,7 @@ export function ImageToolsWorkspace({
       try {
         const { dataUrl, dimensions } = await prepareImageBlob(file);
 
-        let newItem: ImageRecord = {
+        const newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
           imageData: dataUrl,
@@ -1990,11 +1513,7 @@ export function ImageToolsWorkspace({
           isStarred: false,
         };
 
-        if (fsBinding) {
-          newItem = await persistHistoryImage(newItem);
-        }
-
-        appendHistoryEntry(newItem);
+        await appendHistoryEntry(newItem);
         setState((prev) => {
           const nextIds = [...prev.referenceImageIds];
           const idx =
@@ -2021,7 +1540,7 @@ export function ImageToolsWorkspace({
         }));
       }
     },
-    [activeToolId, fsBinding, persistHistoryImage],
+    [activeToolId, appendHistoryEntry],
   );
 
   // Global Paste Listener
@@ -2147,31 +1666,20 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
-  const handleToggleHistoryStar = useCallback((id: string) => {
-    let toggled: boolean | null = null;
-    setState((prev) => {
-      let changed = false;
-      const nextHistory = prev.history.map((item) => {
-        if (item.id !== id) {
-          return item;
-        }
-        changed = true;
-        toggled = !item.isStarred;
-        return { ...item, isStarred: toggled };
-      });
-      return changed ? { ...prev, history: nextHistory } : prev;
-    });
-
-    if (toggled === null) {
-      return;
-    }
-    setThumbnailStrips((prev) => {
-      if (toggled) {
-        return addItemToStrip(prev, "starred", id);
-      }
-      return removeItemFromStrip(prev, "starred", id);
-    });
-  }, []);
+  const handleToggleHistoryStar = useCallback(
+    (id: string) => {
+      const entry = historyStore.history.find((item) => item.id === id);
+      if (!entry) return;
+      const next = !entry.isStarred;
+      void historyStore.setStarred(id, next);
+      setThumbnailStrips((prev) =>
+        next
+          ? addItemToStrip(prev, "starred", id)
+          : removeItemFromStrip(prev, "starred", id),
+      );
+    },
+    [historyStore],
+  );
 
   const handleStripItemDrop = useCallback(
     (
@@ -2187,7 +1695,7 @@ export function ImageToolsWorkspace({
       if (!config.allowDrop) {
         return;
       }
-      const exists = state.history.some((item) => item.id === draggedId);
+      const exists = combinedHistory.some((item) => item.id === draggedId);
       if (!exists) {
         return;
       }
@@ -2202,7 +1710,7 @@ export function ImageToolsWorkspace({
         return addItemToStrip(prev, stripId, draggedId, dropIndex);
       });
     },
-    [state.history, resolvedThumbnailStripConfigs],
+    [combinedHistory, resolvedThumbnailStripConfigs],
   );
 
   const handleStripPinToggle = useCallback((stripId: ThumbnailStripId) => {
@@ -2225,16 +1733,32 @@ export function ImageToolsWorkspace({
         return;
       }
       if (stripId === "starred") {
-        const entry = state.history.find((item) => item.id === imageId);
+        const entry = combinedHistory.find((item) => item.id === imageId);
         if (entry?.isStarred) {
           handleToggleHistoryStar(imageId);
         }
         return;
       }
+      if (stripId === "history") {
+        // Removing from the history strip is an explicit delete: write a
+        // tombstone (in folder mode) and drop the entry from memory + cache.
+        // Environment items are virtual and never get deleted from the store.
+        const entry = combinedHistory.find((item) => item.id === imageId);
+        if (entry && entry.origin !== "environment") {
+          void historyStore.deleteImage(imageId);
+        }
+        setThumbnailStrips((prev) => removeItemFromStrip(prev, stripId, imageId));
+        return;
+      }
 
       setThumbnailStrips((prev) => removeItemFromStrip(prev, stripId, imageId));
     },
-    [handleToggleHistoryStar, state.history, resolvedThumbnailStripConfigs],
+    [
+      combinedHistory,
+      handleToggleHistoryStar,
+      historyStore,
+      resolvedThumbnailStripConfigs,
+    ],
   );
 
   const handleDismissError = () => {
@@ -2528,7 +2052,7 @@ export function ImageToolsWorkspace({
 
         <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ImageToolsBar
-            appState={state}
+            appState={appStateForChildren}
             selectedModel={selectedModel || null}
             isToolRailDisabled={shouldShowConnectToOpenRouterCTA}
             onDisabledToolRailClick={triggerConnectCtaAttention}
@@ -2593,7 +2117,7 @@ export function ImageToolsWorkspace({
             isSupported: fsSupported,
             isLoading: fsLoading,
             isFolderPersistenceActive,
-            directoryName: fsBinding?.directoryName ?? null,
+            directoryName: folderName,
             error: fsError,
             onEnableFolder: () => {
               void handleEnableFolderStorage();

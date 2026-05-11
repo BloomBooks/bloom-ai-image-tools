@@ -31,7 +31,10 @@ import {
   handleCopy as copyImageToClipboard,
   handlePaste as pasteImageFromClipboard,
 } from "../lib/clipboardUtils";
-import { getMimeTypeFromUrl } from "../lib/imageUtils";
+import {
+  getImageFileExtensionFromMimeType,
+  getMimeTypeFromUrl,
+} from "../lib/imageUtils";
 import {
   hasImageFilePayload,
   getImageFileFromDataTransfer,
@@ -417,9 +420,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const handleDownload = () => {
     if (!image || !mergedControls.download) return;
 
+    const extension = image.imageFileName
+      ? getTypeFromFileName(image.imageFileName) ||
+        getImageFileExtensionFromMimeType(getMimeTypeFromUrl(image.imageData))
+      : getImageFileExtensionFromMimeType(getMimeTypeFromUrl(image.imageData));
+
     const link = document.createElement("a");
     link.href = image.imageData;
-    link.download = `bloom-ai-${image.id}.png`;
+    link.download = `bloom-ai-${image.id}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -47,6 +47,22 @@ export const getMimeTypeFromUrl = (
   return match ? match[1].toLowerCase() : null;
 };
 
+export const getImageFileExtensionFromMimeType = (
+  mimeType: string | null | undefined
+): string => {
+  switch ((mimeType || "").toLowerCase()) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "png";
+  }
+};
+
 export type PreparedImageBlob = {
   dataUrl: string;
   mimeType: string | null;

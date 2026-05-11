@@ -1,6 +1,7 @@
 import React from "react";
 import { Box } from "@mui/material";
 import { GenerationProgressState, ImageRecord } from "../types";
+import { getReferenceConstraints } from "../lib/toolHelpers";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -160,8 +161,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 }) => {
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
-  const showReferencePanel = referenceMode === "0+" || referenceMode === "1+";
+  const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
+  const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
+  const canAddReferenceSlot =
+    referenceImages.length < maxReferenceCount ||
+    !Number.isFinite(maxReferenceCount);
 
   const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
@@ -177,16 +182,20 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           dropLabel: "Drop to add",
           actionLabels: { remove: "Remove reference" },
         })),
-        {
-          image: null,
-          slotIndex: referenceImages.length,
-          canRemove: false,
-          dndDropId: `panel:reference:${referenceImages.length}`,
-          dataTestId: `reference-slot-${referenceImages.length}`,
-          uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
-          dropLabel: "Drop to add",
-          actionLabels: { remove: "Remove reference" },
-        },
+        ...(canAddReferenceSlot
+          ? [
+              {
+                image: null,
+                slotIndex: referenceImages.length,
+                canRemove: false,
+                dndDropId: `panel:reference:${referenceImages.length}`,
+                dataTestId: `reference-slot-${referenceImages.length}`,
+                uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
+                dropLabel: "Drop to add",
+                actionLabels: { remove: "Remove reference" },
+              },
+            ]
+          : []),
       ];
 
   const referenceLabel = "Reference Images";

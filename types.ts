@@ -16,6 +16,8 @@ export interface ToolParameter {
 export type ToolParams = Record<string, string>;
 export type ToolParamsById = Record<string, ToolParams>;
 
+export type ToolDerivedResultMode = "split-images" | "animated-gif";
+
 export type CapabilityName = string;
 
 // Model capability scores are on a 0-5 scale.
@@ -79,6 +81,8 @@ export interface ToolDefinition {
   capabilities?: ToolCapabilities;
   /** Optional post-processing pipeline (run sequentially on the returned image). */
   postProcessingFunctions?: string[];
+  /** Optional derived output handling for tools that split a generated sheet into assets. */
+  derivedResultMode?: ToolDerivedResultMode;
 }
 
 export interface EthnicityCategory {

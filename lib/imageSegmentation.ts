@@ -1,5 +1,3 @@
-import { cropWhitespace } from "./imageProcessing";
-
 type RasterImageData = {
   data: Uint8ClampedArray;
   width: number;
@@ -55,6 +53,36 @@ const createForegroundMask = ({
     }
   }
   return mask;
+};
+
+export const extractOpaqueBoundsFromRaster = (
+  raster: RasterImageData,
+  alphaThreshold = ALPHA_BACKGROUND_THRESHOLD,
+): Bounds | null => {
+  const { data, width, height } = raster;
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixelIndex = (y * width + x) * 4;
+      if (data[pixelIndex + 3] <= alphaThreshold) {
+        continue;
+      }
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+
+  if (right < left || bottom < top) {
+    return null;
+  }
+
+  return { left, top, right, bottom };
 };
 
 const countForeground = (
@@ -370,7 +398,39 @@ const cropBoundsToDataUrl = async (
   }
   context.putImageData(imageData, 0, 0);
 
-  return cropWhitespace(canvas.toDataURL("image/png"));
+  const opaqueBounds = extractOpaqueBoundsFromRaster({
+    data: imageData.data,
+    width: cropWidth,
+    height: cropHeight,
+  });
+
+  if (!opaqueBounds) {
+    return canvas.toDataURL("image/png");
+  }
+
+  const trimmedWidth = opaqueBounds.right - opaqueBounds.left + 1;
+  const trimmedHeight = opaqueBounds.bottom - opaqueBounds.top + 1;
+  const trimmedCanvas = document.createElement("canvas");
+  trimmedCanvas.width = trimmedWidth;
+  trimmedCanvas.height = trimmedHeight;
+  const trimmedContext = trimmedCanvas.getContext("2d");
+  if (!trimmedContext) {
+    throw new Error("Canvas context unavailable for segmentation trim.");
+  }
+
+  trimmedContext.drawImage(
+    canvas,
+    opaqueBounds.left,
+    opaqueBounds.top,
+    trimmedWidth,
+    trimmedHeight,
+    0,
+    0,
+    trimmedWidth,
+    trimmedHeight,
+  );
+
+  return trimmedCanvas.toDataURL("image/png");
 };
 
 export const segmentImageIntoPieces = async (

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { extractPieceBoundsFromRaster } from "../imageSegmentation";
+import {
+  extractOpaqueBoundsFromRaster,
+  extractPieceBoundsFromRaster,
+} from "../imageSegmentation";
 
 const expectBoundsToContain = (
   actual: { left: number; top: number; right: number; bottom: number },
@@ -151,5 +154,24 @@ describe("extractPieceBoundsFromRaster", () => {
       right: 92,
       bottom: 29,
     });
+  });
+});
+
+describe("extractOpaqueBoundsFromRaster", () => {
+  it("trims transparent padding from all sides", () => {
+    const width = 20;
+    const height = 16;
+    const data = new Uint8ClampedArray(width * height * 4);
+
+    fillRect(
+      data,
+      width,
+      { left: 6, top: 4, right: 12, bottom: 10 },
+      { r: 90, g: 140, b: 220 },
+    );
+
+    const bounds = extractOpaqueBoundsFromRaster({ data, width, height });
+
+    expect(bounds).toEqual({ left: 6, top: 4, right: 12, bottom: 10 });
   });
 });

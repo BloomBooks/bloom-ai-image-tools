@@ -6,6 +6,7 @@ import ColorLensOutlinedIcon from "@mui/icons-material/ColorLensOutlined";
 import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
 import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
+import GifBoxOutlinedIcon from "@mui/icons-material/GifBoxOutlined";
 import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
@@ -45,6 +46,19 @@ const SIZE_HINTS: Record<string, string> = {
 };
 
 const PALETTE_COLOR_OPTIONS = ["3", "4", "5", "6", "7"] as const;
+
+const appendOptionalInstructions = (
+  basePrompt: string,
+  extraInstructions: string | undefined,
+  prefix: string,
+) => {
+  const trimmedInstructions = extraInstructions?.trim();
+  if (!trimmedInstructions) {
+    return basePrompt;
+  }
+
+  return `${basePrompt}\n\n${prefix} ${trimmedInstructions}`;
+};
 
 export const TOOLS: ToolDefinition[] = [
   {
@@ -116,17 +130,48 @@ export const TOOLS: ToolDefinition[] = [
       },
     ],
     promptTemplate: (params) => {
-      const furtherInstructions = params.furtherInstructions?.trim();
       const basePrompt =
         "Using the supplied reference image or images, design a clean sheet of separate game pieces derived from the visible characters, props, animals, and important objects. Convert the source into distinct standalone pieces that would be useful for a board game or storytelling game. Arrange the finished pieces in a tidy grid on a pure white background with generous spacing between items. Keep every piece fully visible and clearly separated from the others. No borders, no frames, no cut lines, no shadows, no labels, no captions, no numbering, and no extra scene background. Preserve the source design language, colors, and recognizable details while simplifying only as needed so each piece reads clearly as an individual cutout.";
-      if (!furtherInstructions) {
-        return basePrompt;
-      }
-      return `${basePrompt}\n\nAdditional instructions to follow closely: ${furtherInstructions}`;
+      return appendOptionalInstructions(
+        basePrompt,
+        params.furtherInstructions,
+        "Additional instructions to follow closely:",
+      );
     },
     actionButtonLabel: "Generate Pieces",
     referenceImages: "1+",
     editImage: false,
+    derivedResultMode: "split-images",
+  },
+  {
+    id: "make_gif",
+    title: "Make Gif",
+    description:
+      "Turn one reference image into a short looping animation sheet and encode it as a GIF.",
+    icon: GifBoxOutlinedIcon,
+    parameters: [
+      {
+        name: "animationDescription",
+        label: "Describe the Animation",
+        type: "textarea",
+        placeholder:
+          "Optional: describe the motion, such as blinking, waving, hopping, or turning around.",
+        optional: true,
+      },
+    ],
+    promptTemplate: (params) => {
+      const basePrompt =
+        "Using the supplied reference image, create a clean animation sprite sheet of 8 sequential frames for the same main subject. Keep the character or object recognizable and consistent from frame to frame, with the same design language, camera angle, scale, and lighting. Arrange the 8 frames in reading order on a pure white background with generous spacing so each frame can be separated cleanly. Each frame must show a different moment in one short looping action. No borders, no panels, no captions, no text, no frame numbers, no arrows, no motion trails, and no extra scene background. The animation should work as transparent cutout frames after the white background is removed.";
+      return appendOptionalInstructions(
+        basePrompt,
+        params.animationDescription,
+        "Animate this specific action:",
+      );
+    },
+    actionButtonLabel: "Make GIF",
+    referenceImages: "1",
+    editImage: false,
+    derivedResultMode: "animated-gif",
   },
   {
     id: "enhance_drawing",

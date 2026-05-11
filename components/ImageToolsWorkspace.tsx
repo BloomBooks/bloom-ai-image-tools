@@ -89,8 +89,9 @@ import {
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
-import { segmentImageIntoPieces } from "../lib/imageSegmentation";
+import { createAnimatedGif } from "../lib/animatedGif";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
+import { extractDerivedImageItems } from "../lib/toolDerivedResults";
 import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
@@ -1750,32 +1751,11 @@ export function ImageToolsWorkspace({
         return item;
       };
 
-      if (tool.id === "break_into_pieces") {
-        const backgroundRemoved = await removeBackgroundFromImage(
-          processedImageData,
-          {
-            signal: abortController.signal,
-          },
-        );
-        durationMs += backgroundRemoved.durationMs;
-
-        const segmentedPieces = await segmentImageIntoPieces(
-          backgroundRemoved.imageData,
-        );
-        const pieceImages = segmentedPieces.length
-          ? segmentedPieces
-          : [backgroundRemoved.imageData];
-        const createdPieces: ImageRecord[] = [];
-
-        for (const pieceImage of pieceImages) {
-          const pieceItem = await createHistoryItem(
-            pieceImage,
-            constrainedReferences[0]?.id || null,
-          );
-          createdPieces.push(pieceItem);
-          appendHistoryEntry(pieceItem);
-        }
-
+      const finalizeDerivedItems = (
+        createdItems: ImageRecord[],
+        options?: { showAsCollection?: boolean },
+      ) => {
+        const { showAsCollection = false } = options || {};
         if (progressStartedAt > 0) {
           const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
           setGenerationTiming((prev) =>
@@ -1788,13 +1768,48 @@ export function ImageToolsWorkspace({
           );
         }
 
-        setResultImageIds(createdPieces.map((item) => item.id));
+        setResultImageIds(
+          showAsCollection ? createdItems.map((item) => item.id) : [],
+        );
         setGenerationProgress(null);
         setState((prev) => ({
           ...prev,
-          rightPanelImageId: createdPieces[0]?.id || null,
+          rightPanelImageId: createdItems[0]?.id || null,
           isProcessing: false,
         }));
+      };
+
+      if (tool.derivedResultMode) {
+        const derivedItemsResult = await extractDerivedImageItems(
+          processedImageData,
+          {
+            signal: abortController.signal,
+          },
+        );
+        durationMs += derivedItemsResult.durationMs;
+
+        const parentId = constrainedReferences[0]?.id || null;
+
+        if (tool.derivedResultMode === "split-images") {
+          const createdPieces: ImageRecord[] = [];
+
+          for (const pieceImage of derivedItemsResult.imageDataItems) {
+            const pieceItem = await createHistoryItem(pieceImage, parentId);
+            createdPieces.push(pieceItem);
+            appendHistoryEntry(pieceItem);
+          }
+
+          finalizeDerivedItems(createdPieces, { showAsCollection: true });
+          return;
+        }
+
+        const gifImageData = await createAnimatedGif(
+          derivedItemsResult.imageDataItems,
+          { delayMs: 140, repeat: 0 },
+        );
+        const gifItem = await createHistoryItem(gifImageData, parentId);
+        appendHistoryEntry(gifItem);
+        finalizeDerivedItems([gifItem]);
         return;
       }
 

@@ -40,6 +40,8 @@ import {
 
 const ADVANCED_TOOL_IDS = new Set([
   "generate_image",
+  "break_into_pieces",
+  "make_gif",
   "change_style",
   "custom",
   "generate_pallet",
@@ -692,7 +694,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       : needsTarget
       ? "Add an image to edit -->"
       : needsReference
-      ? "Add reference images"
+      ? "Add reference image"
       : missingRequired
       ? "Fill in required fields"
       : undefined;

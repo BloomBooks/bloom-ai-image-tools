@@ -36,15 +36,16 @@
     "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.0.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@huggingface/transformers": "^4.0.1",
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
     "copy-image-clipboard": "^2.1.2",
+    "gifenc": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",
     "react": "^19.2.3",

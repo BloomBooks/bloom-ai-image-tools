@@ -33,7 +33,7 @@ const parseStripIdFromContainer = (id: unknown): ThumbnailStripId | null => {
 };
 
 const parseStripItem = (
-  id: unknown
+  id: unknown,
 ): { stripId: ThumbnailStripId; imageId: string } | null => {
   const raw = String(id);
   if (!raw.startsWith("stripItem:")) return null;
@@ -44,7 +44,9 @@ const parseStripItem = (
   return { stripId, imageId };
 };
 
-const parsePanelDrop = (id: unknown):
+const parsePanelDrop = (
+  id: unknown,
+):
   | { kind: "target" }
   | { kind: "result" }
   | { kind: "reference"; slotIndex: number }
@@ -79,7 +81,7 @@ interface ImageToolsPanelBar {
     stripId: ThumbnailStripId,
     dropIndex: number,
     draggedId: string | null,
-    event?: React.DragEvent | null
+    event?: React.DragEvent | null,
   ) => void;
   onStripRemoveItem: (stripId: ThumbnailStripId, id: string) => void;
   onStripPinToggle: (stripId: ThumbnailStripId) => void;
@@ -160,28 +162,24 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     }
   }, []);
 
-  const lastPointerDownRef = React.useRef<
-    | {
-        t: number;
-        x: number;
-        y: number;
-        pointerType: string;
-        targetTestId: string;
-      }
-    | null
-  >(null);
+  const lastPointerDownRef = React.useRef<{
+    t: number;
+    x: number;
+    y: number;
+    pointerType: string;
+    targetTestId: string;
+  } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       // This governs how much movement is required before a drag is considered active.
       // Lower values make drags feel more immediate (especially on trackpads).
       activationConstraint: { distance: 2 },
-    })
+    }),
   );
 
-  const [activeDragImage, setActiveDragImage] = React.useState<ImageRecord | null>(
-    null
-  );
+  const [activeDragImage, setActiveDragImage] =
+    React.useState<ImageRecord | null>(null);
 
   const dragPerfRef = React.useRef<{
     startT: number | null;
@@ -197,8 +195,10 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           return;
         }
         const perf = dragPerfRef.current;
-        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-        const durationMs = perf.startT != null ? Math.round(now - perf.startT) : null;
+        const now =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        const durationMs =
+          perf.startT != null ? Math.round(now - perf.startT) : null;
         const summary = {
           phase,
           durationMs,
@@ -211,7 +211,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
         // ignore
       }
     },
-    [debugLog]
+    [debugLog],
   );
 
   const DragPreview: React.FC<{ image: ImageRecord }> = ({ image }) => {
@@ -384,7 +384,10 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={(event) => {
-            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const now =
+              typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now();
 
             dragPerfRef.current.startT = now;
             dragPerfRef.current.lastMoveT = now;
@@ -395,8 +398,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             if (last) {
               debugLog(
                 `dragStart dt=${Math.round(now - last.t)}ms pointer=${last.pointerType} from=(${Math.round(
-                  last.x
-                )},${Math.round(last.y)}) targetTestId=${last.targetTestId || ""}`
+                  last.x,
+                )},${Math.round(last.y)}) targetTestId=${last.targetTestId || ""}`,
               );
             } else {
               debugLog("dragStart (no prior pointerdown recorded)");
@@ -407,11 +410,15 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               | undefined;
             if (!imageId) return;
             // `historyItems` contains the same records used by strips and panels.
-            const match = historyItems.find((item) => item.id === imageId) || null;
+            const match =
+              historyItems.find((item) => item.id === imageId) || null;
             setActiveDragImage(match);
           }}
           onDragMove={() => {
-            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+            const now =
+              typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now();
             const perf = dragPerfRef.current;
             if (perf.lastMoveT != null) {
               const delta = now - perf.lastMoveT;
@@ -434,7 +441,11 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               if (typeof window === "undefined") return;
               const pe = event as React.PointerEvent<HTMLElement>;
               // Only record primary-button interactions.
-              if (typeof (pe as any).button === "number" && (pe as any).button !== 0) return;
+              if (
+                typeof (pe as any).button === "number" &&
+                (pe as any).button !== 0
+              )
+                return;
 
               const target = pe.target as HTMLElement | null;
               const targetTestId =
@@ -443,7 +454,10 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
                 "";
 
               lastPointerDownRef.current = {
-                t: typeof performance !== "undefined" ? performance.now() : Date.now(),
+                t:
+                  typeof performance !== "undefined"
+                    ? performance.now()
+                    : Date.now(),
                 x: pe.clientX,
                 y: pe.clientY,
                 pointerType: (pe as any).pointerType || "unknown",
@@ -452,8 +466,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
 
               debugLog(
                 `pointerDown (${lastPointerDownRef.current.pointerType}) @(${Math.round(
-                  pe.clientX
-                )},${Math.round(pe.clientY)}) targetTestId=${targetTestId || ""}`
+                  pe.clientX,
+                )},${Math.round(pe.clientY)}) targetTestId=${targetTestId || ""}`,
               );
             }}
             sx={{

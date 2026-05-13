@@ -27,8 +27,6 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
   label,
   onClose,
 }) => {
-  if (!image) return null;
-
   const [promptCopied, setPromptCopied] = React.useState(false);
   const copyResetTimeoutRef = React.useRef<number | null>(null);
 
@@ -40,12 +38,22 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!open || image) {
+      return;
+    }
+    setPromptCopied(false);
+  }, [open, image]);
+
   const promptContent =
-    image.promptUsed && image.promptUsed.length
+    image?.promptUsed && image.promptUsed.length
       ? image.promptUsed
       : "Prompt unavailable.";
 
   const handleCopyPrompt = async () => {
+    if (!image) {
+      return;
+    }
     const ok = await copyTextToClipboard(promptContent);
     if (!ok) return;
 
@@ -61,7 +69,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
 
   return (
     <Dialog
-      open={open}
+      open={open && !!image}
       onClose={onClose}
       maxWidth="sm"
       fullWidth
@@ -99,7 +107,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <ImageInfoPanel item={image} />
+        {image ? <ImageInfoPanel item={image} /> : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained">

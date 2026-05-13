@@ -18,6 +18,15 @@ export type ToolParamsById = Record<string, ToolParams>;
 
 export type ToolDerivedResultMode = "split-images" | "animated-gif";
 
+export interface GeneratedTextResult {
+  toolId: string;
+  text: string;
+  durationMs: number;
+  cost: number;
+  model: string;
+  promptUsed: string;
+}
+
 export type CapabilityName = string;
 
 // Model capability scores are on a 0-5 scale.
@@ -77,6 +86,8 @@ export interface ToolDefinition {
   promptTemplate: (params: Record<string, string>) => string;
   actionButtonLabel?: string;
   referenceImages: "0" | "0+" | "1" | "1+";
+  outputType?: "image" | "text";
+  fixedModelId?: string;
   editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
   capabilities?: ToolCapabilities;
   /** Optional post-processing pipeline (run sequentially on the returned image). */

@@ -17,7 +17,7 @@ import {
 const bootStore = async (page: import("@playwright/test").Page) => {
   await page.evaluate(async () => {
     // Vite dev server serves the TS source directly.
-    const mod = await import("/services/history/HistoryStore.ts");
+    const mod = await import("../services/history/HistoryStore.ts");
     const store = mod.getHistoryStore();
     (window as any).__bloomHistory = store;
     await store.hydrate();

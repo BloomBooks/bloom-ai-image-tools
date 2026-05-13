@@ -396,8 +396,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Replace the background with transparency.",
     icon: CropFreeOutlinedIcon,
     parameters: [],
-    promptTemplate: () =>
-      `Replace the background with transparency.`,
+    promptTemplate: () => `Replace the background with transparency.`,
     referenceImages: "0",
   },
 ];

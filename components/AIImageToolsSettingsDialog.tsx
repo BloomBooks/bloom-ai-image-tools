@@ -86,17 +86,13 @@ const dialogBackground = "#000";
 export const AIImageToolsSettingsDialog: React.FC<
   AIImageToolsSettingsDialogProps
 > = ({ isOpen, onClose, openRouter, history }) => {
-  if (!isOpen) {
-    return null;
-  }
-
   const folderPath = folderPathFromName(history.directoryName);
   const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
 
   return (
     <ThemeProvider theme={darkTheme}>
       <Dialog
-        open
+        open={isOpen}
         onClose={onClose}
         fullWidth
         maxWidth="md"
@@ -112,7 +108,7 @@ export const AIImageToolsSettingsDialog: React.FC<
       >
         <DialogTitle
           id="ai-settings-title"
-          disableTypography
+          component="div"
           sx={{
             display: "flex",
             alignItems: "center",

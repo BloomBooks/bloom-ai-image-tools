@@ -45,6 +45,7 @@ const ADVANCED_TOOL_IDS = new Set([
   "change_style",
   "custom",
   "generate_pallet",
+  "game_theme_generator",
   "remove_object",
   "remove_background",
 ]);
@@ -127,7 +128,7 @@ const LazyArtStylePicker: React.FC<LazyArtStylePickerProps> = (props) => {
   return <ArtStylePicker {...props} />;
 };
 
-// No debounce - only commit on blur to avoid re-render cascade during typing
+// Commit text changes immediately so validation and button state update while typing.
 
 interface ParamTextInputProps {
   name: string;
@@ -185,7 +186,9 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       const nextValue = event.target.value;
       draftRef.current = nextValue;
       setDraft(nextValue);
-      // Don't commit on change - only on blur to avoid re-render cascade
+      startTransition(() => {
+        commitRef.current(nextValue);
+      });
     },
     [],
   );
@@ -689,12 +692,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
     const missingRequired = hasUnfilledRequiredParams(tool);
+    const requiresDescriptionOrReference =
+      tool.id === "game_theme_generator" &&
+      !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
     const submitDisabledReason = !isAuthenticated && requiresOpenRouter
       ? "Connect to OpenRouter"
       : needsTarget
       ? "Add an image to edit -->"
       : needsReference
       ? "Add reference image"
+      : requiresDescriptionOrReference
+      ? "Add a description or reference image"
       : missingRequired
       ? "Fill in required fields"
       : undefined;
@@ -703,6 +711,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       (requiresOpenRouter && !isAuthenticated) ||
       needsTarget ||
       needsReference ||
+      requiresDescriptionOrReference ||
       missingRequired;
 
     const effectiveCapabilities = isSelected
@@ -838,7 +847,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 return elements;
               })()}
 
-              {requiresOpenRouter && (
+              {requiresOpenRouter && tool.outputType !== "text" && (
                 <CapabilityPanel
                   capabilities={effectiveCapabilities}
                   selectedModel={selectedModel}

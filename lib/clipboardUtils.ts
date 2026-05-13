@@ -12,6 +12,33 @@ import {
 
 export type ClipboardUploadHandler = (file: File) => void | Promise<void>;
 
+export class ClipboardReadError extends Error {
+  code: "unavailable" | "unsupported" | "blocked";
+
+  constructor(
+    code: "unavailable" | "unsupported" | "blocked",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ClipboardReadError";
+    this.code = code;
+  }
+}
+
+export const isClipboardReadFallbackError = (error: unknown): boolean => {
+  if (error instanceof ClipboardReadError) {
+    return true;
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const name = String((error as { name?: string }).name || "");
+  const message = String((error as { message?: string }).message || "");
+  return /notallowed|permission|denied|gesture/i.test(`${name} ${message}`);
+};
+
 export const getDataUrlMimeType = (
   dataUrl: string | null | undefined
 ): string | null => {
@@ -240,14 +267,33 @@ export const handleCopy = async (
 
 export const readClipboardImageFile = async (): Promise<File | null> => {
   if (typeof navigator === "undefined" || !navigator.clipboard) {
-    throw new Error("Clipboard API is not available in this environment");
+    throw new ClipboardReadError(
+      "unavailable",
+      "Clipboard API is not available in this environment",
+    );
   }
 
   if (typeof navigator.clipboard.read !== "function") {
-    throw new Error("navigator.clipboard.read is not supported");
+    throw new ClipboardReadError(
+      "unsupported",
+      "navigator.clipboard.read is not supported",
+    );
   }
 
-  const items = await navigator.clipboard.read();
+  let items: ClipboardItem[];
+  try {
+    items = await navigator.clipboard.read();
+  } catch (error) {
+    if (isClipboardReadFallbackError(error)) {
+      throw new ClipboardReadError(
+        "blocked",
+        "Direct clipboard access was blocked for this page",
+      );
+    }
+
+    throw error;
+  }
+
   for (const item of items) {
     const imageType = item.types.find((type) => type.startsWith("image/"));
     if (!imageType) continue;

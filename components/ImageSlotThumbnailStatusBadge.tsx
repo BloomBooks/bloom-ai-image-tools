@@ -35,8 +35,8 @@ export const ImageSlotThumbnailStatusBadge: React.FC<
           status === "saving" || status === "copying"
             ? theme.colors.accent
             : status === "success" || status === "copied"
-            ? "#22c55e"
-            : "#ef4444",
+              ? "#22c55e"
+              : "#ef4444",
         color: "white",
       }}
     >

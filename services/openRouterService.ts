@@ -30,7 +30,7 @@ export class OpenRouterApiError extends Error {
   }
 }
 // Pick an image-generation-capable model; override with env OPENROUTER_IMAGE_MODEL if needed.
-// Note: google/gemini-2.5-flash-image (aka "Nano Banana") supports image output,
+// Note: google/gemini-3.1-flash-lite-preview (aka "Nano Banana") supports image output,
 // whereas google/gemini-2.5-flash only supports text output.
 const DEFAULT_IMAGE_MODEL = (
   (typeof import.meta !== "undefined" &&
@@ -39,14 +39,23 @@ const DEFAULT_IMAGE_MODEL = (
     (import.meta as any).env?.VITE_OPENROUTER_IMAGE_MODEL) ||
   process.env.OPENROUTER_IMAGE_MODEL ||
   process.env.VITE_OPENROUTER_IMAGE_MODEL ||
-  "google/gemini-2.5-flash-image"
+  "google/gemini-3.1-flash-lite-preview"
 ).trim();
+
+const DEFAULT_TEXT_MODEL = "~google/gemini-flash-latest";
 
 export interface EditImageResult {
   imageData: string; // Data URL for the edited or generated image
   duration: number;
   model: string; // Model ID used (from API response)
   cost: number; // Cost in dollars (from API response usage.cost)
+}
+
+export interface GenerateTextResult {
+  text: string;
+  duration: number;
+  model: string;
+  cost: number;
 }
 
 export interface ImageConfig {
@@ -60,6 +69,11 @@ export interface EditImageOptions {
   signal?: AbortSignal;
   imageConfig?: ImageConfig;
   reasoningLevel?: ModelReasoningLevel;
+}
+
+export interface GenerateTextOptions {
+  signal?: AbortSignal;
+  modelId?: string;
 }
 
 export interface OpenRouterCredits {
@@ -100,6 +114,40 @@ function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
     base64: match[2],
   };
 }
+
+const extractTextContent = (messageContent: unknown): string => {
+  if (typeof messageContent === "string") {
+    return messageContent.trim();
+  }
+
+  if (!Array.isArray(messageContent)) {
+    return "";
+  }
+
+  return messageContent
+    .map((part) => {
+      if (typeof part === "string") {
+        return part;
+      }
+      if (part?.type === "text" && typeof part.text === "string") {
+        return part.text;
+      }
+      return "";
+    })
+    .join("\n")
+    .trim();
+};
+
+const stripMarkdownCodeFence = (text: string): string => {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```[\w-]*\s*\r?\n([\s\S]*?)\r?\n```$/);
+
+  if (!match) {
+    return trimmed;
+  }
+
+  return match[1].trim();
+};
 
 /**
  * Maps shape parameter to Gemini aspect_ratio format.
@@ -313,6 +361,105 @@ export const editImage = async (
     duration: performance.now() - startTime,
     model: responseModel,
     cost: responseCost,
+  };
+};
+
+export const generateText = async (
+  base64Images: string[],
+  prompt: string,
+  apiKey: string,
+  options?: GenerateTextOptions,
+): Promise<GenerateTextResult> => {
+  const key = apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
+    );
+  }
+
+  const startTime = performance.now();
+  const images = (base64Images || []).filter((x) => !!x);
+  const modelToUse =
+    (options?.modelId && options.modelId.trim()) || DEFAULT_TEXT_MODEL;
+  const content: any[] = [{ type: "text", text: prompt }];
+
+  for (const dataUrl of images) {
+    const { base64, mimeType } = dataUrlToParts(dataUrl);
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${mimeType};base64,${base64}` },
+    });
+  }
+
+  const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "Bloom AI Image Tools",
+    },
+    body: JSON.stringify({
+      model: modelToUse,
+      messages: [
+        {
+          role: "user",
+          content,
+        },
+      ],
+      stream: false,
+    }),
+    signal: options?.signal,
+  });
+
+  const rawText = await response.text().catch(() => "");
+  let data: any = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { _nonJsonBody: rawText };
+  }
+
+  if (!response.ok) {
+    const detailMessage = getOpenRouterErrorDetail(data);
+
+    if (response.status === 402 && detailMessage) {
+      throw new OpenRouterApiError(detailMessage, {
+        status: response.status,
+        reason: "insufficient-credits",
+        detailMessage,
+        infoUrl: OPENROUTER_KEYS_URL,
+      });
+    }
+
+    const message = detailMessage || rawText || response.statusText || "";
+    const preview =
+      message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    throw new OpenRouterApiError(
+      `OpenRouter request failed: ${response.status} ${preview}`,
+      {
+        status: response.status,
+        detailMessage,
+      },
+    );
+  }
+
+  const text =
+    extractTextContent(data?.choices?.[0]?.message?.content) ||
+    normalizeErrorString(data?.choices?.[0]?.message?.text) ||
+    normalizeErrorString(data?.output_text);
+
+  if (!text) {
+    throw new Error("OpenRouter did not return text.");
+  }
+
+  const normalizedText = stripMarkdownCodeFence(text);
+
+  return {
+    text: normalizedText,
+    duration: performance.now() - startTime,
+    model: (data?.model as string) || modelToUse,
+    cost: (data?.usage?.cost as number) ?? 0,
   };
 };
 

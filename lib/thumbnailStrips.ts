@@ -114,7 +114,7 @@ const uniqueInsert = (
   return without;
 };
 
-const mergeUniqueIds = (primary: string[], secondary: string[]): string[] => {
+const mergeUniqueIds = <T extends string>(primary: T[], secondary: T[]): T[] => {
   const merged = [...primary];
   secondary.forEach((itemId) => {
     if (!merged.includes(itemId)) {

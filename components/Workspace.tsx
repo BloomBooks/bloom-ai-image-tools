@@ -41,14 +41,14 @@ const readStoredSplitters = (): SplitterState => {
           ? parsed.horizontal
           : DEFAULT_SPLITTERS.horizontal,
         HORIZONTAL_LIMITS.min,
-        HORIZONTAL_LIMITS.max
+        HORIZONTAL_LIMITS.max,
       ),
       vertical: clampRatio(
         typeof parsed.vertical === "number"
           ? parsed.vertical
           : DEFAULT_SPLITTERS.vertical,
         VERTICAL_LIMITS.min,
-        VERTICAL_LIMITS.max
+        VERTICAL_LIMITS.max,
       ),
     };
   } catch {
@@ -216,11 +216,14 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const workspaceRef = React.useRef<HTMLDivElement>(null);
   const leftColumnRef = React.useRef<HTMLDivElement>(null);
   const [splitters, setSplitters] = React.useState<SplitterState>(() =>
-    readStoredSplitters()
+    readStoredSplitters(),
   );
 
   type IdleFriendlyWindow = Window & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+    requestIdleCallback?: (
+      callback: () => void,
+      options?: { timeout?: number },
+    ) => number;
     cancelIdleCallback?: (handle: number) => void;
   };
 
@@ -246,7 +249,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
     const persist = () => {
       try {
-        window.localStorage.setItem(SPLITTER_STORAGE_KEY, JSON.stringify(splitters));
+        window.localStorage.setItem(
+          SPLITTER_STORAGE_KEY,
+          JSON.stringify(splitters),
+        );
       } catch {
         // ignore
       }
@@ -260,7 +266,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         timeout: 500,
       });
     } else {
-      splitterPersistRef.current.timeoutHandle = window.setTimeout(persist, 150);
+      splitterPersistRef.current.timeoutHandle = window.setTimeout(
+        persist,
+        150,
+      );
     }
 
     return () => {
@@ -279,7 +288,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       horizontal: clampRatio(
         ratio,
         HORIZONTAL_LIMITS.min,
-        HORIZONTAL_LIMITS.max
+        HORIZONTAL_LIMITS.max,
       ),
     }));
   }, []);
@@ -315,7 +324,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       window.addEventListener("pointerup", stop);
       window.addEventListener("pointercancel", stop);
     },
-    [updateHorizontalSplit]
+    [updateHorizontalSplit],
   );
 
   const handleVerticalPointerDown = React.useCallback(
@@ -337,7 +346,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       window.addEventListener("pointerup", stop);
       window.addEventListener("pointercancel", stop);
     },
-    [updateVerticalSplit]
+    [updateVerticalSplit],
   );
 
   const handleHorizontalKeyDown = React.useCallback(
@@ -350,11 +359,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         horizontal: clampRatio(
           previous.horizontal + delta,
           HORIZONTAL_LIMITS.min,
-          HORIZONTAL_LIMITS.max
+          HORIZONTAL_LIMITS.max,
         ),
       }));
     },
-    []
+    [],
   );
 
   const handleVerticalKeyDown = React.useCallback(
@@ -367,11 +376,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         vertical: clampRatio(
           previous.vertical + delta,
           VERTICAL_LIMITS.min,
-          VERTICAL_LIMITS.max
+          VERTICAL_LIMITS.max,
         ),
       }));
     },
-    []
+    [],
   );
 
   const showLeftColumn = showTargetPanel || showReferencePanel;
@@ -438,7 +447,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   draggableImageId={undefined}
                   dndDropId="panel:target"
                   dndDragId={
-                    targetImage ? `panelItem:target:${targetImage.id}` : undefined
+                    targetImage
+                      ? `panelItem:target:${targetImage.id}`
+                      : undefined
                   }
                   uploadInputTestId="target-upload-input"
                   onToggleStar={
@@ -529,11 +540,15 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               onClear={onClearRight}
               draggableImageId={undefined}
               dndDropId="panel:result"
-              dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
+              dndDragId={
+                rightImage ? `panelItem:result:${rightImage.id}` : undefined
+              }
               isLoading={isProcessing}
               loadingProgress={generationProgress}
               onToggleStar={
-                rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined
+                rightImage
+                  ? () => onToggleHistoryStar(rightImage.id)
+                  : undefined
               }
             />
           )}

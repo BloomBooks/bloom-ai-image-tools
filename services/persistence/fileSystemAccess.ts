@@ -4,19 +4,29 @@ import {
   IMAGE_TOOLS_FS_HANDLE_KEY,
   IMAGE_TOOLS_FS_HANDLE_STORE,
   IMAGE_TOOLS_FS_IMAGES_DIR,
-  IMAGE_TOOLS_FS_MANIFEST_FILE,
-  IMAGE_TOOLS_FS_MANIFEST_VERSION,
 } from "./constants";
-import { HistoryManifest } from "../../types";
+import { ImageRecord, PersistedAppState, ThumbnailStripsSnapshot } from "../../types";
+import { APP_STATE_FILE_VERSION } from "../history/types";
+import type { AppStateFile, HistoryEntry } from "../history/types";
+import {
+  deleteImageAndSidecar,
+  readAppStateFile,
+  scanFolder,
+  writeAppStateFile,
+  writeTombstone,
+} from "../history/folder/FolderHistoryBackend";
 
 export interface FileSystemImageBinding {
   directoryHandle: FileSystemDirectoryHandle;
   directoryName: string;
 }
 
-type DirectoryPicker = (options?: DirectoryPickerOptions) => Promise<
-  FileSystemDirectoryHandle
->;
+export interface FolderPersistedState {
+  appState: PersistedAppState;
+  thumbnailStrips?: ThumbnailStripsSnapshot;
+}
+
+type DirectoryPicker = (options?: DirectoryPickerOptions) => Promise<FileSystemDirectoryHandle>;
 
 type DirectoryPickerOptions = {
   mode?: "read" | "readwrite";
@@ -31,19 +41,21 @@ type PermissionDescriptor = {
 const rwDescriptor: PermissionDescriptor = { mode: "readwrite" };
 
 type PermissionQueryHandle = FileSystemDirectoryHandle & {
-  queryPermission: (
-    descriptor?: PermissionDescriptor,
-  ) => Promise<PermissionState>;
+  queryPermission: (descriptor?: PermissionDescriptor) => Promise<PermissionState>;
 };
 
 type PermissionRequestHandle = FileSystemDirectoryHandle & {
-  requestPermission: (
-    descriptor?: PermissionDescriptor,
-  ) => Promise<PermissionState>;
+  requestPermission: (descriptor?: PermissionDescriptor) => Promise<PermissionState>;
 };
 
 type DirectoryEntriesHandle = FileSystemDirectoryHandle & {
   entries: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+};
+
+type HistoryImageFile = {
+  id: string;
+  fileName: string;
+  lastModified: number;
 };
 
 const supportsPermissionQuery = (
@@ -55,9 +67,7 @@ const supportsPermissionQuery = (
 const supportsPermissionRequest = (
   handle: FileSystemDirectoryHandle,
 ): handle is PermissionRequestHandle => {
-  return (
-    typeof (handle as PermissionRequestHandle).requestPermission === "function"
-  );
+  return typeof (handle as PermissionRequestHandle).requestPermission === "function";
 };
 
 let handleStore: ReturnType<typeof createStore> | null = null;
@@ -66,10 +76,7 @@ const resolveHandleStore = () => {
     return null;
   }
   if (!handleStore) {
-    handleStore = createStore(
-      IMAGE_TOOLS_FS_DB_NAME,
-      IMAGE_TOOLS_FS_HANDLE_STORE,
-    );
+    handleStore = createStore(IMAGE_TOOLS_FS_DB_NAME, IMAGE_TOOLS_FS_HANDLE_STORE);
   }
   return handleStore;
 };
@@ -79,15 +86,22 @@ const getDirectoryPicker = (): DirectoryPicker | null => {
     return null;
   }
 
-  const picker = (window as Window & typeof globalThis & {
-    showDirectoryPicker?: DirectoryPicker;
-  }).showDirectoryPicker;
+  const picker = (
+    window as Window &
+      typeof globalThis & {
+        showDirectoryPicker?: DirectoryPicker;
+      }
+  ).showDirectoryPicker;
 
   return typeof picker === "function" ? picker.bind(window) : null;
 };
 
 const isNotFoundError = (error: unknown) => {
   return error instanceof DOMException && error.name === "NotFoundError";
+};
+
+const isInvalidStateError = (error: unknown) => {
+  return error instanceof DOMException && error.name === "InvalidStateError";
 };
 
 const hasReadWritePermission = async (handle: FileSystemDirectoryHandle) => {
@@ -103,9 +117,7 @@ const hasReadWritePermission = async (handle: FileSystemDirectoryHandle) => {
   }
 };
 
-const requestReadWritePermission = async (
-  handle: FileSystemDirectoryHandle,
-) => {
+const requestReadWritePermission = async (handle: FileSystemDirectoryHandle) => {
   if (!supportsPermissionRequest(handle)) {
     return true;
   }
@@ -136,10 +148,9 @@ const loadPersistedDirectoryHandle = async () => {
   const store = resolveHandleStore();
   if (!store) return null;
   try {
-    const handle = (await get(
-      IMAGE_TOOLS_FS_HANDLE_KEY,
-      store,
-    )) as FileSystemDirectoryHandle | undefined;
+    const handle = (await get(IMAGE_TOOLS_FS_HANDLE_KEY, store)) as
+      | FileSystemDirectoryHandle
+      | undefined;
     return handle ?? null;
   } catch (error) {
     console.error("Failed to load directory handle", error);
@@ -149,6 +160,10 @@ const loadPersistedDirectoryHandle = async () => {
 
 const getImagesDirectoryHandle = async (root: FileSystemDirectoryHandle) => {
   return root.getDirectoryHandle(IMAGE_TOOLS_FS_IMAGES_DIR, { create: true });
+};
+
+const isImageFileName = (fileName: string) => {
+  return /\.(png|jpg|jpeg|webp|gif)$/i.test(fileName);
 };
 
 const dataUrlToBlob = async (dataUrl: string) => {
@@ -171,11 +186,22 @@ const writeJsonFile = async (
   fileName: string,
   data: unknown,
 ) => {
-  const fileHandle = await handle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
   const payload = JSON.stringify(data, null, 2);
-  await writable.write(new Blob([payload], { type: "application/json" }));
-  await writable.close();
+  const attemptWrite = async () => {
+    const fileHandle = await handle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(new Blob([payload], { type: "application/json" }));
+    await writable.close();
+  };
+
+  try {
+    await attemptWrite();
+  } catch (error) {
+    if (!isInvalidStateError(error)) {
+      throw error;
+    }
+    await attemptWrite();
+  }
 };
 
 const readJsonFile = async <T>(
@@ -225,11 +251,79 @@ const getFileExtension = (mime: string) => {
   }
 };
 
+const getMimeTypeFromFileName = (fileName: string | null | undefined) => {
+  const normalized = fileName?.toLowerCase() ?? "";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (normalized.endsWith(".webp")) {
+    return "image/webp";
+  }
+  if (normalized.endsWith(".gif")) {
+    return "image/gif";
+  }
+  return "image/png";
+};
+
+const imageRecordFromHistoryEntry = (
+  entry: HistoryEntry,
+  imageFileName: string | null,
+): ImageRecord => ({
+  id: entry.id,
+  parentId: entry.parentId ?? null,
+  imageData: "",
+  imageFileName,
+  toolId: entry.toolId,
+  parameters: entry.parameters ?? {},
+  sourceStyleId: entry.sourceStyleId ?? null,
+  durationMs: entry.durationMs,
+  cost: entry.cost,
+  model: entry.model,
+  reasoningLevel: entry.reasoningLevel ?? null,
+  timestamp: entry.timestamp,
+  promptUsed: entry.promptUsed,
+  sourceSummary: entry.sourceSummary ?? null,
+  resolution: entry.resolution,
+  isStarred: entry.isStarred ?? false,
+  origin: entry.origin,
+});
+
+const buildPersistedAppStateFromAppStateFile = (
+  appState: AppStateFile,
+  sidecars: Map<string, HistoryEntry>,
+  imageFilesById: Map<string, string>,
+): PersistedAppState => {
+  const orderedIds = appState.thumbnailStrips?.itemIdsByStrip?.history ?? [];
+  const seenIds = new Set<string>();
+  const history: ImageRecord[] = [];
+
+  orderedIds.forEach((id) => {
+    const sidecar = sidecars.get(id);
+    if (!sidecar) {
+      return;
+    }
+    history.push(imageRecordFromHistoryEntry(sidecar, imageFilesById.get(id) ?? null));
+    seenIds.add(id);
+  });
+
+  sidecars.forEach((sidecar, id) => {
+    if (seenIds.has(id)) {
+      return;
+    }
+    history.push(imageRecordFromHistoryEntry(sidecar, imageFilesById.get(id) ?? null));
+  });
+
+  return {
+    targetImageId: appState.targetImageId ?? null,
+    referenceImageIds: appState.referenceImageIds ?? [],
+    rightPanelImageId: appState.rightPanelImageId ?? null,
+    history,
+  };
+};
+
 export const supportsFileSystemAccess = (): boolean => !!getDirectoryPicker();
 
-export const restoreFileSystemImageBinding = async (): Promise<
-  FileSystemImageBinding | null
-> => {
+export const restoreFileSystemImageBinding = async (): Promise<FileSystemImageBinding | null> => {
   if (!supportsFileSystemAccess()) {
     return null;
   }
@@ -250,9 +344,7 @@ export const restoreFileSystemImageBinding = async (): Promise<
   };
 };
 
-export const requestFileSystemImageBinding = async (): Promise<
-  FileSystemImageBinding | null
-> => {
+export const requestFileSystemImageBinding = async (): Promise<FileSystemImageBinding | null> => {
   const picker = getDirectoryPicker();
   if (!picker) {
     return null;
@@ -298,11 +390,24 @@ export const readImageFile = async (
   binding: FileSystemImageBinding,
   fileName: string,
 ): Promise<string | null> => {
-  try {
-    const dir = await getImagesDirectoryHandle(binding.directoryHandle);
-    const fileHandle = await dir.getFileHandle(fileName);
+  const readFromHandle = async (directory: FileSystemDirectoryHandle) => {
+    const fileHandle = await directory.getFileHandle(fileName);
     const file = await fileHandle.getFile();
     return await blobToDataUrl(file);
+  };
+
+  try {
+    const dir = await getImagesDirectoryHandle(binding.directoryHandle);
+    return await readFromHandle(dir);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      console.error("Failed to read history image", error);
+      return null;
+    }
+  }
+
+  try {
+    return await readFromHandle(binding.directoryHandle);
   } catch (error) {
     if (isNotFoundError(error)) {
       return null;
@@ -312,10 +417,7 @@ export const readImageFile = async (
   }
 };
 
-export const deleteImageFile = async (
-  binding: FileSystemImageBinding,
-  fileName: string,
-) => {
+export const deleteImageFile = async (binding: FileSystemImageBinding, fileName: string) => {
   try {
     const dir = await getImagesDirectoryHandle(binding.directoryHandle);
     await dir.removeEntry(fileName);
@@ -332,19 +434,15 @@ export const deriveImageFileName = (historyId: string, mime: string) => {
   return `${historyId}.${extension}`;
 };
 
-export const listHistoryImageFiles = async (
-  binding: FileSystemImageBinding,
-) => {
-  try {
-    const dir = await getImagesDirectoryHandle(binding.directoryHandle);
-    const iterableDir = dir as DirectoryEntriesHandle;
-    const entries: Array<{ id: string; fileName: string; lastModified: number }> =
-      [];
-    for await (const [name, handle] of iterableDir.entries()) {
-      if (handle.kind !== "file") {
+export const listHistoryImageFiles = async (binding: FileSystemImageBinding) => {
+  const scanHandle = async (handle: FileSystemDirectoryHandle) => {
+    const iterableDir = handle as DirectoryEntriesHandle;
+    const entries: HistoryImageFile[] = [];
+    for await (const [name, entryHandle] of iterableDir.entries()) {
+      if (entryHandle.kind !== "file" || !isImageFileName(name)) {
         continue;
       }
-      const fileHandle = handle as FileSystemFileHandle;
+      const fileHandle = entryHandle as FileSystemFileHandle;
       const file = await fileHandle.getFile();
       const id = name.replace(/\.[^.]+$/, "");
       if (!id) {
@@ -353,31 +451,70 @@ export const listHistoryImageFiles = async (
       entries.push({ id, fileName: name, lastModified: file.lastModified });
     }
     return entries;
+  };
+
+  try {
+    const entriesById = new Map<string, HistoryImageFile>();
+
+    try {
+      const dir = await getImagesDirectoryHandle(binding.directoryHandle);
+      for (const entry of await scanHandle(dir)) {
+        entriesById.set(entry.id, entry);
+      }
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        console.error("Failed to list history images", error);
+      }
+    }
+
+    for (const entry of await scanHandle(binding.directoryHandle)) {
+      if (!entriesById.has(entry.id)) {
+        entriesById.set(entry.id, entry);
+      }
+    }
+
+    return Array.from(entriesById.values());
   } catch (error) {
     console.error("Failed to list history images", error);
     return [];
   }
 };
 
-export const readHistoryManifest = async (
+export const readFolderPersistedState = async (
   binding: FileSystemImageBinding,
-): Promise<HistoryManifest | null> => {
-  const manifest = await readJsonFile<HistoryManifest>(
-    binding.directoryHandle,
-    IMAGE_TOOLS_FS_MANIFEST_FILE,
-  );
-  if (!manifest || manifest.version !== IMAGE_TOOLS_FS_MANIFEST_VERSION) {
+): Promise<FolderPersistedState | null> => {
+  const appState = await readAppStateFile(binding);
+  if (!appState) {
     return null;
   }
-  return manifest;
+
+  const scan = await scanFolder(binding);
+  const imageFilesById = new Map(scan.images.map((image) => [image.id, image.fileName] as const));
+  return {
+    appState: buildPersistedAppStateFromAppStateFile(appState, scan.sidecars, imageFilesById),
+    thumbnailStrips: appState.thumbnailStrips,
+  };
 };
 
-export const writeHistoryManifest = async (
+export const writeFolderAppState = async (
   binding: FileSystemImageBinding,
-  manifest: Omit<HistoryManifest, "version">,
+  appState: Omit<AppStateFile, "version" | "savedAt">,
 ) => {
-  await writeJsonFile(binding.directoryHandle, IMAGE_TOOLS_FS_MANIFEST_FILE, {
-    ...manifest,
-    version: IMAGE_TOOLS_FS_MANIFEST_VERSION,
+  await writeAppStateFile(binding, {
+    ...appState,
+    version: APP_STATE_FILE_VERSION,
+    savedAt: Date.now(),
   });
+};
+
+export const deletePersistedHistoryItem = async (
+  binding: FileSystemImageBinding,
+  item: ImageRecord,
+) => {
+  if (!item.imageFileName) {
+    return;
+  }
+
+  await writeTombstone(binding, { id: item.id, deletedAt: Date.now() });
+  await deleteImageAndSidecar(binding, item.id, getMimeTypeFromFileName(item.imageFileName));
 };

@@ -11,7 +11,6 @@ import {
   Tombstone,
 } from "./types";
 import { blobToBase64 } from "../../lib/imageUtils";
-import { migrateLegacyManifestIfNeeded } from "./migration";
 
 const BROADCAST_CHANNEL_NAME = "bloom-history";
 
@@ -135,12 +134,6 @@ export class HistoryStore {
   private async attachBinding(binding: folder.FolderBinding): Promise<void> {
     this.folderBinding = binding;
     this.folderStatus = "attached";
-
-    try {
-      await migrateLegacyManifestIfNeeded(binding);
-    } catch (error) {
-      console.error("Legacy manifest migration failed", error);
-    }
 
     // First-time attach migration: promote browser tombstones to folder
     // tombstones so a stale Dropbox folder can't resurrect them.

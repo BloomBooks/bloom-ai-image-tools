@@ -1,18 +1,5 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
-import {
-  Box,
-  Button,
-  CssBaseline,
-  IconButton,
-  Stack,
-  Typography,
-} from "@mui/material";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Box, Button, CssBaseline, IconButton, Stack, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import {
@@ -48,45 +35,29 @@ import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
-import {
-  createToolParamDefaults,
-  mergeParamsWithDefaults,
-} from "./tools/toolParams";
-import {
-  API_KEY_STORAGE_KEY,
-  AUTH_METHOD_STORAGE_KEY,
-} from "../lib/authStorage";
+import { createToolParamDefaults, mergeParamsWithDefaults } from "./tools/toolParams";
+import { API_KEY_STORAGE_KEY, AUTH_METHOD_STORAGE_KEY } from "../lib/authStorage";
 import {
   IMAGE_TOOLS_STATE_VERSION,
   LOCAL_HISTORY_CACHE_LIMIT,
 } from "../services/persistence/constants";
 import {
   FileSystemImageBinding,
-  deleteImageFile,
+  deletePersistedHistoryItem,
   deriveImageFileName,
   forgetFileSystemImageBinding,
   listHistoryImageFiles,
-  readHistoryManifest,
+  readFolderPersistedState,
   readImageFile,
   requestFileSystemImageBinding,
   restoreFileSystemImageBinding,
   supportsFileSystemAccess,
-  writeHistoryManifest,
+  writeFolderAppState,
   writeImageFile,
 } from "../services/persistence/fileSystemAccess";
-import {
-  getStyleIdFromParams,
-  getStyleIdFromImageRecord,
-} from "../lib/artStyles";
-import {
-  getImageDimensions,
-  getMimeTypeFromUrl,
-  prepareImageBlob,
-} from "../lib/imageUtils";
-import {
-  getReferenceConstraints,
-  getToolReferenceMode,
-} from "../lib/toolHelpers";
+import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
+import { getImageDimensions, getMimeTypeFromUrl, prepareImageBlob } from "../lib/imageUtils";
+import { getReferenceConstraints, getToolReferenceMode } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
 import { createAnimatedGif } from "../lib/animatedGif";
@@ -107,10 +78,7 @@ import {
   resolveThumbnailStripConfigs,
   ThumbnailStripConfig,
 } from "../lib/thumbnailStrips";
-import {
-  mergeHistoryFields,
-  sanitizePersistedAppState,
-} from "../lib/persistedAppState";
+import { mergeHistoryFields, sanitizePersistedAppState } from "../lib/persistedAppState";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -137,10 +105,7 @@ const renderLinkWithUrl = (url: string) => (
   </a>
 );
 
-const linkifyMessageWithUrl = (
-  message: string,
-  url: string,
-): React.ReactNode => {
+const linkifyMessageWithUrl = (message: string, url: string): React.ReactNode => {
   if (!message) {
     return renderLinkWithUrl(url);
   }
@@ -162,10 +127,7 @@ const linkifyMessageWithUrl = (
   ));
 };
 
-const buildInsufficientCreditsError = (
-  message: string,
-  url: string,
-): React.ReactNode => {
+const buildInsufficientCreditsError = (message: string, url: string): React.ReactNode => {
   const safeMessage = message?.trim() || "This request requires more credits.";
   return <>OpenRouter said "{linkifyMessageWithUrl(safeMessage, url)}"</>;
 };
@@ -192,8 +154,7 @@ const MAX_PROMPT_DURATION_ESTIMATES = 40;
 const MAX_TOOL_DURATION_ESTIMATES = 24;
 const PESSIMISTIC_MS = 3000;
 
-const getNowMs = () =>
-  typeof performance !== "undefined" ? performance.now() : Date.now();
+const getNowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 const clampDurationMs = (value: number | null | undefined) => {
   if (!Number.isFinite(value) || (value ?? 0) <= 0) {
@@ -203,10 +164,7 @@ const clampDurationMs = (value: number | null | undefined) => {
   return Math.max(1000, Math.min(300000, Math.round(value as number)));
 };
 
-const limitDurationMap = (
-  durationsByKey: Record<string, number>,
-  maxEntries: number,
-) => {
+const limitDurationMap = (durationsByKey: Record<string, number>, maxEntries: number) => {
   const entries = Object.entries(durationsByKey);
   if (entries.length <= maxEntries) {
     return durationsByKey;
@@ -215,10 +173,7 @@ const limitDurationMap = (
   return Object.fromEntries(entries.slice(-maxEntries));
 };
 
-const normalizeDurationMap = (
-  value: unknown,
-  maxEntries: number,
-): Record<string, number> => {
+const normalizeDurationMap = (value: unknown, maxEntries: number): Record<string, number> => {
   if (!value || typeof value !== "object") {
     return {};
   }
@@ -250,21 +205,14 @@ const normalizeGenerationTiming = (value: unknown): GenerationTimingState => {
       raw?.promptDurationsByKey,
       MAX_PROMPT_DURATION_ESTIMATES,
     ),
-    toolDurationsByKey: normalizeDurationMap(
-      raw?.toolDurationsByKey,
-      MAX_TOOL_DURATION_ESTIMATES,
-    ),
+    toolDurationsByKey: normalizeDurationMap(raw?.toolDurationsByKey, MAX_TOOL_DURATION_ESTIMATES),
   };
 };
 
-const createPromptDurationKey = (
-  toolId: string,
-  modelId: string,
-  prompt: string,
-) => `${toolId}:${modelId}:${hashString(prompt.trim())}`;
+const createPromptDurationKey = (toolId: string, modelId: string, prompt: string) =>
+  `${toolId}:${modelId}:${hashString(prompt.trim())}`;
 
-const createToolDurationKey = (toolId: string, modelId: string) =>
-  `${toolId}:${modelId}`;
+const createToolDurationKey = (toolId: string, modelId: string) => `${toolId}:${modelId}`;
 
 const resolveEstimatedDurationMs = (
   timing: GenerationTimingState,
@@ -307,33 +255,26 @@ const updateGenerationTiming = (
   };
 };
 
-const isModelReasoningLevel = (
-  value: unknown,
-): value is ModelReasoningLevel => {
+const isModelReasoningLevel = (value: unknown): value is ModelReasoningLevel => {
   return (
-    typeof value === "string" &&
-    MODEL_REASONING_LEVEL_VALUES.includes(value as ModelReasoningLevel)
+    typeof value === "string" && MODEL_REASONING_LEVEL_VALUES.includes(value as ModelReasoningLevel)
   );
 };
 
-const normalizeModelReasoningLevels = (
-  value: unknown,
-): ModelReasoningLevelByModelId => {
+const normalizeModelReasoningLevels = (value: unknown): ModelReasoningLevelByModelId => {
   if (!value || typeof value !== "object") {
     return {};
   }
 
   const normalized: ModelReasoningLevelByModelId = {};
-  Object.entries(value as Record<string, unknown>).forEach(
-    ([modelId, level]) => {
-      const cleanModelId = modelId.trim();
-      if (!cleanModelId || !isModelReasoningLevel(level)) {
-        return;
-      }
+  Object.entries(value as Record<string, unknown>).forEach(([modelId, level]) => {
+    const cleanModelId = modelId.trim();
+    if (!cleanModelId || !isModelReasoningLevel(level)) {
+      return;
+    }
 
-      normalized[cleanModelId] = level;
-    },
-  );
+    normalized[cleanModelId] = level;
+  });
 
   return normalized;
 };
@@ -405,40 +346,34 @@ export function ImageToolsWorkspace({
     isAuthenticated: false,
     error: null,
   });
-  const [thumbnailStrips, setThumbnailStrips] =
-    useState<ThumbnailStripsSnapshot>(() =>
-      createDefaultThumbnailStripsSnapshot(),
-    );
+  const [thumbnailStrips, setThumbnailStrips] = useState<ThumbnailStripsSnapshot>(() =>
+    createDefaultThumbnailStripsSnapshot(),
+  );
 
   const resolvedThumbnailStripConfigs = useMemo(
     () => resolveThumbnailStripConfigs(thumbnailStripConfigOverrides),
     [thumbnailStripConfigOverrides],
   );
 
-  const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() =>
-    createToolParamDefaults(),
-  );
-  const [selectedArtStyleId, setSelectedArtStyleId] = useState<string | null>(
-    null,
-  );
+  const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() => createToolParamDefaults());
+  const [selectedArtStyleId, setSelectedArtStyleId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string>(
-    DEFAULT_MODEL?.id || "",
+  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL?.id || "");
+  const [generationTiming, setGenerationTiming] = useState<GenerationTimingState>({
+    lastDurationMs: null,
+    promptDurationsByKey: {},
+    toolDurationsByKey: {},
+  });
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(
+    null,
   );
-  const [generationTiming, setGenerationTiming] =
-    useState<GenerationTimingState>({
-      lastDurationMs: null,
-      promptDurationsByKey: {},
-      toolDurationsByKey: {},
-    });
-  const [generationProgress, setGenerationProgress] =
-    useState<GenerationProgressState | null>(null);
   const [resultImageIds, setResultImageIds] = useState<string[]>([]);
-  const [modelReasoningLevels, setModelReasoningLevels] =
-    useState<ModelReasoningLevelByModelId>({});
+  const [modelReasoningLevels, setModelReasoningLevels] = useState<ModelReasoningLevelByModelId>(
+    {},
+  );
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -446,19 +381,14 @@ export function ImageToolsWorkspace({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
   const [connectCtaAttentionKey, setConnectCtaAttentionKey] = useState(0);
-  const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(
-    null,
-  );
+  const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(null);
   const [fsLoading, setFsLoading] = useState(false);
   const [fsError, setFsError] = useState<string | null>(null);
-  const [fsSupported, setFsSupported] = useState(() =>
-    supportsFileSystemAccess(),
-  );
+  const [fsSupported, setFsSupported] = useState(() => supportsFileSystemAccess());
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
   const selectedModel =
-    MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
-    DEFAULT_MODEL;
+    MODEL_CATALOG.find((model) => model.id === selectedModelId) || DEFAULT_MODEL;
   const envApiKey = envApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
   const usingEnvKey = !!(envApiKey && !apiKey);
@@ -544,7 +474,7 @@ export function ImageToolsWorkspace({
       if (!fsBinding || !item.imageFileName) {
         return;
       }
-      await deleteImageFile(fsBinding, item.imageFileName);
+      await deletePersistedHistoryItem(fsBinding, item);
     },
     [fsBinding],
   );
@@ -556,9 +486,7 @@ export function ImageToolsWorkspace({
       if (!skipHistoryStrip) {
         // Keep the history strip ordered newest-first (leftmost), matching
         // hydrate/build behavior.
-        setThumbnailStrips((prev) =>
-          addItemToStrip(prev, "history", entry.id, 0),
-        );
+        setThumbnailStrips((prev) => addItemToStrip(prev, "history", entry.id, 0));
       }
     },
     [],
@@ -571,9 +499,7 @@ export function ImageToolsWorkspace({
         const next: ToolParamsById = { ...prev };
 
         TOOLS.forEach((tool) => {
-          const artStyleParams = tool.parameters.filter(
-            (param) => param.type === "art-style",
-          );
+          const artStyleParams = tool.parameters.filter((param) => param.type === "art-style");
           if (!artStyleParams.length) {
             return;
           }
@@ -624,9 +550,7 @@ export function ImageToolsWorkspace({
 
     if (environmentStripMode === "host") {
       if (!resolvedEnvironmentEntries.length) {
-        setThumbnailStrips((prev) =>
-          replaceStripItems(prev, "environment", []),
-        );
+        setThumbnailStrips((prev) => replaceStripItems(prev, "environment", []));
         return;
       }
 
@@ -643,9 +567,7 @@ export function ImageToolsWorkspace({
         return mutated ? { ...prev, history: nextHistory } : prev;
       });
 
-      setThumbnailStrips((prev) =>
-        replaceStripItems(prev, "environment", resolvedIds),
-      );
+      setThumbnailStrips((prev) => replaceStripItems(prev, "environment", resolvedIds));
 
       return;
     }
@@ -686,9 +608,7 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     const referencedIds = new Set<string>();
     THUMBNAIL_STRIP_ORDER.forEach((stripId) => {
-      (thumbnailStrips.itemIdsByStrip[stripId] || []).forEach((id) =>
-        referencedIds.add(id),
-      );
+      (thumbnailStrips.itemIdsByStrip[stripId] || []).forEach((id) => referencedIds.add(id));
     });
     if (state.targetImageId) {
       referencedIds.add(state.targetImageId);
@@ -712,16 +632,11 @@ export function ImageToolsWorkspace({
     setState((prev) => ({
       ...prev,
       history: prev.history.filter(
-        (entry) =>
-          entry.origin === "environment" || referencedIds.has(entry.id),
+        (entry) => entry.origin === "environment" || referencedIds.has(entry.id),
       ),
-      referenceImageIds: prev.referenceImageIds.filter((id) =>
-        referencedIds.has(id),
-      ),
+      referenceImageIds: prev.referenceImageIds.filter((id) => referencedIds.has(id)),
       targetImageId:
-        prev.targetImageId && referencedIds.has(prev.targetImageId)
-          ? prev.targetImageId
-          : null,
+        prev.targetImageId && referencedIds.has(prev.targetImageId) ? prev.targetImageId : null,
       rightPanelImageId:
         prev.rightPanelImageId && referencedIds.has(prev.rightPanelImageId)
           ? prev.rightPanelImageId
@@ -820,9 +735,7 @@ export function ImageToolsWorkspace({
       if (cancelled) {
         return;
       }
-      const updateMap = new Map<string, ImageRecord>(
-        updatedItems.map((item) => [item.id, item]),
-      );
+      const updateMap = new Map<string, ImageRecord>(updatedItems.map((item) => [item.id, item]));
       setState((prev) => {
         let changed = false;
         const nextHistory = prev.history.map((item) => {
@@ -927,18 +840,12 @@ export function ImageToolsWorkspace({
 
           if (
             persisted.selectedModelId &&
-            MODEL_CATALOG.some(
-              (model) => model.id === persisted.selectedModelId,
-            )
+            MODEL_CATALOG.some((model) => model.id === persisted.selectedModelId)
           ) {
             setSelectedModelId(persisted.selectedModelId);
           }
-          setGenerationTiming(
-            normalizeGenerationTiming(persisted.generationTiming),
-          );
-          setModelReasoningLevels(
-            normalizeModelReasoningLevels(persisted.modelReasoningLevels),
-          );
+          setGenerationTiming(normalizeGenerationTiming(persisted.generationTiming));
+          setModelReasoningLevels(normalizeModelReasoningLevels(persisted.modelReasoningLevels));
           if (persisted.auth?.apiKey) {
             setApiKey(persisted.auth.apiKey);
             setAuthMethod(persisted.auth.authMethod ?? null);
@@ -966,10 +873,7 @@ export function ImageToolsWorkspace({
     const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
     if (!storedKey) return;
 
-    const storedMethod = localStorage.getItem(AUTH_METHOD_STORAGE_KEY) as
-      | "oauth"
-      | "manual"
-      | null;
+    const storedMethod = localStorage.getItem(AUTH_METHOD_STORAGE_KEY) as "oauth" | "manual" | null;
     setApiKey(storedKey);
     setAuthMethod(storedMethod ?? "manual");
     setState((prev) => ({ ...prev, isAuthenticated: true }));
@@ -978,10 +882,7 @@ export function ImageToolsWorkspace({
   }, [isHydrated, apiKey]);
 
   type IdleFriendlyWindow = Window & {
-    requestIdleCallback?: (
-      callback: () => void,
-      options?: { timeout?: number },
-    ) => number;
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
     cancelIdleCallback?: (handle: number) => void;
   };
 
@@ -1010,9 +911,7 @@ export function ImageToolsWorkspace({
   const authMethodRef = useRef(authMethod);
   const thumbnailStripsRef = useRef(thumbnailStrips);
   const fsManifestHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
-  const fsManifestReadyHandleRef = useRef<FileSystemDirectoryHandle | null>(
-    null,
-  );
+  const fsManifestReadyHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -1069,7 +968,7 @@ export function ImageToolsWorkspace({
 
     let cancelled = false;
     (async () => {
-      const manifest = await readHistoryManifest(fsBinding);
+      const folderState = await readFolderPersistedState(fsBinding);
       if (cancelled) {
         return;
       }
@@ -1077,11 +976,11 @@ export function ImageToolsWorkspace({
       let incomingAppState: PersistedAppState | null = null;
       let incomingStrips: ThumbnailStripsSnapshot | null | undefined = null;
 
-      if (manifest) {
-        incomingAppState = sanitizePersistedAppState(manifest.appState, {
+      if (folderState) {
+        incomingAppState = sanitizePersistedAppState(folderState.appState, {
           allowFileBackedEntries: true,
         });
-        incomingStrips = manifest.thumbnailStrips;
+        incomingStrips = folderState.thumbnailStrips;
       } else if (stateRef.current.history.length === 0) {
         const files = await listHistoryImageFiles(fsBinding);
         if (cancelled) {
@@ -1104,10 +1003,7 @@ export function ImageToolsWorkspace({
         return;
       }
 
-      const mergedFields = mergeHistoryFields(
-        stateRef.current,
-        incomingAppState,
-      );
+      const mergedFields = mergeHistoryFields(stateRef.current, incomingAppState);
       if (cancelled) {
         return;
       }
@@ -1144,9 +1040,7 @@ export function ImageToolsWorkspace({
     if (fsBinding || !fsSupported) {
       return false;
     }
-    return state.history.some(
-      (item) => !item.imageData && !!item.imageFileName,
-    );
+    return state.history.some((item) => !item.imageData && !!item.imageFileName);
   }, [fsBinding, fsSupported, state.history]);
 
   useEffect(() => {
@@ -1169,17 +1063,11 @@ export function ImageToolsWorkspace({
       const currentState = stateRef.current;
       const currentFsBinding = fsBindingRef.current;
 
-      const cacheStart = Math.max(
-        currentState.history.length - LOCAL_HISTORY_CACHE_LIMIT,
-        0,
-      );
+      const cacheStart = Math.max(currentState.history.length - LOCAL_HISTORY_CACHE_LIMIT, 0);
 
       const historyForPersistence = currentState.history.map((item, index) => {
         const keepImageData =
-          !currentFsBinding ||
-          !item.imageFileName ||
-          !item.imageData ||
-          index >= cacheStart;
+          !currentFsBinding || !item.imageFileName || !item.imageData || index >= cacheStart;
         if (keepImageData) {
           return item;
         }
@@ -1208,24 +1096,15 @@ export function ImageToolsWorkspace({
       };
     };
 
-    const buildHistoryManifest = (): Omit<HistoryManifest, "version"> => {
-      const currentState = stateRef.current;
-      const historyForManifest = currentState.history.map((item) => {
-        if (item.imageFileName && item.imageData) {
-          return { ...item, imageData: "" };
-        }
-        return item;
-      });
-      return {
-        appState: {
-          targetImageId: currentState.targetImageId,
-          referenceImageIds: currentState.referenceImageIds,
-          rightPanelImageId: currentState.rightPanelImageId,
-          history: historyForManifest,
-        },
-        thumbnailStrips: thumbnailStripsRef.current,
-      };
-    };
+    const buildFolderAppState = () => ({
+      thumbnailStrips: thumbnailStripsRef.current,
+      targetImageId: stateRef.current.targetImageId,
+      referenceImageIds: stateRef.current.referenceImageIds,
+      rightPanelImageId: stateRef.current.rightPanelImageId,
+      activeToolId: activeToolIdRef.current,
+      selectedModelId: selectedModelIdRef.current || null,
+      selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
+    });
 
     const runSave = async () => {
       const sched = persistenceScheduleRef.current;
@@ -1238,27 +1117,22 @@ export function ImageToolsWorkspace({
 
       sched.saving = true;
       sched.dirty = false;
-      const start =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
+      const start = typeof performance !== "undefined" ? performance.now() : Date.now();
       debugLog("save(start)");
 
       try {
         await persistence.save(buildPersistableState());
         const currentBinding = fsBindingRef.current;
-        if (
-          currentBinding &&
-          fsManifestReadyHandleRef.current === currentBinding.directoryHandle
-        ) {
+        if (currentBinding && fsManifestReadyHandleRef.current === currentBinding.directoryHandle) {
           try {
-            await writeHistoryManifest(currentBinding, buildHistoryManifest());
+            await writeFolderAppState(currentBinding, buildFolderAppState());
           } catch (error) {
-            console.error("Failed to persist history manifest", error);
+            console.error("Failed to persist history metadata", error);
             setFsError("Could not save history metadata to folder.");
           }
         }
       } finally {
-        const end =
-          typeof performance !== "undefined" ? performance.now() : Date.now();
+        const end = typeof performance !== "undefined" ? performance.now() : Date.now();
         debugLog(`save(done) dt=${Math.round(end - start)}ms`);
         sched.saving = false;
         if (sched.dirty) {
@@ -1354,29 +1228,24 @@ export function ImageToolsWorkspace({
       if (!binding) {
         return;
       }
-      const existingManifest = await readHistoryManifest(binding);
-      const incomingAppState = existingManifest
-        ? sanitizePersistedAppState(existingManifest.appState, {
+      const existingFolderState = await readFolderPersistedState(binding);
+      const incomingAppState = existingFolderState
+        ? sanitizePersistedAppState(existingFolderState.appState, {
             allowFileBackedEntries: true,
           })
         : null;
       const mergedFields = incomingAppState
         ? mergeHistoryFields(stateRef.current, incomingAppState)
         : null;
-      const historyToPersist =
-        mergedFields?.history ?? stateRef.current.history;
+      const historyToPersist = mergedFields?.history ?? stateRef.current.history;
       const migratedHistory = await Promise.all(
         historyToPersist.map((item) => persistHistoryImage(item, binding)),
       );
-      const migratedMap = new Map(
-        migratedHistory.map((item) => [item.id, item] as const),
-      );
-      const nextHistory = historyToPersist.map(
-        (item) => migratedMap.get(item.id) ?? item,
-      );
+      const migratedMap = new Map(migratedHistory.map((item) => [item.id, item] as const));
+      const nextHistory = historyToPersist.map((item) => migratedMap.get(item.id) ?? item);
       const nextThumbnailStrips = mergeThumbnailStripsSnapshots(
         thumbnailStripsRef.current,
-        existingManifest?.thumbnailStrips,
+        existingFolderState?.thumbnailStrips,
         nextHistory,
       );
       fsManifestHandleRef.current = binding.directoryHandle;
@@ -1386,9 +1255,7 @@ export function ImageToolsWorkspace({
         if (!mergedFields) {
           return {
             ...prev,
-            history: prev.history.map(
-              (item) => migratedMap.get(item.id) ?? item,
-            ),
+            history: prev.history.map((item) => migratedMap.get(item.id) ?? item),
           };
         }
         return {
@@ -1425,9 +1292,7 @@ export function ImageToolsWorkspace({
           return { ...item, imageFileName: null };
         }),
       );
-      const restoredMap = new Map(
-        restoredHistory.map((item) => [item.id, item] as const),
-      );
+      const restoredMap = new Map(restoredHistory.map((item) => [item.id, item] as const));
       await forgetFileSystemImageBinding();
       setFsBinding(null);
       setState((prev) => ({
@@ -1453,10 +1318,7 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, isProcessing: false }));
   }, []);
 
-  const handleApplyTool = async (
-    toolId: string,
-    params: Record<string, string>,
-  ) => {
+  const handleApplyTool = async (toolId: string, params: Record<string, string>) => {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
 
@@ -1482,8 +1344,7 @@ export function ImageToolsWorkspace({
     if (referenceItems.length < min) {
       setState((prev) => ({
         ...prev,
-        error:
-          "Please add a reference image for this tool (drag from history or upload).",
+        error: "Please add a reference image for this tool (drag from history or upload).",
       }));
       return;
     }
@@ -1517,10 +1378,7 @@ export function ImageToolsWorkspace({
         null;
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
       const referenceImageCount = constrainedReferences.length;
-      const sourceSummary = formatSourceSummary(
-        editImageCount,
-        referenceImageCount,
-      );
+      const sourceSummary = formatSourceSummary(editImageCount, referenceImageCount);
       const sourceImages = [
         ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
         ...constrainedReferences.map((h) => h.imageData),
@@ -1537,11 +1395,7 @@ export function ImageToolsWorkspace({
         : envApiKey && !apiKey
           ? "default-image-model"
           : selectedModel?.id || "default-image-model";
-      const promptDurationKey = createPromptDurationKey(
-        tool.id,
-        modelTimingKey,
-        prompt,
-      );
+      const promptDurationKey = createPromptDurationKey(tool.id, modelTimingKey, prompt);
       const toolDurationKey = createToolDurationKey(tool.id, modelTimingKey);
 
       let processedImageData: string;
@@ -1593,18 +1447,13 @@ export function ImageToolsWorkspace({
         // In E2E, we authenticate via an env key. In that mode we want the model
         // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
         // rather than whatever the UI's default model happens to be.
-        const modelIdForRequest =
-          envApiKey && !apiKey ? undefined : selectedModel?.id;
+        const modelIdForRequest = envApiKey && !apiKey ? undefined : selectedModel?.id;
         const selectedModelIdForReasoning = selectedModel?.id || "";
-        const configuredReasoningLevel =
-          modelReasoningLevels[selectedModelIdForReasoning];
-        const initialReasoningLevel = isModelReasoningLevel(
-          selectedModel?.initialReasoningLevel,
-        )
+        const configuredReasoningLevel = modelReasoningLevels[selectedModelIdForReasoning];
+        const initialReasoningLevel = isModelReasoningLevel(selectedModel?.initialReasoningLevel)
           ? selectedModel.initialReasoningLevel
           : "default";
-        reasoningLevelForRequest =
-          configuredReasoningLevel ?? initialReasoningLevel;
+        reasoningLevelForRequest = configuredReasoningLevel ?? initialReasoningLevel;
 
         // Build image configuration from tool parameters (shape/size)
         const imageConfig: ImageConfig = {
@@ -1622,17 +1471,11 @@ export function ImageToolsWorkspace({
           ),
         });
 
-        const result = await editImage(
-          sourceImages,
-          prompt,
-          resolvedApiKey,
-          modelIdForRequest,
-          {
-            signal: abortController.signal,
-            imageConfig,
-            reasoningLevel: reasoningLevelForRequest,
-          },
-        );
+        const result = await editImage(sourceImages, prompt, resolvedApiKey, modelIdForRequest, {
+          signal: abortController.signal,
+          imageConfig,
+          reasoningLevel: reasoningLevelForRequest,
+        });
 
         processedImageData = await applyPostProcessingPipeline(
           result.imageData,
@@ -1685,23 +1528,13 @@ export function ImageToolsWorkspace({
       ) => {
         const { showAsCollection = false } = options || {};
         if (progressStartedAt > 0) {
-          const observedDurationMs = Math.max(
-            1,
-            getNowMs() - progressStartedAt,
-          );
+          const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
           setGenerationTiming((prev) =>
-            updateGenerationTiming(
-              prev,
-              promptDurationKey,
-              toolDurationKey,
-              observedDurationMs,
-            ),
+            updateGenerationTiming(prev, promptDurationKey, toolDurationKey, observedDurationMs),
           );
         }
 
-        setResultImageIds(
-          showAsCollection ? createdItems.map((item) => item.id) : [],
-        );
+        setResultImageIds(showAsCollection ? createdItems.map((item) => item.id) : []);
         setGenerationProgress(null);
         setState((prev) => ({
           ...prev,
@@ -1711,12 +1544,9 @@ export function ImageToolsWorkspace({
       };
 
       if (tool.derivedResultMode) {
-        const derivedItemsResult = await extractDerivedImageItems(
-          processedImageData,
-          {
-            signal: abortController.signal,
-          },
-        );
+        const derivedItemsResult = await extractDerivedImageItems(processedImageData, {
+          signal: abortController.signal,
+        });
         durationMs += derivedItemsResult.durationMs;
 
         const parentId = constrainedReferences[0]?.id || null;
@@ -1734,10 +1564,10 @@ export function ImageToolsWorkspace({
           return;
         }
 
-        const gifImageData = await createAnimatedGif(
-          derivedItemsResult.imageDataItems,
-          { delayMs: 140, repeat: 0 },
-        );
+        const gifImageData = await createAnimatedGif(derivedItemsResult.imageDataItems, {
+          delayMs: 140,
+          repeat: 0,
+        });
         const gifItem = await createHistoryItem(gifImageData, parentId);
         appendHistoryEntry(gifItem);
         finalizeDerivedItems([gifItem]);
@@ -1749,12 +1579,7 @@ export function ImageToolsWorkspace({
       if (progressStartedAt > 0) {
         const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
         setGenerationTiming((prev) =>
-          updateGenerationTiming(
-            prev,
-            promptDurationKey,
-            toolDurationKey,
-            observedDurationMs,
-          ),
+          updateGenerationTiming(prev, promptDurationKey, toolDurationKey, observedDurationMs),
         );
       }
 
@@ -1783,13 +1608,9 @@ export function ImageToolsWorkspace({
           error.detailMessage
         ) {
           const infoUrl = error.infoUrl || OPENROUTER_KEYS_URL;
-          errorContent = buildInsufficientCreditsError(
-            error.detailMessage,
-            infoUrl,
-          );
+          errorContent = buildInsufficientCreditsError(error.detailMessage, infoUrl);
         } else {
-          errorContent =
-            error instanceof Error ? error.message : "Failed to process image.";
+          errorContent = error instanceof Error ? error.message : "Failed to process image.";
         }
         setState((prev) => ({
           ...prev,
@@ -1807,18 +1628,15 @@ export function ImageToolsWorkspace({
     }
   };
 
-  const handleParamChange = useCallback(
-    (toolId: string, paramName: string, value: string) => {
-      setParamsByTool((prev) => ({
-        ...prev,
-        [toolId]: {
-          ...(prev[toolId] || {}),
-          [paramName]: value,
-        },
-      }));
-    },
-    [],
-  );
+  const handleParamChange = useCallback((toolId: string, paramName: string, value: string) => {
+    setParamsByTool((prev) => ({
+      ...prev,
+      [toolId]: {
+        ...prev[toolId],
+        [paramName]: value,
+      },
+    }));
+  }, []);
 
   const handleUpload = useCallback(
     async (file: File, targetPanel: "target" | "right") => {
@@ -1847,14 +1665,12 @@ export function ImageToolsWorkspace({
         appendHistoryEntry(newItem);
         setState((prev) => ({
           ...prev,
-          targetImageId:
-            targetPanel === "target" ? newItem.id : prev.targetImageId,
+          targetImageId: targetPanel === "target" ? newItem.id : prev.targetImageId,
           referenceImageIds:
             targetPanel === "target"
               ? prev.referenceImageIds.filter((id) => id !== newItem.id)
               : prev.referenceImageIds,
-          rightPanelImageId:
-            targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
+          rightPanelImageId: targetPanel === "right" ? newItem.id : prev.rightPanelImageId,
         }));
       } catch (error) {
         console.error("Failed to load image", error);
@@ -1886,8 +1702,7 @@ export function ImageToolsWorkspace({
       ...prev,
       targetImageId: id,
       referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
-      rightPanelImageId:
-        prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+      rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
     }));
   }, []);
 
@@ -1928,10 +1743,7 @@ export function ImageToolsWorkspace({
         appendHistoryEntry(newItem);
         setState((prev) => {
           const nextIds = [...prev.referenceImageIds];
-          const idx =
-            typeof slotIndex === "number" && slotIndex >= 0
-              ? slotIndex
-              : nextIds.length;
+          const idx = typeof slotIndex === "number" && slotIndex >= 0 ? slotIndex : nextIds.length;
 
           if (idx < nextIds.length) {
             nextIds[idx] = newItem.id;
@@ -1963,9 +1775,7 @@ export function ImageToolsWorkspace({
         return;
       }
 
-      const tool = activeToolId
-        ? TOOLS.find((t) => t.id === activeToolId)
-        : null;
+      const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
       const requiresEditImage = tool?.editImage !== false;
       const referenceMode = getToolReferenceMode(activeToolId);
       const { max } = getReferenceConstraints(referenceMode);
@@ -2050,8 +1860,7 @@ export function ImageToolsWorkspace({
       return {
         ...prev,
         referenceImageIds: next.slice(0, max),
-        rightPanelImageId:
-          prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+        rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
       };
     });
   };
@@ -2172,10 +1981,7 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, error: null }));
   };
 
-  const handleSelectModel = (
-    modelId: string,
-    reasoningLevels: ModelReasoningLevelByModelId,
-  ) => {
+  const handleSelectModel = (modelId: string, reasoningLevels: ModelReasoningLevelByModelId) => {
     setSelectedModelId(modelId);
     setModelReasoningLevels(normalizeModelReasoningLevels(reasoningLevels));
   };
@@ -2187,9 +1993,7 @@ export function ImageToolsWorkspace({
   const referenceItems = state.referenceImageIds
     .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
     .filter((h): h is ImageRecord => !!h);
-  const rightItem =
-    accessibleHistoryItems.find((h) => h.id === state.rightPanelImageId) ||
-    null;
+  const rightItem = accessibleHistoryItems.find((h) => h.id === state.rightPanelImageId) || null;
   const resultItems = resultImageIds
     .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
     .filter((item): item is ImageRecord => !!item);
@@ -2237,20 +2041,15 @@ export function ImageToolsWorkspace({
         )} total`
       : null;
 
-  const creditsTooltipLines = [
-    creditsPrimaryLabel,
-    creditsSecondaryLabel,
-  ].filter((line): line is string => Boolean(line));
+  const creditsTooltipLines = [creditsPrimaryLabel, creditsSecondaryLabel].filter(
+    (line): line is string => Boolean(line),
+  );
 
-  const creditsTooltipLabel =
-    creditsTooltipLines.join(". ") || creditsPrimaryLabel;
+  const creditsTooltipLabel = creditsTooltipLines.join(". ") || creditsPrimaryLabel;
 
   const creditsProgressFraction =
     credits && credits.totalCredits > 0
-      ? Math.min(
-          1,
-          Math.max(0, credits.remainingCredits / credits.totalCredits),
-        )
+      ? Math.min(1, Math.max(0, credits.remainingCredits / credits.totalCredits))
       : null;
 
   const creditsProgressAriaProps: React.HTMLAttributes<HTMLElement> =
@@ -2264,13 +2063,9 @@ export function ImageToolsWorkspace({
       : { role: "status" };
 
   const isCreditsLow =
-    creditsProgressFraction !== null && !creditsError
-      ? creditsProgressFraction < 0.1
-      : false;
+    creditsProgressFraction !== null && !creditsError ? creditsProgressFraction < 0.1 : false;
 
-  const creditsLabelColor = isCreditsLow
-    ? theme.colors.danger
-    : theme.colors.textMuted;
+  const creditsLabelColor = isCreditsLow ? theme.colors.danger : theme.colors.textMuted;
 
   const progressTrackBackground = creditsError
     ? "rgba(239, 68, 68, 0.15)"
@@ -2278,9 +2073,7 @@ export function ImageToolsWorkspace({
       ? theme.colors.dangerSubtle
       : theme.colors.surfaceAlt;
 
-  const progressBorderColor = isCreditsLow
-    ? theme.colors.danger
-    : theme.colors.border;
+  const progressBorderColor = isCreditsLow ? theme.colors.danger : theme.colors.border;
 
   const progressFillColor = creditsError
     ? "#ef4444"
@@ -2330,12 +2123,7 @@ export function ImageToolsWorkspace({
             alignItems="center"
             sx={{ flex: 1, minWidth: 0, flexWrap: "wrap", rowGap: 0.75 }}
           >
-            <Box
-              component="img"
-              src={bloomLogo}
-              alt="Bloom"
-              sx={{ width: 28, height: 28 }}
-            />
+            <Box component="img" src={bloomLogo} alt="Bloom" sx={{ width: 28, height: 28 }} />
             <Typography variant="h6" component="h1" fontWeight={700}>
               Bloom AI Image Tools
             </Typography>
@@ -2362,9 +2150,7 @@ export function ImageToolsWorkspace({
           <Stack spacing={1} alignItems="flex-end" sx={{ flexShrink: 0 }}>
             <Stack direction="row" spacing={3} alignItems="center">
               <OpenRouterCreditsHeader
-                shouldShowConnectToOpenRouterCTA={
-                  shouldShowConnectToOpenRouterCTA
-                }
+                shouldShowConnectToOpenRouterCTA={shouldShowConnectToOpenRouterCTA}
                 onOpenSettingsDialog={() => setIsSettingsDialogOpen(true)}
                 connectCtaAttentionKey={connectCtaAttentionKey}
                 creditsTooltipLabel={creditsTooltipLabel}
@@ -2421,9 +2207,7 @@ export function ImageToolsWorkspace({
                   style={{
                     width: 16,
                     height: 16,
-                    animation: fsLoading
-                      ? `${rotate360} 0.8s linear infinite`
-                      : "none",
+                    animation: fsLoading ? `${rotate360} 0.8s linear infinite` : "none",
                   }}
                 >
                   <path d={Icons.Gear} />
@@ -2445,12 +2229,7 @@ export function ImageToolsWorkspace({
               </IconButton>
             </Stack>
             {fsError && (
-              <Typography
-                variant="caption"
-                fontWeight={600}
-                sx={{ color: "#ef4444" }}
-                role="alert"
-              >
+              <Typography variant="caption" fontWeight={600} sx={{ color: "#ef4444" }} role="alert">
                 {fsError}
               </Typography>
             )}

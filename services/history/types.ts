@@ -54,8 +54,6 @@ export const APP_STATE_FILE_VERSION = 2 as const;
 export const APP_STATE_FILE_NAME = "app-state.json";
 export const IMAGES_DIR_NAME = "images";
 export const TOMBSTONES_DIR_NAME = "tombstones";
-export const LEGACY_MANIFEST_FILE = "history-manifest.json";
-export const LEGACY_MANIFEST_RENAMED = "history-manifest.legacy.json";
 
 /** Tombstones older than this are GC'd on next scan. */
 export const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

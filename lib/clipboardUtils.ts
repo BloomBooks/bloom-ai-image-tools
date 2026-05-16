@@ -5,24 +5,17 @@ import {
   isPngBlob,
 } from "copy-image-clipboard";
 
-import {
-  injectPngTextMetadataIntoBlob,
-  type PngTextMetadata,
-} from "./pngMetadata";
+import { applyExifToBlob, extractExifFromBlob } from "./exifMetadata";
 
 export type ClipboardUploadHandler = (file: File) => void | Promise<void>;
 
-export const getDataUrlMimeType = (
-  dataUrl: string | null | undefined
-): string | null => {
+export const getDataUrlMimeType = (dataUrl: string | null | undefined): string | null => {
   if (!dataUrl) return null;
   const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
   return match ? match[1].toLowerCase() : null;
 };
 
-export const getTypeFromFileName = (
-  fileName: string | null | undefined
-): string | null => {
+export const getTypeFromFileName = (fileName: string | null | undefined): string | null => {
   if (!fileName) return null;
   const ext = fileName.split(".").pop()?.toLowerCase();
   if (!ext) return null;
@@ -41,8 +34,7 @@ export const getBlobFromDataUrl = async (dataUrl: string): Promise<Blob> => {
     throw new Error("Invalid data URL");
   }
 
-  const [, mime = "application/octet-stream", base64Indicator, dataPart] =
-    match;
+  const [, mime = "application/octet-stream", base64Indicator, dataPart] = match;
 
   if (base64Indicator) {
     const cleaned = dataPart.replace(/\s+/g, "");
@@ -121,9 +113,7 @@ export const clipboardSupportsMime = (mime: string): boolean => {
 export const shouldRetryWithPng = (error: unknown): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const message = String((error as { message?: string }).message || "");
-  return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(
-    message
-  );
+  return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(message);
 };
 
 export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> => {
@@ -131,10 +121,7 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
     return blob;
   }
 
-  if (
-    typeof window !== "undefined" &&
-    typeof window.createImageBitmap === "function"
-  ) {
+  if (typeof window !== "undefined" && typeof window.createImageBitmap === "function") {
     try {
       const bitmap = await window.createImageBitmap(blob);
       try {
@@ -149,10 +136,8 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
         const pngBlob = await new Promise<Blob>((resolve, reject) => {
           canvas.toBlob(
             (result) =>
-              result
-                ? resolve(result)
-                : reject(new Error("Canvas toBlob() returned null")),
-            "image/png"
+              result ? resolve(result) : reject(new Error("Canvas toBlob() returned null")),
+            "image/png",
           );
         });
         return pngBlob;
@@ -162,10 +147,7 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
         }
       }
     } catch (error) {
-      console.warn(
-        "Bitmap-based PNG conversion failed, retrying with default method:",
-        error
-      );
+      console.warn("Bitmap-based PNG conversion failed, retrying with default method:", error);
     }
   }
 
@@ -175,6 +157,10 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
 export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
   const mime = getTypeFromMime(blob.type) || "image/png";
   const canUseOriginal = clipboardSupportsMime(mime);
+  // Preserve EXIF when the browser still gives us the original bytes. This
+  // cannot restore metadata that a browser already stripped during clipboard
+  // read or paste handling upstream.
+  const exifBytes = await extractExifFromBlob(blob);
 
   if (canUseOriginal) {
     try {
@@ -186,40 +172,23 @@ export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
       }
     }
   } else {
-    console.info(
-      `Clipboard does not support ${mime}, attempting PNG fallback.`
-    );
+    console.info(`Clipboard does not support ${mime}, attempting PNG fallback.`);
   }
 
-  const pngBlob = await convertBlobToPngWithFallback(blob);
+  let pngBlob = await convertBlobToPngWithFallback(blob);
+  if (exifBytes) {
+    pngBlob = await applyExifToBlob(pngBlob, exifBytes);
+  }
   await copyBlobToClipboard(pngBlob);
 };
 
-export const handleCopy = async (
-  imageData: string | null | undefined,
-  pngTextMetadata?: PngTextMetadata
-): Promise<boolean> => {
+export const handleCopy = async (imageData: string | null | undefined): Promise<boolean> => {
   if (!imageData) return false;
 
   try {
     const normalizedBlob = await getNormalizedImageBlob(imageData);
 
-    const hasMetadata =
-      !!pngTextMetadata &&
-      Object.values(pngTextMetadata).some(
-        (v) => typeof v === "string" && v.trim().length > 0
-      );
-
-    if (hasMetadata) {
-      const pngBlob = await convertBlobToPngWithFallback(normalizedBlob);
-      const pngWithMetadata = await injectPngTextMetadataIntoBlob(
-        pngBlob,
-        pngTextMetadata || {}
-      );
-      await copyBlobToClipboard(pngWithMetadata);
-    } else {
-      await copyWithFallbackIfNeeded(normalizedBlob);
-    }
+    await copyWithFallbackIfNeeded(normalizedBlob);
     return true;
   } catch (error) {
     // Some browsers/environments can't write image types to the clipboard.
@@ -252,6 +221,9 @@ export const readClipboardImageFile = async (): Promise<File | null> => {
     const imageType = item.types.find((type) => type.startsWith("image/"));
     if (!imageType) continue;
 
+    // Best case: this returns the browser's original image bytes and EXIF can
+    // survive roundtrips. In Chromium, real clipboard reads may already be
+    // sanitized before they reach web content, so this is not a hard guarantee.
     const blob = await item.getType(imageType);
     const extension = imageType.split("/")[1] || "png";
     return new File([blob], `pasted.${extension}`, {
@@ -262,9 +234,7 @@ export const readClipboardImageFile = async (): Promise<File | null> => {
   return null;
 };
 
-export const handlePaste = async (
-  onUpload?: ClipboardUploadHandler
-): Promise<boolean> => {
+export const handlePaste = async (onUpload?: ClipboardUploadHandler): Promise<boolean> => {
   if (!onUpload) return false;
   const file = await readClipboardImageFile();
   if (!file) return false;
@@ -272,9 +242,7 @@ export const handlePaste = async (
   return true;
 };
 
-export const getImageFileFromClipboardEvent = (
-  event: ClipboardEvent
-): File | null => {
+export const getImageFileFromClipboardEvent = (event: ClipboardEvent): File | null => {
   const data = event.clipboardData;
   if (!data) return null;
 
@@ -291,7 +259,7 @@ export const getImageFileFromClipboardEvent = (
 
 export const handleClipboardPaste = async (
   event: ClipboardEvent,
-  onUpload?: ClipboardUploadHandler
+  onUpload?: ClipboardUploadHandler,
 ): Promise<boolean> => {
   if (!onUpload) return false;
   const file = getImageFileFromClipboardEvent(event);

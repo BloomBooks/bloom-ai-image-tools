@@ -49,6 +49,9 @@
     "gifenc": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",
+    "piexifjs": "^1.0.6",
+    "png-chunks-encode": "^1.0.0",
+    "png-chunks-extract": "^1.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "rembg-webgpu": "^0.2.1"

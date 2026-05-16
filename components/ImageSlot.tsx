@@ -2,7 +2,7 @@ import React from "react";
 import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
-import { kPrimary, theme } from "../themes";
+import { theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";
@@ -10,15 +10,9 @@ import { ImageSlotRolePill } from "./ImageSlotRolePill";
 import { ImageSlotDropOverlay } from "./ImageSlotDropOverlay";
 import { ImageSlotLoadingOverlay } from "./ImageSlotLoadingOverlay";
 import { ImageSlotArtStyleContextMenu } from "./ImageSlotArtStyleContextMenu";
-import {
-  ImageSlotThumbnailStatusBadge,
-  ThumbnailStatus,
-} from "./ImageSlotThumbnailStatusBadge";
+import { ImageSlotThumbnailStatusBadge, ThumbnailStatus } from "./ImageSlotThumbnailStatusBadge";
 import { ImageSlotInfoDialog } from "./ImageSlotInfoDialog";
-import {
-  processImageForThumbnail,
-  saveArtStyleThumbnail,
-} from "../lib/imageProcessing";
+import { processImageForThumbnail, saveArtStyleThumbnail } from "../lib/imageProcessing";
 import { isClearArtStyleId } from "../lib/artStyles";
 import {
   getInternalImageDragData,
@@ -27,20 +21,11 @@ import {
 } from "./dragConstants";
 import {
   getTypeFromFileName,
-  getTypeFromMime,
   handleCopy as copyImageToClipboard,
   handlePaste as pasteImageFromClipboard,
 } from "../lib/clipboardUtils";
-import {
-  getImageFileExtensionFromMimeType,
-  getMimeTypeFromUrl,
-} from "../lib/imageUtils";
-import {
-  hasImageFilePayload,
-  getImageFileFromDataTransfer,
-} from "../lib/dragUtils";
-import { TOOLS } from "./tools/tools-registry";
-import { getModelNameById } from "../lib/modelsCatalog";
+import { getImageFileExtensionFromMimeType, getMimeTypeFromUrl } from "../lib/imageUtils";
+import { hasImageFilePayload, getImageFileFromDataTransfer } from "../lib/dragUtils";
 import { useDndContext } from "@dnd-kit/core";
 
 let transparentDragImage: HTMLImageElement | null = null;
@@ -50,8 +35,7 @@ const getTransparentDragImage = (): HTMLImageElement | null => {
     if (transparentDragImage) return transparentDragImage;
     const img = document.createElement("img");
     // 1x1 transparent GIF
-    img.src =
-      "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+    img.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
     transparentDragImage = img;
     return img;
   } catch {
@@ -183,8 +167,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       borderWidth: 2,
       borderStyle: "solid",
       overflow: "hidden",
-      transition:
-        "opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
+      transition: "opacity 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
       width: "100%",
       aspectRatio: "1 / 1",
       backgroundColor: "transparent",
@@ -215,9 +198,7 @@ const TRANSPARENCY_BLOOM_BLUE = "rgba(29, 143, 175, 0.2)";
 const TRANSPARENCY_PATTERN_SIZE = TRANSPARENCY_TILE_SIZE * 2;
 const TRANSPARENCY_CHECKERBOARD_IMAGE = (() => {
   const tile = TRANSPARENCY_TILE_SIZE;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${
-    tile * 2
-  }" height="${
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile * 2}" height="${
     tile * 2
   }" shape-rendering="crispEdges"><rect width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/><rect x="${tile}" y="${tile}" width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
@@ -238,8 +219,7 @@ const getArtStyleIdForImage = (item?: ImageRecord | null): string | null => {
     return normalizedFromSource;
   }
 
-  const legacyStyleId = (item.parameters as Record<string, string | undefined>)
-    .styleId;
+  const legacyStyleId = (item.parameters as Record<string, string | undefined>).styleId;
   if (legacyStyleId && !isClearArtStyleId(legacyStyleId)) {
     return legacyStyleId;
   }
@@ -287,8 +267,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     x: number;
     y: number;
   } | null>(null);
-  const [thumbnailStatus, setThumbnailStatus] =
-    React.useState<ThumbnailStatus>("idle");
+  const [thumbnailStatus, setThumbnailStatus] = React.useState<ThumbnailStatus>("idle");
   const [isMagnifierPinned, setIsMagnifierPinned] = React.useState(false);
   const [isInfoDialogOpen, setIsInfoDialogOpen] = React.useState(false);
 
@@ -388,26 +367,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     try {
       setThumbnailStatus("copying");
 
-      const tool = TOOLS.find((t) => t.id === image.toolId) || null;
-      const isNewImageTool = tool?.editImage === false;
-      const modelId = (image.model || "").trim();
-      const modelName = getModelNameById(modelId) || modelId;
-      const reasoningLevel = (image.reasoningLevel || "").trim();
-      const pngMetadata = modelId
-        ? isNewImageTool
-          ? {
-              IllustratorModel: modelName,
-              IllustratorModelId: modelId,
-              IllustratorReasoningLevel: reasoningLevel,
-            }
-          : {
-              EditorModel: modelName,
-              EditorModelId: modelId,
-              EditorReasoningLevel: reasoningLevel,
-            }
-        : undefined;
-
-      await copyImageToClipboard(image.imageData, pngMetadata);
+      await copyImageToClipboard(image.imageData);
       setThumbnailStatus("copied");
       setTimeout(() => setThumbnailStatus("idle"), 1500);
     } catch (err) {
@@ -450,8 +410,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     event.preventDefault();
     if (!isDropZone || disabled) return;
     if (event.dataTransfer) {
-      const canHandleInternal =
-        onDrop && hasInternalImageDragData(event.dataTransfer);
+      const canHandleInternal = onDrop && hasInternalImageDragData(event.dataTransfer);
       if (canHandleInternal) {
         event.dataTransfer.dropEffect = "move";
       } else {
@@ -483,17 +442,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     dragDepthRef.current = 0;
     setIsDragOver(false);
 
-    const internalImageId = onDrop
-      ? getInternalImageDragData(event.dataTransfer)
-      : null;
+    const internalImageId = onDrop ? getInternalImageDragData(event.dataTransfer) : null;
     if (internalImageId && onDrop) {
       onDrop(internalImageId);
       return;
     }
 
-    const droppedFile = onUpload
-      ? getImageFileFromDataTransfer(event.dataTransfer)
-      : null;
+    const droppedFile = onUpload ? getImageFileFromDataTransfer(event.dataTransfer) : null;
     if (droppedFile) {
       handleUpload(droppedFile);
     }
@@ -517,8 +472,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   };
 
   const handleImageDragStart = (event: React.DragEvent<HTMLImageElement>) => {
-    const now =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (lastDragPointerDownRef.current) {
       debugLog(
         `dragstart(img) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`,
@@ -532,8 +486,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
   const handleContainerDragStart = (event: React.DragEvent<HTMLDivElement>) => {
     if (variant !== "thumb") return;
-    const now =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (lastDragPointerDownRef.current) {
       debugLog(
         `dragstart(container) dt=${Math.round(now - lastDragPointerDownRef.current.t)}ms pointer=${lastDragPointerDownRef.current.pointerType}`,
@@ -581,10 +534,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
 
-  const handleCloseContextMenu = () => {
-    setContextMenu(null);
-  };
-
   const handleSetThumbnail = async () => {
     if (!image || !hasValidArtStyle || !imageArtStyleId) return;
     setContextMenu(null);
@@ -614,10 +563,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const variantStyles = VARIANT_LAYOUT_STYLES[variant];
 
   // Panel slots stay transparent until hovered or dragged for a lighter touch.
-  const baseBackgroundColor =
-    variant === "panel" ? "transparent" : theme.colors.surface;
-  const hoverBackgroundColor =
-    variant === "panel" ? theme.colors.surfaceAlt : baseBackgroundColor;
+  const baseBackgroundColor = variant === "panel" ? "transparent" : theme.colors.surface;
+  const hoverBackgroundColor = variant === "panel" ? theme.colors.surfaceAlt : baseBackgroundColor;
 
   const defaultEmptyState = (
     <button
@@ -633,16 +580,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         color: theme.colors.textMuted,
         background: "none",
         border: "none",
-        cursor:
-          mergedControls.upload && onUpload && !disabled
-            ? "pointer"
-            : "default",
+        cursor: mergedControls.upload && onUpload && !disabled ? "pointer" : "default",
       }}
-      onClick={
-        mergedControls.upload && onUpload && !disabled
-          ? openFilePicker
-          : undefined
-      }
+      onClick={mergedControls.upload && onUpload && !disabled ? openFilePicker : undefined}
     >
       <img
         src={imagePlaceholder}
@@ -683,11 +623,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
       />
     ) : undefined;
 
-  const shouldRenderHeader =
-    variant === "panel" && (label || headerActions || starState);
+  const shouldRenderHeader = variant === "panel" && (label || headerActions || starState);
 
-  const shouldShowOverlayStar =
-    variant !== "panel" && !!starState && !!image && !disabled;
+  const shouldShowOverlayStar = variant !== "panel" && !!starState && !!image && !disabled;
 
   return (
     <>
@@ -704,10 +642,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             (variant === "thumb" && !!draggableImageId && !disabled);
           if (!isPotentiallyDraggable) return;
           lastDragPointerDownRef.current = {
-            t:
-              typeof performance !== "undefined"
-                ? performance.now()
-                : Date.now(),
+            t: typeof performance !== "undefined" ? performance.now() : Date.now(),
             x: event.clientX,
             y: event.clientY,
             pointerType: (event as any).pointerType || "unknown",
@@ -739,10 +674,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                   ? 1
                   : 0.8
               : 1,
-          cursor:
-            !disabled && (onClick || variant === "thumb")
-              ? "pointer"
-              : "default",
+          cursor: !disabled && (onClick || variant === "thumb") ? "pointer" : "default",
           pointerEvents: disabled ? "none" : "auto",
           filter: disabled ? "grayscale(1)" : "none",
           borderColor: isDragOver
@@ -817,9 +749,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                     maxWidth: "100%",
                     objectFit: variant === "thumb" ? "cover" : "contain",
                     display: "block",
-                    ...(variant === "thumb"
-                      ? undefined
-                      : TRANSPARENCY_BACKGROUND_STYLE),
+                    ...(variant === "thumb" ? undefined : TRANSPARENCY_BACKGROUND_STYLE),
                   }}
                   draggable={!!draggableImageId}
                   onDragStart={handleImageDragStart}
@@ -865,11 +795,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
             {rolePill ? <ImageSlotRolePill pill={rolePill} /> : null}
 
-            <ImageSlotDropOverlay
-              isVisible={isDragOver}
-              label={dropLabel}
-              borderRadius={18}
-            />
+            <ImageSlotDropOverlay isVisible={isDragOver} label={dropLabel} borderRadius={18} />
 
             <ImageSlotLoadingOverlay
               isVisible={isLoading}

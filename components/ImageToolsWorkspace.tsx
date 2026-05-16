@@ -107,6 +107,10 @@ import {
   resolveThumbnailStripConfigs,
   ThumbnailStripConfig,
 } from "../lib/thumbnailStrips";
+import {
+  mergeHistoryFields,
+  sanitizePersistedAppState,
+} from "../lib/persistedAppState";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -375,88 +379,6 @@ const buildRecoveredHistoryEntry = (entry: {
   isStarred: false,
   origin: "generated",
 });
-
-const sanitizePersistedAppState = (
-  persisted: PersistedAppState | null | undefined,
-): PersistedAppState => {
-  const history = Array.isArray(persisted?.history)
-    ? (persisted?.history as ImageRecord[])
-    : [];
-  const accessibleIds = new Set(
-    history
-      .filter((item) => !!item.imageData || !!item.imageFileName)
-      .map((item) => item.id),
-  );
-
-  const normalizeId = (id: string | null) =>
-    id && accessibleIds.has(id) ? id : null;
-  const referenceImageIds = Array.isArray(persisted?.referenceImageIds)
-    ? (persisted?.referenceImageIds as string[]).filter((id) =>
-        accessibleIds.has(id),
-      )
-    : [];
-
-  return {
-    targetImageId: normalizeId(persisted?.targetImageId ?? null),
-    referenceImageIds,
-    rightPanelImageId: normalizeId(persisted?.rightPanelImageId ?? null),
-    history,
-  };
-};
-
-const mergeImageRecord = (current: ImageRecord, incoming: ImageRecord) => {
-  return {
-    ...incoming,
-    ...current,
-    imageData: current.imageData || incoming.imageData,
-    imageFileName: current.imageFileName || incoming.imageFileName,
-    isStarred: current.isStarred ?? incoming.isStarred,
-  };
-};
-
-const mergeHistoryFields = (
-  current: AppState,
-  incoming: PersistedAppState,
-): Pick<
-  AppState,
-  "history" | "targetImageId" | "referenceImageIds" | "rightPanelImageId"
-> => {
-  const incomingById = new Map(incoming.history.map((item) => [item.id, item]));
-  const mergedHistory = current.history.map((item) => {
-    const incomingItem = incomingById.get(item.id);
-    if (!incomingItem) {
-      return item;
-    }
-    incomingById.delete(item.id);
-    return mergeImageRecord(item, incomingItem);
-  });
-  incomingById.forEach((item) => mergedHistory.push(item));
-
-  const validIds = new Set(mergedHistory.map((item) => item.id));
-  const resolveId = (primary: string | null, fallback: string | null) => {
-    if (primary && validIds.has(primary)) {
-      return primary;
-    }
-    if (fallback && validIds.has(fallback)) {
-      return fallback;
-    }
-    return null;
-  };
-
-  const mergedReferences = Array.from(
-    new Set([...current.referenceImageIds, ...incoming.referenceImageIds]),
-  ).filter((id) => validIds.has(id));
-
-  return {
-    history: mergedHistory,
-    targetImageId: resolveId(current.targetImageId, incoming.targetImageId),
-    rightPanelImageId: resolveId(
-      current.rightPanelImageId,
-      incoming.rightPanelImageId,
-    ),
-    referenceImageIds: mergedReferences,
-  };
-};
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
@@ -948,7 +870,9 @@ export function ImageToolsWorkspace({
         }
 
         if (persisted) {
-          const sanitized = sanitizePersistedAppState(persisted.appState);
+          const sanitized = sanitizePersistedAppState(persisted.appState, {
+            allowFileBackedEntries: Boolean(fsBindingRef.current),
+          });
           if (cancelled) return;
           setState((prev) => ({
             ...prev,
@@ -1154,7 +1078,9 @@ export function ImageToolsWorkspace({
       let incomingStrips: ThumbnailStripsSnapshot | null | undefined = null;
 
       if (manifest) {
-        incomingAppState = sanitizePersistedAppState(manifest.appState);
+        incomingAppState = sanitizePersistedAppState(manifest.appState, {
+          allowFileBackedEntries: true,
+        });
         incomingStrips = manifest.thumbnailStrips;
       } else if (stateRef.current.history.length === 0) {
         const files = await listHistoryImageFiles(fsBinding);
@@ -1430,7 +1356,9 @@ export function ImageToolsWorkspace({
       }
       const existingManifest = await readHistoryManifest(binding);
       const incomingAppState = existingManifest
-        ? sanitizePersistedAppState(existingManifest.appState)
+        ? sanitizePersistedAppState(existingManifest.appState, {
+            allowFileBackedEntries: true,
+          })
         : null;
       const mergedFields = incomingAppState
         ? mergeHistoryFields(stateRef.current, incomingAppState)

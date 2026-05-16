@@ -9,11 +9,23 @@ Bloom AI Image Tools provides a browser-based workspace for creating and editing
 - Build tooling: tsup for library bundling, Vitest/tsconfig for shared types, and Playwright for end-to-end coverage
 - Authentication and API access: OpenRouter OAuth helpers in `lib/openRouterOAuth.ts` and related service files under `services/`
 
+## Common Commands
+
+- Install or refresh dependencies: `vp install`
+- Run the app for one-off browser investigation: `vp dev` (serves on `http://localhost:3000` and normally opens the browser)
+- Build everything: `vp build`
+- Build only the published library output: `vp run build:lib`
+- Build only the demo app output: `vp run build:demo`
+- Run formatting, linting, and type checking: `vp check`
+- Run unit tests: `vp test`
+- Preview the built demo: `vp preview`
+
 ## E2E Testing with Playwright
 
-- Use `pnpm run e2e` to run UI tests
-- Run specific file: `pnpm run e2e <file-name>`
-- To see all renderer console messages and failed network requests: `E2E_VERBOSE=1 pnpm run e2e <file-name>`
+- Use `vp run e2e` to run UI tests
+- Run specific file: `vp run e2e <file-name>`
+- Playwright starts its own dev server with `vp dev --host --port 3000`, so a separate dev server is usually unnecessary
+- To see all renderer console messages and failed network requests: set `E2E_VERBOSE=1` before `vp run e2e <file-name>`
 - For information on writing tests, see .github/skills/playwright/SKILL.md
 
 ## Component Hierarchy
@@ -47,7 +59,8 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Review Checklist
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
+- [ ] Use `vp dev` for live browser investigations and `vp preview` when you specifically need to inspect the built output.
 - [ ] Run `vp check` and `vp test` to format, lint, type check and test changes.
-- [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
+- [ ] Run `vp build` when you need to validate distributable output, and use `vp run <script>` only for script-specific workflows such as `vp run e2e` or `vp run build:lib`.
 
 <!--VITE PLUS END-->

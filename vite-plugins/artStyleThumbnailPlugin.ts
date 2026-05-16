@@ -1,4 +1,4 @@
-import type { Plugin } from "vite";
+import type { Plugin } from "vite-plus";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -10,10 +10,7 @@ export function artStyleThumbnailPlugin(): Plugin {
     name: "art-style-thumbnail-api",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (
-          req.url !== "/__api/save-art-style-thumbnail" ||
-          req.method !== "POST"
-        ) {
+        if (req.url !== "/__api/save-art-style-thumbnail" || req.method !== "POST") {
           return next();
         }
 
@@ -49,9 +46,7 @@ export function artStyleThumbnailPlugin(): Plugin {
           const base64Match = imageData.match(/^data:image\/png;base64,(.+)$/);
           if (!base64Match) {
             res.statusCode = 400;
-            res.end(
-              "Invalid image data format (expected data:image/png;base64,...)"
-            );
+            res.end("Invalid image data format (expected data:image/png;base64,...)");
             return;
           }
 
@@ -75,33 +70,28 @@ export function artStyleThumbnailPlugin(): Plugin {
             process.cwd(),
             "components",
             "artStyle",
-            "art-styles.json5"
+            "art-styles.json5",
           );
           const newSampleImageUrl = `art-styles/${artStyleId}.png`;
 
           if (fs.existsSync(json5Path)) {
             let json5Content = fs.readFileSync(json5Path, "utf-8");
 
-            const blockPattern = new RegExp(
-              `\\{[^{}]*id:\\s*["']${artStyleId}["'][^{}]*\\}`,
-              "s"
-            );
+            const blockPattern = new RegExp(`\\{[^{}]*id:\\s*["']${artStyleId}["'][^{}]*\\}`, "s");
 
             const blockMatch = json5Content.match(blockPattern);
             if (blockMatch) {
               const block = blockMatch[0];
               const blockLines = block.split(/\r?\n/);
               const filteredLines = blockLines.filter(
-                (line) => !line.trim().startsWith("sampleImageUrl:")
+                (line) => !line.trim().startsWith("sampleImageUrl:"),
               );
 
-              const closingIndex = filteredLines.findIndex((line) =>
-                line.trim().startsWith("}")
-              );
+              const closingIndex = filteredLines.findIndex((line) => line.trim().startsWith("}"));
 
               if (closingIndex === -1) {
                 console.warn(
-                  `[art-style-thumbnail] Could not locate closing brace for ${artStyleId}`
+                  `[art-style-thumbnail] Could not locate closing brace for ${artStyleId}`,
                 );
               } else {
                 const closingLine = filteredLines[closingIndex];
@@ -115,14 +105,10 @@ export function artStyleThumbnailPlugin(): Plugin {
                 json5Content = json5Content.replace(block, updatedBlock);
 
                 fs.writeFileSync(json5Path, json5Content, "utf-8");
-                console.log(
-                  `[art-style-thumbnail] Updated art-styles.json5 for ${artStyleId}`
-                );
+                console.log(`[art-style-thumbnail] Updated art-styles.json5 for ${artStyleId}`);
               }
             } else {
-              console.warn(
-                `[art-style-thumbnail] Could not find art style ${artStyleId} in json5`
-              );
+              console.warn(`[art-style-thumbnail] Could not find art style ${artStyleId} in json5`);
             }
           }
 
@@ -133,9 +119,7 @@ export function artStyleThumbnailPlugin(): Plugin {
           console.error("[art-style-thumbnail] Error:", error);
           res.statusCode = 500;
           res.end(
-            `Internal server error: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
+            `Internal server error: ${error instanceof Error ? error.message : "Unknown error"}`,
           );
         }
       });

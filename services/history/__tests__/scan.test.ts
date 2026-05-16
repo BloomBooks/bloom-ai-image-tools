@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { diffFolderAgainstMemory, synthesizeEntryForOrphan } from "../folder/scan";
 import type { HistoryEntry, Tombstone } from "../types";
 import type { FolderScanResult } from "../folder/FolderHistoryBackend";
@@ -45,9 +45,7 @@ describe("diffFolderAgainstMemory", () => {
 
   it("tombstones remove from memory and schedule file deletion", () => {
     const memory = new Map<string, HistoryEntry>([["x", makeEntry({ id: "x" })]]);
-    const tombstones = new Map<string, Tombstone>([
-      ["x", { id: "x", deletedAt: 1500 }],
-    ]);
+    const tombstones = new Map<string, Tombstone>([["x", { id: "x", deletedAt: 1500 }]]);
     const images = [{ id: "x", fileName: "x.png", mime: "image/png", lastModified: 1000 }];
     const plan = diffFolderAgainstMemory({
       scan: makeScan({ tombstones, images }),
@@ -61,9 +59,7 @@ describe("diffFolderAgainstMemory", () => {
 
   it("tombstone wins over a sidecar present in the same scan (resurrection guard)", () => {
     const sidecars = new Map<string, HistoryEntry>([["x", makeEntry({ id: "x" })]]);
-    const tombstones = new Map<string, Tombstone>([
-      ["x", { id: "x", deletedAt: 1500 }],
-    ]);
+    const tombstones = new Map<string, Tombstone>([["x", { id: "x", deletedAt: 1500 }]]);
     const plan = diffFolderAgainstMemory({
       scan: makeScan({ sidecars, tombstones }),
       memory: new Map(),
@@ -151,9 +147,7 @@ describe("diffFolderAgainstMemory", () => {
   });
 
   it("non-expired tombstones are not GC'd", () => {
-    const tombstones = new Map<string, Tombstone>([
-      ["fresh", { id: "fresh", deletedAt: 1000 }],
-    ]);
+    const tombstones = new Map<string, Tombstone>([["fresh", { id: "fresh", deletedAt: 1000 }]]);
     const plan = diffFolderAgainstMemory({
       scan: makeScan({ tombstones }),
       memory: new Map(),

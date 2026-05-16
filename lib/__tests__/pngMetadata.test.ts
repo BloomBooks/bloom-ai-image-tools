@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { injectPngTextMetadata } from "../pngMetadata";
 
 const toBytes = (base64: string): Uint8Array => {
@@ -12,8 +12,7 @@ const readTextChunks = (png: Uint8Array): Record<string, string[]> => {
   const out: Record<string, string[]> = {};
 
   const readU32 = (i: number) =>
-    ((png[i] << 24) | (png[i + 1] << 16) | (png[i + 2] << 8) | png[i + 3]) >>>
-    0;
+    ((png[i] << 24) | (png[i + 1] << 16) | (png[i + 2] << 8) | png[i + 3]) >>> 0;
 
   while (offset + 12 <= png.length) {
     const len = readU32(offset);
@@ -21,7 +20,7 @@ const readTextChunks = (png: Uint8Array): Record<string, string[]> => {
       png[offset + 4],
       png[offset + 5],
       png[offset + 6],
-      png[offset + 7]
+      png[offset + 7],
     );
     const dataStart = offset + 8;
     const dataEnd = dataStart + len;
@@ -58,9 +57,7 @@ describe("injectPngTextMetadata", () => {
     });
 
     const chunks = readTextChunks(updated);
-    expect(chunks["IllustratorModel"]?.[0]).toBe(
-      "google/gemini-2.5-flash-image"
-    );
+    expect(chunks["IllustratorModel"]?.[0]).toBe("google/gemini-2.5-flash-image");
   });
 
   it("ignores empty metadata values", () => {

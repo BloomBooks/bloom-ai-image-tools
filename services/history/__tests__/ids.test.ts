@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   buildHistoryId,
   formatIsoForFilename,
@@ -105,9 +105,7 @@ describe("filename helpers", () => {
   });
 
   it("idFromFileName strips the extension", () => {
-    expect(idFromFileName("2026-05-11T14-32-07_foo_a3f9.png")).toBe(
-      "2026-05-11T14-32-07_foo_a3f9",
-    );
+    expect(idFromFileName("2026-05-11T14-32-07_foo_a3f9.png")).toBe("2026-05-11T14-32-07_foo_a3f9");
     expect(idFromFileName("plain")).toBe("plain");
   });
 });

@@ -1,8 +1,4 @@
-import {
-  ImageRecord,
-  ThumbnailStripId,
-  ThumbnailStripsSnapshot,
-} from "../types";
+import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../types";
 
 export interface ThumbnailStripConfig {
   id: ThumbnailStripId;
@@ -20,10 +16,7 @@ export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
   "environment",
 ];
 
-export const THUMBNAIL_STRIP_CONFIGS: Record<
-  ThumbnailStripId,
-  ThumbnailStripConfig
-> = {
+export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripConfig> = {
   history: {
     id: "history",
     label: "History",
@@ -56,9 +49,7 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<
 };
 
 export const resolveThumbnailStripConfigs = (
-  overrides?: Partial<
-    Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
-  >
+  overrides?: Partial<Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>>,
 ): Record<ThumbnailStripId, ThumbnailStripConfig> => {
   if (!overrides) {
     return THUMBNAIL_STRIP_CONFIGS;
@@ -70,7 +61,7 @@ export const resolveThumbnailStripConfigs = (
     const override = overrides[stripId];
     resolved[stripId] = {
       ...base,
-      ...(override || {}),
+      ...override,
       id: stripId,
     };
   });
@@ -79,7 +70,7 @@ export const resolveThumbnailStripConfigs = (
 };
 
 const cloneStripArrays = (
-  snapshot: ThumbnailStripsSnapshot
+  snapshot: ThumbnailStripsSnapshot,
 ): Record<ThumbnailStripId, string[]> => {
   const cloned: Partial<Record<ThumbnailStripId, string[]>> = {};
   THUMBNAIL_STRIP_ORDER.forEach((id) => {
@@ -88,23 +79,22 @@ const cloneStripArrays = (
   return cloned as Record<ThumbnailStripId, string[]>;
 };
 
-export const createDefaultThumbnailStripsSnapshot =
-  (): ThumbnailStripsSnapshot => ({
-    activeStripId: "history",
-    pinnedStripIds: ["history"],
-    itemIdsByStrip: {
-      history: [],
-      starred: [],
-      reference: [],
-      environment: [],
-    },
-  });
+export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot => ({
+  activeStripId: "history",
+  pinnedStripIds: ["history"],
+  itemIdsByStrip: {
+    history: [],
+    starred: [],
+    reference: [],
+    environment: [],
+  },
+});
 
 const uniqueInsert = (
   list: string[],
   itemId: string,
   index: number,
-  respectExistingIndex = true
+  respectExistingIndex = true,
 ): string[] => {
   const without = list.filter((id) => id !== itemId);
   const existingIndex = respectExistingIndex ? list.indexOf(itemId) : -1;
@@ -114,7 +104,7 @@ const uniqueInsert = (
   return without;
 };
 
-const mergeUniqueIds = (primary: string[], secondary: string[]): string[] => {
+const mergeUniqueIds = <T extends string>(primary: T[], secondary: T[]): T[] => {
   const merged = [...primary];
   secondary.forEach((itemId) => {
     if (!merged.includes(itemId)) {
@@ -128,16 +118,11 @@ export const addItemToStrip = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
   itemId: string,
-  index?: number
+  index?: number,
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   const targetList = next[stripId] || [];
-  next[stripId] = uniqueInsert(
-    targetList,
-    itemId,
-    index ?? targetList.length,
-    true
-  );
+  next[stripId] = uniqueInsert(targetList, itemId, index ?? targetList.length, true);
   return {
     ...snapshot,
     itemIdsByStrip: next,
@@ -147,7 +132,7 @@ export const addItemToStrip = (
 export const removeItemFromStrip = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
-  itemId: string
+  itemId: string,
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   next[stripId] = (next[stripId] || []).filter((id) => id !== itemId);
@@ -161,7 +146,7 @@ export const reorderItemInStrip = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
   itemId: string,
-  targetIndex: number
+  targetIndex: number,
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   const targetList = next[stripId] || [];
@@ -178,7 +163,7 @@ export const reorderItemInStrip = (
 export const setStripPinState = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
-  pinned: boolean
+  pinned: boolean,
 ): ThumbnailStripsSnapshot => {
   const nextPins = snapshot.pinnedStripIds.filter((id) => id !== stripId);
   if (pinned) {
@@ -192,7 +177,7 @@ export const setStripPinState = (
 
 export const setActiveStrip = (
   snapshot: ThumbnailStripsSnapshot,
-  stripId: ThumbnailStripId
+  stripId: ThumbnailStripId,
 ): ThumbnailStripsSnapshot => {
   if (snapshot.activeStripId === stripId) {
     return snapshot;
@@ -203,7 +188,7 @@ export const setActiveStrip = (
 export const replaceStripItems = (
   snapshot: ThumbnailStripsSnapshot,
   stripId: ThumbnailStripId,
-  itemIds: string[]
+  itemIds: string[],
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   next[stripId] = Array.from(new Set(itemIds));
@@ -215,18 +200,17 @@ export const replaceStripItems = (
 
 export const sanitizeThumbnailStrips = (
   snapshot: ThumbnailStripsSnapshot,
-  validIds: Set<string>
+  validIds: Set<string>,
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   THUMBNAIL_STRIP_ORDER.forEach((id) => {
     next[id] = (next[id] || []).filter((itemId) => validIds.has(itemId));
   });
-  const rawPins = (snapshot as unknown as { pinnedStripIds?: unknown })
-    .pinnedStripIds;
+  const rawPins = (snapshot as unknown as { pinnedStripIds?: unknown }).pinnedStripIds;
   const hasPins = Array.isArray(rawPins);
   const sanitizedPins = (hasPins ? rawPins : []).filter(
     (id): id is ThumbnailStripId =>
-      typeof id === "string" && THUMBNAIL_STRIP_ORDER.includes(id as any)
+      typeof id === "string" && THUMBNAIL_STRIP_ORDER.includes(id as any),
   );
   const active = THUMBNAIL_STRIP_ORDER.includes(snapshot.activeStripId)
     ? snapshot.activeStripId
@@ -240,12 +224,12 @@ export const sanitizeThumbnailStrips = (
 
 export const isStripPinned = (
   snapshot: ThumbnailStripsSnapshot,
-  stripId: ThumbnailStripId
+  stripId: ThumbnailStripId,
 ): boolean => snapshot.pinnedStripIds.includes(stripId);
 
 export const ensureStripHasItems = (
   snapshot: ThumbnailStripsSnapshot,
-  stripId: ThumbnailStripId
+  stripId: ThumbnailStripId,
 ): ThumbnailStripsSnapshot => {
   if (snapshot.itemIdsByStrip[stripId]) {
     return snapshot;
@@ -257,19 +241,17 @@ export const ensureStripHasItems = (
 
 export const stripCollectionIncludes = (
   snapshot: ThumbnailStripsSnapshot,
-  entryId: string
+  entryId: string,
 ): boolean => {
   return THUMBNAIL_STRIP_ORDER.some((stripId) =>
-    (snapshot.itemIdsByStrip[stripId] || []).includes(entryId)
+    (snapshot.itemIdsByStrip[stripId] || []).includes(entryId),
   );
 };
 
 const filterNonEnvironment = (entries: ImageRecord[]) =>
   entries.filter((entry) => entry.origin !== "environment");
 
-export const buildStripSnapshotFromEntries = (
-  entries: ImageRecord[]
-): ThumbnailStripsSnapshot => {
+export const buildStripSnapshotFromEntries = (entries: ImageRecord[]): ThumbnailStripsSnapshot => {
   const base = createDefaultThumbnailStripsSnapshot();
   // UI expectation: most recent items should appear first (leftmost).
   // App state keeps history oldest-first, so reverse for display ordering.
@@ -277,15 +259,13 @@ export const buildStripSnapshotFromEntries = (
     .map((entry) => entry.id)
     .reverse();
   base.itemIdsByStrip.history = orderedHistory;
-  base.itemIdsByStrip.starred = entries
-    .filter((entry) => entry.isStarred)
-    .map((entry) => entry.id);
+  base.itemIdsByStrip.starred = entries.filter((entry) => entry.isStarred).map((entry) => entry.id);
   return base;
 };
 
 export const hydrateThumbnailStripsSnapshot = (
   persisted: ThumbnailStripsSnapshot | null | undefined,
-  entries: ImageRecord[]
+  entries: ImageRecord[],
 ): ThumbnailStripsSnapshot => {
   const fallback = buildStripSnapshotFromEntries(entries);
   if (!persisted) {
@@ -294,27 +274,21 @@ export const hydrateThumbnailStripsSnapshot = (
   const validIds = new Set(entries.map((entry) => entry.id));
   let sanitized = sanitizeThumbnailStrips(persisted, validIds);
 
-  const starredIds = entries
-    .filter((entry) => entry.isStarred)
-    .map((entry) => entry.id);
+  const starredIds = entries.filter((entry) => entry.isStarred).map((entry) => entry.id);
   starredIds.forEach((id) => {
     if (!sanitized.itemIdsByStrip.starred.includes(id)) {
       sanitized = addItemToStrip(sanitized, "starred", id);
     }
   });
 
-  sanitized = replaceStripItems(
-    sanitized,
-    "history",
-    fallback.itemIdsByStrip.history
-  );
+  sanitized = replaceStripItems(sanitized, "history", fallback.itemIdsByStrip.history);
   return sanitized;
 };
 
 export const mergeThumbnailStripsSnapshots = (
   current: ThumbnailStripsSnapshot | null | undefined,
   incoming: ThumbnailStripsSnapshot | null | undefined,
-  entries: ImageRecord[]
+  entries: ImageRecord[],
 ): ThumbnailStripsSnapshot => {
   if (!current) {
     return hydrateThumbnailStripsSnapshot(incoming, entries);
@@ -331,24 +305,24 @@ export const mergeThumbnailStripsSnapshots = (
     activeStripId: currentSanitized.activeStripId || incomingSanitized.activeStripId,
     pinnedStripIds: mergeUniqueIds(
       currentSanitized.pinnedStripIds,
-      incomingSanitized.pinnedStripIds
+      incomingSanitized.pinnedStripIds,
     ),
     itemIdsByStrip: {
       history: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.history || [],
-        incomingSanitized.itemIdsByStrip.history || []
+        incomingSanitized.itemIdsByStrip.history || [],
       ),
       starred: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.starred || [],
-        incomingSanitized.itemIdsByStrip.starred || []
+        incomingSanitized.itemIdsByStrip.starred || [],
       ),
       reference: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.reference || [],
-        incomingSanitized.itemIdsByStrip.reference || []
+        incomingSanitized.itemIdsByStrip.reference || [],
       ),
       environment: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.environment || [],
-        incomingSanitized.itemIdsByStrip.environment || []
+        incomingSanitized.itemIdsByStrip.environment || [],
       ),
     },
   };

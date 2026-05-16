@@ -1,8 +1,5 @@
-import { describe, expect, it } from "vitest";
-import {
-  extractOpaqueBoundsFromRaster,
-  extractPieceBoundsFromRaster,
-} from "../imageSegmentation";
+import { describe, expect, it } from "vite-plus/test";
+import { extractOpaqueBoundsFromRaster, extractPieceBoundsFromRaster } from "../imageSegmentation";
 
 const expectBoundsToContain = (
   actual: { left: number; top: number; right: number; bottom: number },
@@ -163,12 +160,7 @@ describe("extractOpaqueBoundsFromRaster", () => {
     const height = 16;
     const data = new Uint8ClampedArray(width * height * 4);
 
-    fillRect(
-      data,
-      width,
-      { left: 6, top: 4, right: 12, bottom: 10 },
-      { r: 90, g: 140, b: 220 },
-    );
+    fillRect(data, width, { left: 6, top: 4, right: 12, bottom: 10 }, { r: 90, g: 140, b: 220 });
 
     const bounds = extractOpaqueBoundsFromRaster({ data, width, height });
 

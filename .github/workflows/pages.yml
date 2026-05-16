@@ -25,23 +25,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Volta
-        uses: volta-cli/action@v4
+      - name: Setup Vite Plus
+        uses: voidzero-dev/setup-vp@v1
         with:
           node-version: 24.12.0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
+          cache: true
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: vp install --frozen-lockfile
 
       - name: Build demo site
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-        run: pnpm build:demo
+        run: vp build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

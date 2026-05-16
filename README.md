@@ -4,12 +4,14 @@ React component library that exposes the `ImageToolsWorkspace` UI for embedding 
 
 ## Install & Build
 
-**Prerequisites:** volta, pnpm.
+**Prerequisites:** Vite+ (`vp`). On Windows install it with `irm https://vite.plus/ps1 | iex`, then restart your terminal or VS Code so `vp` is on `PATH`.
 
-1. Install dependencies: `pnpm install`
-2. Run the dev demo: `pnpm dev`
-3. Build the npm package: `pnpm build:lib`
-4. Build the demo bundle (optional): `pnpm build:demo`
+Vite+ manages the Node.js runtime from `.node-version` and the pnpm version from `packageManager` in `package.json`.
+
+1. Install dependencies: `vp install`
+2. Run the dev demo: `vp dev`
+3. Build the npm package: `vp run build:lib`
+4. Build the demo bundle (optional): `vp build`
 
 ## Consuming the Component
 
@@ -34,12 +36,13 @@ See `App.tsx` for a concrete integration example.
 
 We use [Changesets](https://github.com/changesets/changesets) for semver management. Typical workflow:
 
-1. Create a changeset describing your change: `pnpm changeset`
+1. Create a changeset describing your change: `vp run changeset`
 2. Merge the generated PR. The `Release` GitHub Action will bump versions and publish to npm.
-3. Manual publishing (rare): `pnpm release`
+3. Manual publishing (rare): `vp run release`
 
 Ensure `NPM_TOKEN` is configured in the repo secrets for the workflow to succeed.
 
 ## Tests
 
-- E2E (Playwright): set `BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS` to your OpenRouter API key, then run `pnpm e2e`.
+- Unit tests: `vp test`
+- E2E (Playwright): set `BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS` to your OpenRouter API key, then run `vp run e2e`.

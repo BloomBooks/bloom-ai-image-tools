@@ -1,7 +1,12 @@
 {
   "name": "bloom-ai-image-tools",
-  "private": false,
   "version": "0.1.0",
+  "private": false,
+  "files": [
+    "dist",
+    "assets",
+    "README.md"
+  ],
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",
@@ -13,27 +18,23 @@
       "default": "./dist/index.mjs"
     }
   },
-  "files": [
-    "dist",
-    "assets",
-    "README.md"
-  ],
   "scripts": {
-    "dev": "vite",
-    "build": "pnpm build:lib && pnpm build:demo",
-    "build:demo": "vite build",
+    "dev": "vp dev",
+    "build": "vp run build:lib && vp run build:demo",
+    "build:demo": "vp build",
     "build:lib": "tsup",
-    "test": "vitest run",
-    "release": "pnpm build:lib && pnpm publish --access public",
+    "test": "vp test",
+    "release": "vp run build:lib && pnpm publish --access public",
     "changeset": "changeset",
-    "preview": "vite preview",
+    "preview": "vp preview",
     "//note that e2e tests require that you run build to pick up new code in the app (but not in the e2e tests themselves)": "",
     "e2e": "npx playwright test",
     "e2e:verbose": "cross-env E2E_VERBOSE=1 npx playwright test",
     "// This brings up the inspector and record button oh my...": "",
     "e2edebug": "echo To debug, right click on the e2e test and choose 'Debug Test'",
     "// This is the same as as e2edebug because neither actually runs a test": "",
-    "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug"
+    "e2erecord": "cross-env PWDEBUG=console  npx playwright test --debug",
+    "prepare": "vp config"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -60,13 +61,12 @@
     "@types/node": "^25.0.3",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "^5.1.2",
+    "@vitejs/plugin-react": "^6.0.2",
     "tsup": "^8.3.5",
     "typescript": "~5.8.2",
-    "vite": "^7.3.0",
-    "vitest": "^4.0.16"
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
   },
-  "volta": {
-    "node": "24.12.0"
-  }
+  "packageManager": "pnpm@11.1.2"
 }

@@ -7,8 +7,8 @@ import type { FolderScanResult } from "./FolderHistoryBackend";
  *
  * Critical invariants enforced here:
  *   - A tombstone removes the entry from memory AND schedules an image-delete.
- *   - An image present in memory but missing from disk is NOT a deletion
- *     (Dropbox mid-sync); we leave memory alone.
+ *   - A sidecar present without image bytes is invalid; remove it from memory
+ *     and delete the stray sidecar so the UI never renders a broken thumbnail.
  *   - Newer `metaUpdatedAt` on disk wins over memory (LWW for stars/notes).
  *   - Newer `metaUpdatedAt` in memory wins over disk; we re-write the sidecar.
  *   - Files in the folder with no sidecar are treated as orphans and surfaced
@@ -70,6 +70,12 @@ export const diffFolderAgainstMemory = (input: DiffInput): ReconcilePlan => {
   // Step 2: sidecars present on disk -> add or reconcile.
   for (const [id, sidecar] of scan.sidecars) {
     if (scan.tombstones.has(id)) continue; // tombstoned
+    const diskImage = imageById.get(id);
+    if (!diskImage) {
+      if (memory.has(id)) plan.toRemoveFromMemory.push(id);
+      plan.toDeleteFiles.push({ id, imageMime: sidecar.imageMime });
+      continue;
+    }
     const inMemory = memory.get(id);
     if (!inMemory) {
       plan.toAdd.push(sidecar);
@@ -95,10 +101,6 @@ export const diffFolderAgainstMemory = (input: DiffInput): ReconcilePlan => {
       fileName: img.fileName,
     });
   }
-
-  // Step 4: images that disappeared from disk without a tombstone are LEFT
-  // alone in memory. No plan entries are emitted for them. (Dropbox protection.)
-
   return plan;
 };
 

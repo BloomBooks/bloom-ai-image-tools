@@ -62,8 +62,7 @@ type DirectoryPicker = (options?: { mode?: PermissionMode }) => Promise<FileSyst
 
 const getDirectoryPicker = (): DirectoryPicker | null => {
   if (typeof window === "undefined") return null;
-  const picker = (window as Window & { showDirectoryPicker?: DirectoryPicker })
-    .showDirectoryPicker;
+  const picker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
   return typeof picker === "function" ? picker.bind(window) : null;
 };
 
@@ -153,11 +152,7 @@ const getImagesDir = (binding: FolderBinding, create = true) =>
 const getTombstonesDir = (binding: FolderBinding, create = true) =>
   binding.directoryHandle.getDirectoryHandle(TOMBSTONES_DIR_NAME, { create });
 
-const writeJsonFile = async (
-  dir: FileSystemDirectoryHandle,
-  fileName: string,
-  data: unknown,
-) => {
+const writeJsonFile = async (dir: FileSystemDirectoryHandle, fileName: string, data: unknown) => {
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
   const payload = JSON.stringify(data, null, 2);
@@ -232,10 +227,7 @@ export const writeImageAndSidecar = async (
 };
 
 /** Rewrite just the sidecar (for metadata edits like starring). */
-export const writeSidecar = async (
-  binding: FolderBinding,
-  entry: HistoryEntry,
-): Promise<void> => {
+export const writeSidecar = async (binding: FolderBinding, entry: HistoryEntry): Promise<void> => {
   const imagesDir = await getImagesDir(binding);
   await writeJsonFile(imagesDir, sidecarFileNameForId(entry.id), entry);
 };
@@ -284,7 +276,11 @@ export const writeTombstone = async (binding: FolderBinding, tombstone: Tombston
   await writeJsonFile(dir, tombstoneFileNameForId(tombstone.id), tombstone);
 };
 
-export const deleteImageAndSidecar = async (binding: FolderBinding, id: string, imageMime: string) => {
+export const deleteImageAndSidecar = async (
+  binding: FolderBinding,
+  id: string,
+  imageMime: string,
+) => {
   try {
     const imagesDir = await getImagesDir(binding, false);
     await removeFromDir(imagesDir, imageFileNameForEntry({ id, imageMime }));
@@ -333,8 +329,7 @@ const mimeFromExtension = (fileName: string): string => {
   }
 };
 
-const isImageFile = (fileName: string) =>
-  /\.(png|jpg|jpeg|webp|gif)$/i.test(fileName);
+const isImageFile = (fileName: string) => /\.(png|jpg|jpeg|webp|gif)$/i.test(fileName);
 
 const isJsonFile = (fileName: string) => /\.json$/i.test(fileName);
 
@@ -347,7 +342,9 @@ const iterateDirectoryEntries = async (
   const dirAny = dir as unknown as {
     entries?: () => AsyncIterable<[string, FileSystemHandle]>;
   };
-  const source = dirAny.entries ? dirAny.entries() : (dir as unknown as AsyncIterable<[string, FileSystemHandle]>);
+  const source = dirAny.entries
+    ? dirAny.entries()
+    : (dir as unknown as AsyncIterable<[string, FileSystemHandle]>);
   for await (const [name, handle] of source) {
     out.push({ name, handle });
   }
@@ -374,6 +371,9 @@ export const scanFolder = async (binding: FolderBinding): Promise<FolderScanResu
       if (isImageFile(name)) {
         try {
           const file = await fileHandle.getFile();
+          if (file.size === 0) {
+            continue;
+          }
           images.push({
             id: idFromFileName(name),
             fileName: name,
@@ -439,10 +439,8 @@ export const writeAppStateFile = async (
 
 // ---------- Legacy file access (for migration) ----------
 
-export const readRawJson = async <T>(
-  binding: FolderBinding,
-  fileName: string,
-): Promise<T | null> => readJsonFile<T>(binding.directoryHandle, fileName);
+export const readRawJson = async <T>(binding: FolderBinding, fileName: string): Promise<T | null> =>
+  readJsonFile<T>(binding.directoryHandle, fileName);
 
 export const renameTopLevelFile = async (
   binding: FolderBinding,

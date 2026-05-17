@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  getHistoryStore,
-  HistoryStore,
-} from "./HistoryStore";
+import { getHistoryStore, HistoryStore } from "./HistoryStore";
 import {
   AppStateFile,
   APP_STATE_FILE_VERSION,
@@ -16,7 +13,7 @@ import { supportsFolderStorage } from "./folder/FolderHistoryBackend";
 
 const DEFAULT_STRIPS: ThumbnailStripsSnapshot = {
   activeStripId: "history",
-  pinnedStripIds: ["history"],
+  pinnedStripIds: [],
   itemIdsByStrip: { history: [], starred: [], reference: [], environment: [] },
 };
 

@@ -33,8 +33,12 @@ describe("diffFolderAgainstMemory", () => {
       ["a", makeEntry({ id: "a" })],
       ["b", makeEntry({ id: "b" })],
     ]);
+    const images = [
+      { id: "a", fileName: "a.png", mime: "image/png", lastModified: 1000 },
+      { id: "b", fileName: "b.png", mime: "image/png", lastModified: 1001 },
+    ];
     const plan = diffFolderAgainstMemory({
-      scan: makeScan({ sidecars }),
+      scan: makeScan({ sidecars, images }),
       memory: new Map(),
       now: 2000,
       tombstoneTtlMs: TTL,
@@ -70,17 +74,29 @@ describe("diffFolderAgainstMemory", () => {
     expect(plan.toRemoveFromMemory).toEqual([]);
   });
 
-  it("does NOT delete from memory when image bytes are missing without a tombstone (Dropbox protection)", () => {
+  it("removes a sidecar-only entry from memory and schedules sidecar cleanup", () => {
     const memory = new Map<string, HistoryEntry>([["y", makeEntry({ id: "y" })]]);
-    // Scan has no image bytes and no sidecar for y, and no tombstone.
+    const sidecars = new Map<string, HistoryEntry>([["y", makeEntry({ id: "y" })]]);
     const plan = diffFolderAgainstMemory({
-      scan: makeScan(),
+      scan: makeScan({ sidecars }),
       memory,
       now: 2000,
       tombstoneTtlMs: TTL,
     });
-    expect(plan.toRemoveFromMemory).toEqual([]);
-    expect(plan.toUpdateInMemory).toEqual([]);
+    expect(plan.toRemoveFromMemory).toEqual(["y"]);
+    expect(plan.toDeleteFiles).toEqual([{ id: "y", imageMime: "image/png" }]);
+  });
+
+  it("does NOT add a sidecar-only entry without matching image bytes", () => {
+    const sidecars = new Map<string, HistoryEntry>([["ghost", makeEntry({ id: "ghost" })]]);
+    const plan = diffFolderAgainstMemory({
+      scan: makeScan({ sidecars, images: [] }),
+      memory: new Map(),
+      now: 2000,
+      tombstoneTtlMs: TTL,
+    });
+    expect(plan.toAdd).toEqual([]);
+    expect(plan.toDeleteFiles).toEqual([{ id: "ghost", imageMime: "image/png" }]);
   });
 
   it("orphan image (no sidecar) is surfaced for recovery", () => {
@@ -103,8 +119,9 @@ describe("diffFolderAgainstMemory", () => {
     const sidecars = new Map<string, HistoryEntry>([
       ["m", makeEntry({ id: "m", metaUpdatedAt: 200, isStarred: true })],
     ]);
+    const images = [{ id: "m", fileName: "m.png", mime: "image/png", lastModified: 1000 }];
     const plan = diffFolderAgainstMemory({
-      scan: makeScan({ sidecars }),
+      scan: makeScan({ sidecars, images }),
       memory,
       now: 1000,
       tombstoneTtlMs: TTL,
@@ -121,8 +138,9 @@ describe("diffFolderAgainstMemory", () => {
     const sidecars = new Map<string, HistoryEntry>([
       ["m", makeEntry({ id: "m", metaUpdatedAt: 200, isStarred: false })],
     ]);
+    const images = [{ id: "m", fileName: "m.png", mime: "image/png", lastModified: 1000 }];
     const plan = diffFolderAgainstMemory({
-      scan: makeScan({ sidecars }),
+      scan: makeScan({ sidecars, images }),
       memory,
       now: 1000,
       tombstoneTtlMs: TTL,

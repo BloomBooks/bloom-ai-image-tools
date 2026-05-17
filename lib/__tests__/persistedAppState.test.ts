@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppState, ImageRecord, PersistedAppState } from "../../types";
-import {
-  mergeHistoryFields,
-  sanitizePersistedAppState,
-} from "../persistedAppState";
+import { mergeHistoryFields, sanitizePersistedAppState } from "../persistedAppState";
 
 const buildImageRecord = (overrides: Partial<ImageRecord>): ImageRecord => ({
   id: "img-1",
@@ -99,5 +96,42 @@ describe("persistedAppState", () => {
     expect(merged.history[0].imageData).toBe(currentRecord.imageData);
     expect(merged.history[0].isStarred).toBe(true);
     expect(merged.targetImageId).toBe("merged");
+  });
+
+  it("drops stale browser-cached history items when folder state is authoritative", () => {
+    const staleCurrent = buildImageRecord({
+      id: "stale",
+      imageData: "data:image/png;base64,stale",
+      imageFileName: null,
+    });
+    const folderRecord = buildImageRecord({
+      id: "folder",
+      imageData: "",
+      imageFileName: "folder.png",
+    });
+    const current: AppState = {
+      targetImageId: "stale",
+      referenceImageIds: ["stale"],
+      rightPanelImageId: "stale",
+      history: [staleCurrent],
+      isProcessing: false,
+      isAuthenticated: false,
+      error: null,
+    };
+    const incoming: PersistedAppState = {
+      targetImageId: null,
+      referenceImageIds: [],
+      rightPanelImageId: null,
+      history: [folderRecord],
+    };
+
+    const merged = mergeHistoryFields(current, incoming, {
+      preserveCurrentOnlyHistory: false,
+    });
+
+    expect(merged.history.map((item) => item.id)).toEqual(["folder"]);
+    expect(merged.targetImageId).toBeNull();
+    expect(merged.referenceImageIds).toEqual([]);
+    expect(merged.rightPanelImageId).toBeNull();
   });
 });

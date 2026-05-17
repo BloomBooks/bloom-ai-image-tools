@@ -118,9 +118,7 @@ test.describe("HistoryStore", () => {
 
   // ---------- T3: the bug-that-was — pre-existing folder + non-empty browser ----------
 
-  test("T3: attach folder with existing images keeps both sets (union)", async ({
-    page,
-  }) => {
+  test("T3: attach folder with existing images keeps both sets (union)", async ({ page }) => {
     // Pre-seed the mock folder with two images written via the store API on a
     // fresh instance, then reset memory, then attach to the same folder with
     // two different browser-only images already present.
@@ -194,7 +192,10 @@ test.describe("HistoryStore", () => {
     }, SAMPLE_PNG_DATA_URL);
 
     const ids = await page.evaluate(() =>
-      (window as any).__bloomHistory.snapshot().entries.map((e: any) => e.id).sort(),
+      (window as any).__bloomHistory
+        .snapshot()
+        .entries.map((e: any) => e.id)
+        .sort(),
     );
     expect(ids).toEqual(["browser_c", "browser_d", "folder_a", "folder_b"]);
 
@@ -314,9 +315,9 @@ test.describe("HistoryStore", () => {
     expect(images).not.toContain("racey.json");
   });
 
-  // ---------- T9: Dropbox mid-sync (image bytes temporarily missing) ----------
+  // ---------- T9: sidecar without image is cleaned up ----------
 
-  test("T9: image disappearing from disk without a tombstone does NOT mark it deleted", async ({
+  test("T9: image disappearing from disk without a tombstone removes the stale entry and sidecar", async ({
     page,
   }) => {
     await page.evaluate(async (dataUrl) => {
@@ -340,7 +341,8 @@ test.describe("HistoryStore", () => {
       );
     }, SAMPLE_PNG_DATA_URL);
 
-    // Surgically remove the image file (NOT the sidecar) — sim of partial Dropbox sync.
+    // Surgically remove the image file (NOT the sidecar) so reconcile sees an
+    // invalid sidecar-only entry and cleans it up.
     await page.evaluate(() => {
       const fs = (window as any).__mockFsRead();
       delete fs.root.dirs.images.files["vanishing.png"];
@@ -355,7 +357,13 @@ test.describe("HistoryStore", () => {
     const memoryIds = await page.evaluate(() =>
       (window as any).__bloomHistory.snapshot().entries.map((e: any) => e.id),
     );
-    expect(memoryIds).toContain("vanishing");
+    expect(memoryIds).not.toContain("vanishing");
+
+    const images = await page.evaluate(() => {
+      const fs = (window as any).__mockFsRead();
+      return Object.keys(fs?.root?.dirs?.images?.files ?? {});
+    });
+    expect(images).not.toContain("vanishing.json");
   });
 
   // ---------- T12: expired tombstones get GC'd ----------

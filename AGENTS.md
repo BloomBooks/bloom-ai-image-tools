@@ -20,6 +20,10 @@ Bloom AI Image Tools provides a browser-based workspace for creating and editing
 - Run unit tests: `vp test`
 - Preview the built demo: `vp preview`
 
+## Troubleshooting
+
+Use the chrome-devtools in a terminal to drive and probe the running app.
+
 ## E2E Testing with Playwright
 
 - Use `vp run e2e` to run UI tests

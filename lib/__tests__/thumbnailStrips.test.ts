@@ -4,6 +4,7 @@ import {
   createDefaultThumbnailStripsSnapshot,
   hydrateThumbnailStripsSnapshot,
   mergeThumbnailStripsSnapshots,
+  removeItemsFromAllStrips,
   removeItemFromStrip,
   reorderItemInStrip,
 } from "../thumbnailStrips";
@@ -30,6 +31,12 @@ const makeEntry = (id: string, overrides: Partial<ImageRecord> = {}): ImageRecor
 });
 
 describe("thumbnail strip helpers", () => {
+  it("starts with no pinned strips by default", () => {
+    const snapshot = createDefaultThumbnailStripsSnapshot();
+
+    expect(snapshot.pinnedStripIds).toEqual([]);
+  });
+
   it("adds unique items while preserving order", () => {
     const snapshot = createDefaultThumbnailStripsSnapshot();
     const first = addItemToStrip(snapshot, "reference", "one");
@@ -57,12 +64,33 @@ describe("thumbnail strip helpers", () => {
     expect(stripped.itemIdsByStrip.reference).toEqual(["b"]);
   });
 
+  it("removes orphaned ids from every strip", () => {
+    const base = createDefaultThumbnailStripsSnapshot();
+    const seeded = {
+      ...base,
+      itemIdsByStrip: {
+        history: ["keep", "drop"],
+        starred: ["drop"],
+        reference: ["keep", "drop"],
+        environment: ["drop", "keep"],
+      },
+    };
+
+    const stripped = removeItemsFromAllStrips(seeded, ["drop"]);
+
+    expect(stripped.itemIdsByStrip.history).toEqual(["keep"]);
+    expect(stripped.itemIdsByStrip.starred).toEqual([]);
+    expect(stripped.itemIdsByStrip.reference).toEqual(["keep"]);
+    expect(stripped.itemIdsByStrip.environment).toEqual(["keep"]);
+  });
+
   it("hydrates snapshot from persisted data and entries", () => {
     const entries = [makeEntry("base"), makeEntry("star", { isStarred: true })];
     const hydrated = hydrateThumbnailStripsSnapshot(null, entries);
 
     expect(hydrated.itemIdsByStrip.history).toEqual(["star", "base"]);
     expect(hydrated.itemIdsByStrip.starred).toEqual(["star"]);
+    expect(hydrated.pinnedStripIds).toEqual([]);
   });
 
   it("preserves explicitly empty pinnedStripIds during hydrate", () => {

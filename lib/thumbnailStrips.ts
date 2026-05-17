@@ -81,7 +81,7 @@ const cloneStripArrays = (
 
 export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot => ({
   activeStripId: "history",
-  pinnedStripIds: ["history"],
+  pinnedStripIds: [],
   itemIdsByStrip: {
     history: [],
     starred: [],
@@ -136,6 +136,26 @@ export const removeItemFromStrip = (
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   next[stripId] = (next[stripId] || []).filter((id) => id !== itemId);
+  return {
+    ...snapshot,
+    itemIdsByStrip: next,
+  };
+};
+
+export const removeItemsFromAllStrips = (
+  snapshot: ThumbnailStripsSnapshot,
+  itemIds: Iterable<string>,
+): ThumbnailStripsSnapshot => {
+  const toRemove = new Set(itemIds);
+  if (toRemove.size === 0) {
+    return snapshot;
+  }
+
+  const next = cloneStripArrays(snapshot);
+  THUMBNAIL_STRIP_ORDER.forEach((stripId) => {
+    next[stripId] = (next[stripId] || []).filter((id) => !toRemove.has(id));
+  });
+
   return {
     ...snapshot,
     itemIdsByStrip: next,
@@ -217,7 +237,7 @@ export const sanitizeThumbnailStrips = (
     : "history";
   return {
     activeStripId: active,
-    pinnedStripIds: hasPins ? sanitizedPins : ["history"],
+    pinnedStripIds: hasPins ? sanitizedPins : [],
     itemIdsByStrip: next,
   };
 };

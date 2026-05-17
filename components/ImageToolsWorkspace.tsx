@@ -42,6 +42,7 @@ import {
   LOCAL_HISTORY_CACHE_LIMIT,
 } from "../services/persistence/constants";
 import {
+  collectHistoryImageDebugInfo,
   FileSystemImageBinding,
   deletePersistedHistoryItem,
   deriveImageFileName,
@@ -68,6 +69,7 @@ import {
   createDefaultThumbnailStripsSnapshot,
   hydrateThumbnailStripsSnapshot,
   mergeThumbnailStripsSnapshots,
+  removeItemsFromAllStrips,
   removeItemFromStrip,
   reorderItemInStrip,
   replaceStripItems,
@@ -429,6 +431,14 @@ export function ImageToolsWorkspace({
         await writeImageFile(bindingToUse, fileName, item.imageData);
         return { ...item, imageFileName: fileName };
       } catch (error) {
+        const debugInfo = await collectHistoryImageDebugInfo(
+          bindingToUse,
+          item.imageFileName
+            ? item.imageFileName
+            : deriveImageFileName(item.id, getMimeTypeFromUrl(item.imageData) ?? "image/png"),
+        ).catch((debugError) => ({
+          failedToCollect: debugError instanceof Error ? debugError.message : String(debugError),
+        }));
         const errorDetails =
           error instanceof Error
             ? {
@@ -446,6 +456,7 @@ export function ImageToolsWorkspace({
             item.id,
             getMimeTypeFromUrl(item.imageData) ?? "image/png",
           ),
+          debugInfo,
           error: errorDetails,
         });
         setFsError("Could not save image to folder.");
@@ -629,6 +640,8 @@ export function ImageToolsWorkspace({
       void deleteHistoryImageFromFolder(entry);
     });
 
+    const orphanedIds = new Set(orphaned.map((entry) => entry.id));
+
     setState((prev) => ({
       ...prev,
       history: prev.history.filter(
@@ -642,6 +655,10 @@ export function ImageToolsWorkspace({
           ? prev.rightPanelImageId
           : null,
     }));
+
+    setThumbnailStrips((prev) => {
+      return removeItemsFromAllStrips(prev, orphanedIds);
+    });
   }, [
     deleteHistoryImageFromFolder,
     state.history,
@@ -1003,7 +1020,9 @@ export function ImageToolsWorkspace({
         return;
       }
 
-      const mergedFields = mergeHistoryFields(stateRef.current, incomingAppState);
+      const mergedFields = mergeHistoryFields(stateRef.current, incomingAppState, {
+        preserveCurrentOnlyHistory: false,
+      });
       if (cancelled) {
         return;
       }

@@ -1,8 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  resetImageToolsPersistence,
-  uploadSampleImageToTarget,
-} from "./playwright_helpers";
+import { resetImageToolsPersistence, uploadSampleImageToTarget } from "./playwright_helpers";
 
 test.describe("history drag-and-drop", () => {
   test.beforeEach(async ({ page }) => {
@@ -12,27 +9,51 @@ test.describe("history drag-and-drop", () => {
     await resetImageToolsPersistence(page);
   });
 
-  test("history items can populate target and result panels", async ({
-    page,
-  }) => {
+  test("pane images can be dragged into other panes", async ({ page }) => {
+    await uploadSampleImageToTarget(page);
+
+    const targetPanel = page.getByTestId("target-panel");
+    const targetImage = targetPanel.getByRole("img", { name: "Image to Edit" });
+    const resultPanel = page.getByTestId("result-panel");
+
+    await expect(targetImage).toBeVisible();
+    await expect(page.getByRole("img", { name: "Result" })).toHaveCount(0);
+
+    const targetSrc = await targetImage.getAttribute("src");
+    expect(targetSrc).toBeTruthy();
+    await expect(targetImage).toHaveAttribute("draggable", "true");
+
+    const from = await targetImage.boundingBox();
+    const to = await resultPanel.boundingBox();
+    expect(from).toBeTruthy();
+    expect(to).toBeTruthy();
+    if (!from || !to) return;
+
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+
+    const resultImage = page.getByRole("img", { name: "Result" });
+    await expect(resultImage).toBeVisible();
+    await expect(resultImage).toHaveAttribute("src", targetSrc || "");
+  });
+
+  test("history items can populate target and result panels", async ({ page }) => {
     await uploadSampleImageToTarget(page);
 
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
-    const historyThumb = historyStrip
-      .getByTestId("thumbnail-strip-item-history")
-      .first();
+    const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
     await expect(historyThumb).toBeVisible();
-    const initialHistoryThumbCount = await historyStrip
-      .getByTestId("history-card")
-      .count();
+    const initialHistoryThumbCount = await historyStrip.getByTestId("history-card").count();
     expect(initialHistoryThumbCount).toBeGreaterThan(0);
 
     const targetPanel = page.getByTestId("target-panel");
     await targetPanel.hover();
     await targetPanel.getByRole("button", { name: "Clear Image" }).click();
-    await expect(
-      targetPanel.getByRole("img", { name: "Image to Edit" })
-    ).toHaveCount(0);
+    await expect(targetPanel.getByRole("img", { name: "Image to Edit" })).toHaveCount(0);
 
     {
       const from = await historyThumb.boundingBox();
@@ -58,9 +79,7 @@ test.describe("history drag-and-drop", () => {
     // If this starts regressing into multi-frame stalls, we'll catch it.
     expect(perf1.maxMoveDeltaMs).toBeLessThan(300);
 
-    await expect(
-      targetPanel.getByRole("img", { name: "Image to Edit" })
-    ).toHaveCount(1);
+    await expect(targetPanel.getByRole("img", { name: "Image to Edit" })).toHaveCount(1);
 
     const resultPanel = page.getByTestId("result-panel");
     {
@@ -79,11 +98,7 @@ test.describe("history drag-and-drop", () => {
       });
       await page.mouse.up();
     }
-    await expect(
-      page.getByRole("img", { name: "Result" })
-    ).toBeVisible();
-    await expect(historyStrip.getByTestId("history-card")).toHaveCount(
-      initialHistoryThumbCount
-    );
+    await expect(page.getByRole("img", { name: "Result" })).toBeVisible();
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(initialHistoryThumbCount);
   });
 });

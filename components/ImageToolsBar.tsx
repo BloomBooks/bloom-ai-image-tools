@@ -5,6 +5,7 @@ import {
   DndContext,
   DragEndEvent,
   DragOverlay,
+  type Modifier,
   PointerSensor,
   useSensor,
   useSensors,
@@ -26,15 +27,55 @@ import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 import type { ThumbnailStripConfig } from "../lib/thumbnailStrips";
 
+const DRAG_PREVIEW_SIZE = 112;
+
+const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
+
+const getActivatorClientPoint = (event: Event | null) => {
+  if (event instanceof MouseEvent || event instanceof PointerEvent) {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  if (typeof TouchEvent !== "undefined" && event instanceof TouchEvent) {
+    const touch = event.touches[0] || event.changedTouches[0];
+    if (touch) {
+      return { x: touch.clientX, y: touch.clientY };
+    }
+  }
+
+  return null;
+};
+
+const alignDragPreviewToCursor: Modifier = ({
+  activatorEvent,
+  activeNodeRect,
+  overlayNodeRect,
+  transform,
+}) => {
+  const point = getActivatorClientPoint(activatorEvent);
+  if (!point || !activeNodeRect || !overlayNodeRect) {
+    return transform;
+  }
+
+  const sourceOffsetX = point.x - activeNodeRect.left;
+  const sourceOffsetY = point.y - activeNodeRect.top;
+  const sourceRatioX = activeNodeRect.width > 0 ? sourceOffsetX / activeNodeRect.width : 0.5;
+  const sourceRatioY = activeNodeRect.height > 0 ? sourceOffsetY / activeNodeRect.height : 0.5;
+
+  return {
+    ...transform,
+    x: transform.x + sourceOffsetX - clamp01(sourceRatioX) * overlayNodeRect.width,
+    y: transform.y + sourceOffsetY - clamp01(sourceRatioY) * overlayNodeRect.height,
+  };
+};
+
 const parseStripIdFromContainer = (id: unknown): ThumbnailStripId | null => {
   const raw = String(id);
   if (!raw.startsWith("strip:")) return null;
   return raw.slice("strip:".length) as ThumbnailStripId;
 };
 
-const parseStripItem = (
-  id: unknown,
-): { stripId: ThumbnailStripId; imageId: string } | null => {
+const parseStripItem = (id: unknown): { stripId: ThumbnailStripId; imageId: string } | null => {
   const raw = String(id);
   if (!raw.startsWith("stripItem:")) return null;
   const parts = raw.split(":");
@@ -46,11 +87,7 @@ const parseStripItem = (
 
 const parsePanelDrop = (
   id: unknown,
-):
-  | { kind: "target" }
-  | { kind: "result" }
-  | { kind: "reference"; slotIndex: number }
-  | null => {
+): { kind: "target" } | { kind: "result" } | { kind: "reference"; slotIndex: number } | null => {
   const raw = String(id);
   if (raw === "panel:target") return { kind: "target" };
   if (raw === "panel:result") return { kind: "result" };
@@ -178,8 +215,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     }),
   );
 
-  const [activeDragImage, setActiveDragImage] =
-    React.useState<ImageRecord | null>(null);
+  const [activeDragImage, setActiveDragImage] = React.useState<ImageRecord | null>(null);
 
   const dragPerfRef = React.useRef<{
     startT: number | null;
@@ -195,10 +231,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           return;
         }
         const perf = dragPerfRef.current;
-        const now =
-          typeof performance !== "undefined" ? performance.now() : Date.now();
-        const durationMs =
-          perf.startT != null ? Math.round(now - perf.startT) : null;
+        const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const durationMs = perf.startT != null ? Math.round(now - perf.startT) : null;
         const summary = {
           phase,
           durationMs,
@@ -218,8 +252,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     return (
       <div
         style={{
-          width: 112,
-          height: 112,
+          width: DRAG_PREVIEW_SIZE,
+          height: DRAG_PREVIEW_SIZE,
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: theme.colors.panelShadow,
@@ -244,9 +278,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragImage(null);
-    const imageId = (event.active.data.current as any)?.imageId as
-      | string
-      | undefined;
+    const imageId = (event.active.data.current as any)?.imageId as string | undefined;
     if (!imageId) return;
 
     const overId = event.over?.id;
@@ -384,10 +416,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={(event) => {
-            const now =
-              typeof performance !== "undefined"
-                ? performance.now()
-                : Date.now();
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
 
             dragPerfRef.current.startT = now;
             dragPerfRef.current.lastMoveT = now;
@@ -405,20 +434,14 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               debugLog("dragStart (no prior pointerdown recorded)");
             }
 
-            const imageId = (event.active.data.current as any)?.imageId as
-              | string
-              | undefined;
+            const imageId = (event.active.data.current as any)?.imageId as string | undefined;
             if (!imageId) return;
             // `historyItems` contains the same records used by strips and panels.
-            const match =
-              historyItems.find((item) => item.id === imageId) || null;
+            const match = historyItems.find((item) => item.id === imageId) || null;
             setActiveDragImage(match);
           }}
           onDragMove={() => {
-            const now =
-              typeof performance !== "undefined"
-                ? performance.now()
-                : Date.now();
+            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
             const perf = dragPerfRef.current;
             if (perf.lastMoveT != null) {
               const delta = now - perf.lastMoveT;
@@ -441,11 +464,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               if (typeof window === "undefined") return;
               const pe = event as React.PointerEvent<HTMLElement>;
               // Only record primary-button interactions.
-              if (
-                typeof (pe as any).button === "number" &&
-                (pe as any).button !== 0
-              )
-                return;
+              if (typeof (pe as any).button === "number" && (pe as any).button !== 0) return;
 
               const target = pe.target as HTMLElement | null;
               const targetTestId =
@@ -454,10 +473,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
                 "";
 
               lastPointerDownRef.current = {
-                t:
-                  typeof performance !== "undefined"
-                    ? performance.now()
-                    : Date.now(),
+                t: typeof performance !== "undefined" ? performance.now() : Date.now(),
                 x: pe.clientX,
                 y: pe.clientY,
                 pointerType: (pe as any).pointerType || "unknown",
@@ -516,7 +532,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             />
           </Box>
 
-          <DragOverlay>
+          <DragOverlay modifiers={[alignDragPreviewToCursor]}>
             {activeDragImage ? <DragPreview image={activeDragImage} /> : null}
           </DragOverlay>
         </DndContext>

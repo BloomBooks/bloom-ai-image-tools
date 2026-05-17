@@ -22,8 +22,7 @@ const HORIZONTAL_LIMITS = { min: 0.25, max: 0.75 } as const;
 const VERTICAL_LIMITS = { min: 0.2, max: 0.8 } as const;
 const KEYBOARD_STEP = 0.02;
 
-const clampRatio = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+const clampRatio = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const readStoredSplitters = (): SplitterState => {
   if (typeof window === "undefined") {
@@ -37,16 +36,12 @@ const readStoredSplitters = (): SplitterState => {
     const parsed = JSON.parse(rawValue) as Partial<SplitterState>;
     return {
       horizontal: clampRatio(
-        typeof parsed.horizontal === "number"
-          ? parsed.horizontal
-          : DEFAULT_SPLITTERS.horizontal,
+        typeof parsed.horizontal === "number" ? parsed.horizontal : DEFAULT_SPLITTERS.horizontal,
         HORIZONTAL_LIMITS.min,
         HORIZONTAL_LIMITS.max,
       ),
       vertical: clampRatio(
-        typeof parsed.vertical === "number"
-          ? parsed.vertical
-          : DEFAULT_SPLITTERS.vertical,
+        typeof parsed.vertical === "number" ? parsed.vertical : DEFAULT_SPLITTERS.vertical,
         VERTICAL_LIMITS.min,
         VERTICAL_LIMITS.max,
       ),
@@ -98,10 +93,9 @@ const Splitter: React.FC<SplitterProps> = ({
         "&:focus-visible": {
           backgroundColor: theme.colors.overlay,
         },
-        "&:hover .splitter-thumb, &:focus-visible .splitter-thumb, &:active .splitter-thumb":
-          {
-            opacity: 1,
-          },
+        "&:hover .splitter-thumb, &:focus-visible .splitter-thumb, &:active .splitter-thumb": {
+          opacity: 1,
+        },
       }}
     >
       <Box
@@ -165,8 +159,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
   const canAddReferenceSlot =
-    referenceImages.length < maxReferenceCount ||
-    !Number.isFinite(maxReferenceCount);
+    referenceImages.length < maxReferenceCount || !Number.isFinite(maxReferenceCount);
 
   const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
@@ -215,15 +208,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
   const leftColumnRef = React.useRef<HTMLDivElement>(null);
-  const [splitters, setSplitters] = React.useState<SplitterState>(() =>
-    readStoredSplitters(),
-  );
+  const [splitters, setSplitters] = React.useState<SplitterState>(() => readStoredSplitters());
 
   type IdleFriendlyWindow = Window & {
-    requestIdleCallback?: (
-      callback: () => void,
-      options?: { timeout?: number },
-    ) => number;
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
     cancelIdleCallback?: (handle: number) => void;
   };
 
@@ -249,10 +237,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
     const persist = () => {
       try {
-        window.localStorage.setItem(
-          SPLITTER_STORAGE_KEY,
-          JSON.stringify(splitters),
-        );
+        window.localStorage.setItem(SPLITTER_STORAGE_KEY, JSON.stringify(splitters));
       } catch {
         // ignore
       }
@@ -266,10 +251,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         timeout: 500,
       });
     } else {
-      splitterPersistRef.current.timeoutHandle = window.setTimeout(
-        persist,
-        150,
-      );
+      splitterPersistRef.current.timeoutHandle = window.setTimeout(persist, 150);
     }
 
     return () => {
@@ -285,11 +267,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     const ratio = (clientX - rect.left) / rect.width;
     setSplitters((previous) => ({
       ...previous,
-      horizontal: clampRatio(
-        ratio,
-        HORIZONTAL_LIMITS.min,
-        HORIZONTAL_LIMITS.max,
-      ),
+      horizontal: clampRatio(ratio, HORIZONTAL_LIMITS.min, HORIZONTAL_LIMITS.max),
     }));
   }, []);
 
@@ -366,22 +344,15 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     [],
   );
 
-  const handleVerticalKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-      event.preventDefault();
-      const delta = event.key === "ArrowUp" ? -KEYBOARD_STEP : KEYBOARD_STEP;
-      setSplitters((previous) => ({
-        ...previous,
-        vertical: clampRatio(
-          previous.vertical + delta,
-          VERTICAL_LIMITS.min,
-          VERTICAL_LIMITS.max,
-        ),
-      }));
-    },
-    [],
-  );
+  const handleVerticalKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowUp" ? -KEYBOARD_STEP : KEYBOARD_STEP;
+    setSplitters((previous) => ({
+      ...previous,
+      vertical: clampRatio(previous.vertical + delta, VERTICAL_LIMITS.min, VERTICAL_LIMITS.max),
+    }));
+  }, []);
 
   const showLeftColumn = showTargetPanel || showReferencePanel;
   const leftColumnFlexGrow = showLeftColumn ? splitters.horizontal : 0;
@@ -444,19 +415,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   onClear={onClearTarget}
                   showCopyButton={false}
                   showDownloadButton={false}
-                  draggableImageId={undefined}
+                  draggableImageId={targetImage?.id}
                   dndDropId="panel:target"
-                  dndDragId={
-                    targetImage
-                      ? `panelItem:target:${targetImage.id}`
-                      : undefined
-                  }
+                  dndDragId={targetImage ? `panelItem:target:${targetImage.id}` : undefined}
                   uploadInputTestId="target-upload-input"
-                  onToggleStar={
-                    targetImage
-                      ? () => onToggleHistoryStar(targetImage.id)
-                      : undefined
-                  }
+                  onToggleStar={targetImage ? () => onToggleHistoryStar(targetImage.id) : undefined}
                 />
               </Box>
             )}
@@ -485,12 +448,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   panelTestId="reference-panel"
                   slots={slots}
                   disabled={false}
-                  onSlotUpload={(file, slotIndex) =>
-                    onUploadReference(file, slotIndex)
-                  }
-                  onSlotDrop={(imageId, slotIndex) =>
-                    onSetReferenceAt(slotIndex, imageId)
-                  }
+                  onSlotUpload={(file, slotIndex) => onUploadReference(file, slotIndex)}
+                  onSlotDrop={(imageId, slotIndex) => onSetReferenceAt(slotIndex, imageId)}
                   onSlotRemove={(slotIndex) => onRemoveReferenceAt(slotIndex)}
                 />
               </Box>
@@ -538,18 +497,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               onDrop={onSetRight}
               showUploadControls={false}
               onClear={onClearRight}
-              draggableImageId={undefined}
+              draggableImageId={rightImage?.id}
               dndDropId="panel:result"
-              dndDragId={
-                rightImage ? `panelItem:result:${rightImage.id}` : undefined
-              }
+              dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
               isLoading={isProcessing}
               loadingProgress={generationProgress}
-              onToggleStar={
-                rightImage
-                  ? () => onToggleHistoryStar(rightImage.id)
-                  : undefined
-              }
+              onToggleStar={rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined}
             />
           )}
         </Box>

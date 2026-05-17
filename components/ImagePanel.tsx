@@ -129,8 +129,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                 download: true,
                 remove: slot.canRemove,
               };
-              const isSlotDropZone =
-                !disabled && Boolean(slot.dndDropId || slotControls.upload);
+              const isSlotDropZone = !disabled && Boolean(slot.dndDropId || slotControls.upload);
 
               return (
                 <Box
@@ -164,9 +163,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                           : (file) => onSlotUpload(file, slot.slotIndex)
                       }
                       onRemove={
-                        slot.canRemove && !disabled
-                          ? () => onSlotRemove(slot.slotIndex)
-                          : undefined
+                        slot.canRemove && !disabled ? () => onSlotRemove(slot.slotIndex) : undefined
                       }
                       controls={slotControls}
                       variant="tile"
@@ -278,10 +275,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           <Box component="p" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>
             Panel Disabled
           </Box>
-          <Box
-            component="p"
-            sx={{ fontSize: "0.75rem", opacity: 0.7, mt: 0.5 }}
-          >
+          <Box component="p" sx={{ fontSize: "0.75rem", opacity: 0.7, mt: 0.5 }}>
             Creating new image from scratch
           </Box>
         </Box>
@@ -290,10 +284,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
 
     return (
       <Box sx={{ textAlign: "center", p: 3 }}>
-        <Box
-          component="p"
-          sx={{ fontSize: "0.85rem", opacity: 0.6, fontWeight: 600 }}
-        >
+        <Box component="p" sx={{ fontSize: "0.85rem", opacity: 0.6, fontWeight: 600 }}>
           Empty
         </Box>
       </Box>
@@ -304,7 +295,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     <DndImageSlotWrapper
       droppableId={dndDropId}
       draggableId={image ? dndDragId : undefined}
-      draggableImageId={image?.id}
+      draggableImageId={draggableImageId}
       disabled={disabled}
     >
       <ImageSlot
@@ -316,7 +307,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         onDrop={onDrop}
         onUpload={showUploadControls ? onUpload : undefined}
         onRemove={onClear}
-        draggableImageId={undefined}
+        draggableImageId={draggableImageId}
         isLoading={isLoading}
         loadingProgress={loadingProgress}
         uploadInputTestId={uploadInputTestId}

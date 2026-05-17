@@ -34,6 +34,7 @@ describe("thumbnail strip helpers", () => {
   it("starts with no pinned strips by default", () => {
     const snapshot = createDefaultThumbnailStripsSnapshot();
 
+    expect(snapshot.activeStripId).toBe("history");
     expect(snapshot.pinnedStripIds).toEqual([]);
   });
 

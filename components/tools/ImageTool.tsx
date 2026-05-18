@@ -32,7 +32,13 @@ import { Icon, Icons } from "../Icons";
 import { CapabilityPanel } from "../CapabilityPanel";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
-import { ShapePicker } from "./ShapePicker";
+import { AspectRatioPicker } from "./AspectRatioPicker";
+import {
+  AUTO_ASPECT_RATIO,
+  DEFAULT_CREATE_ASPECT_RATIO,
+  getDefaultAspectRatioValue,
+  resolveAspectRatioValue,
+} from "../../lib/aspectRatios";
 import {
   getReferenceConstraints,
   toolRequiresEditImage,
@@ -52,6 +58,31 @@ const ADVANCED_TOOL_IDS = new Set([
 
 const TEXT_TOOL_IDS = new Set(["change_text", "stylized_title"]);
 
+const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
+
+const getOrderedSizeOptions = (
+  options: string[] | undefined,
+  selectedModelId: string | undefined,
+) => {
+  const resolvedOptions = [...(options ?? [])];
+  if (selectedModelId !== GEMINI_3_1_FLASH_MODEL_ID) {
+    return resolvedOptions;
+  }
+
+  const sizePriority = new Map([
+    ["512k", 0],
+    ["1k", 1],
+    ["2k", 2],
+    ["4k", 3],
+  ]);
+
+  return resolvedOptions.sort((left, right) => {
+    const leftPriority = sizePriority.get(left.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rightPriority = sizePriority.get(right.toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    return leftPriority - rightPriority;
+  });
+};
+
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
@@ -59,6 +90,7 @@ interface ToolPanelProps {
   onToolSelect: (toolId: string | null) => void;
   referenceImageCount: number;
   hasTargetImage: boolean;
+  targetImageResolution?: { width: number; height: number } | null;
   isAuthenticated: boolean;
   selectedModel: ModelInfo | null;
   activeToolId: string | null;
@@ -340,6 +372,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   onToolSelect,
   referenceImageCount,
   hasTargetImage,
+  targetImageResolution,
   isAuthenticated,
   selectedModel,
   activeToolId,
@@ -560,24 +593,52 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         );
       }
 
-      if (param.type === "shape") {
-        const shapeValue = value || param.defaultValue || "";
+      if (param.type === "aspect-ratio") {
+        const isEditTool = tool.editImage !== false;
+        const supportedAspectRatios = selectedModel?.supportedAspectRatios;
+        const fallbackValue = isEditTool
+          ? AUTO_ASPECT_RATIO
+          : getDefaultAspectRatioValue(supportedAspectRatios) || DEFAULT_CREATE_ASPECT_RATIO;
+        const rawAspectRatioValue = value || param.defaultValue || fallbackValue;
+        const aspectRatioValue =
+          isEditTool && rawAspectRatioValue === AUTO_ASPECT_RATIO
+            ? AUTO_ASPECT_RATIO
+            : resolveAspectRatioValue(
+                rawAspectRatioValue,
+                undefined,
+                supportedAspectRatios,
+              );
         return (
-          <ShapePicker
+          <AspectRatioPicker
             key={param.name}
-            options={param.options || []}
-            value={shapeValue}
+            value={aspectRatioValue}
             onChange={(newValue) =>
               handleParamChange(tool.id, param.name, newValue)
             }
             disabled={isProcessing}
             label={param.label}
+            allowAuto={isEditTool}
+            autoResolvedValue={resolveAspectRatioValue(
+              AUTO_ASPECT_RATIO,
+              targetImageResolution,
+              supportedAspectRatios,
+            )}
+            options={supportedAspectRatios}
           />
         );
       }
 
       if (param.type === "size") {
-        const sizeValue = value || param.defaultValue || "";
+        const sizeOptions = getOrderedSizeOptions(
+          param.options,
+          selectedModel?.id,
+        );
+        const shouldPreferModelDefault =
+          selectedModel?.id === GEMINI_3_1_FLASH_MODEL_ID &&
+          (!value || value === param.defaultValue);
+        const sizeValue = shouldPreferModelDefault
+          ? sizeOptions[0] || param.defaultValue || ""
+          : value || sizeOptions[0] || param.defaultValue || "";
         return (
           <Stack key={param.name} spacing={1}>
             <Typography
@@ -606,7 +667,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 displayEmpty: false,
               }}
             >
-              {param.options?.map((option) => (
+              {sizeOptions.map((option) => (
                 <MenuItem key={option} value={option}>
                   {option}
                 </MenuItem>
@@ -666,6 +727,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       muiTheme.palette.text.secondary,
       onArtStyleChange,
       selectedArtStyleId,
+      selectedModel?.id,
       handleParamChange,
     ],
   );
@@ -813,11 +875,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   const param = params[i];
                   const nextParam = params[i + 1];
                   const paramValue = toolParams[param.name] ?? "";
-                  if (param.name === "shape" && nextParam?.name === "size") {
+                  if (
+                    param.name === "aspectRatio" &&
+                    nextParam?.name === "size"
+                  ) {
                     const nextParamValue = toolParams[nextParam.name] ?? "";
                     elements.push(
                       <Box
-                        key="shape-size-row"
+                        key="aspect-ratio-size-row"
                         sx={{
                           display: "flex",
                           gap: 2,

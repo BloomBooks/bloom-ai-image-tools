@@ -57,6 +57,7 @@ import {
   writeImageFile,
 } from "../services/persistence/fileSystemAccess";
 import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
+import { resolveAspectRatioValue } from "../lib/aspectRatios";
 import { getImageDimensions, getMimeTypeFromUrl, prepareImageBlob } from "../lib/imageUtils";
 import { getReferenceConstraints, getToolReferenceMode } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
@@ -1474,9 +1475,13 @@ export function ImageToolsWorkspace({
           : "default";
         reasoningLevelForRequest = configuredReasoningLevel ?? initialReasoningLevel;
 
-        // Build image configuration from tool parameters (shape/size)
+        // Build image configuration from tool parameters.
         const imageConfig: ImageConfig = {
-          shape: params.shape,
+          aspectRatio: resolveAspectRatioValue(
+            params.aspectRatio,
+            targetImage?.resolution,
+            selectedModel?.supportedAspectRatios,
+          ),
           size: params.size,
         };
 

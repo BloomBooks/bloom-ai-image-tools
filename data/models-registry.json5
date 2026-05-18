@@ -11,6 +11,8 @@
       "transparent-background": 3,
       "edit-with-reference-image": 3,
     },
+    // Google Gemini docs list these ratios for Gemini 3 Pro Image Preview.
+    supportedAspectRatios: ["2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9", "21:9"],
     default: false,
   },
   {
@@ -23,6 +25,8 @@
       "transparent-background": 3,
       "edit-with-reference-image": 3,
     },
+    // Google Gemini docs note that 3.1 Flash adds the four extreme ratios.
+    supportedAspectRatios: ["1:8", "1:4", "2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9", "21:9", "4:1", "8:1"],
     initialReasoningLevel: "medium",
     default: true,
   },
@@ -37,6 +41,10 @@
       "transparent-background": 0,
       "edit-with-reference-image": 4,
     },
+    // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
+    // The current OpenRouter chat-completions path in this app can faithfully target
+    // those three exact aspect ratios.
+    supportedAspectRatios: ["2:3", "1:1", "3:2"],
     default: false,
   },
   {
@@ -49,6 +57,10 @@
       "transparent-background": 0,
       "edit-with-reference-image": 4,
     },
+    // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
+    // The current OpenRouter chat-completions path in this app can faithfully target
+    // those three exact aspect ratios.
+    supportedAspectRatios: ["2:3", "1:1", "3:2"],
     default: false,
   },
 ]

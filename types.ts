@@ -3,7 +3,7 @@ import type { ElementType, ReactNode } from "react";
 export interface ToolParameter {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea" | "art-style" | "shape" | "size";
+  type: "text" | "select" | "textarea" | "art-style" | "aspect-ratio" | "size";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
@@ -59,6 +59,7 @@ export interface ModelInfo {
   badge?: string;
   capabilities?: ModelCapabilities;
   initialReasoningLevel?: ModelReasoningLevel;
+  supportedAspectRatios?: string[];
 }
 
 export interface ArtStyleDefinition {

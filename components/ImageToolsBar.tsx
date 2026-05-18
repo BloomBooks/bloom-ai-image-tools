@@ -384,6 +384,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             onToolSelect={onToolSelect}
             referenceImageCount={referenceImages.length}
             hasTargetImage={hasTargetImage}
+            targetImageResolution={targetImage?.resolution ?? null}
             isAuthenticated={appState.isAuthenticated}
             selectedModel={selectedModel}
             activeToolId={activeToolId}

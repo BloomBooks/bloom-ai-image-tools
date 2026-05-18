@@ -1,4 +1,5 @@
 import type { ModelReasoningLevel } from "../types";
+import { getOpenAIOrientation } from "../lib/aspectRatios";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
@@ -59,9 +60,9 @@ export interface GenerateTextResult {
 }
 
 export interface ImageConfig {
-  /** Shape: "Square", "Portrait Rectangle", "Landscape Rectangle" */
-  shape?: string;
-  /** Size: "1k", "2k", "4k" */
+  /** Explicit aspect ratio, for example "1:1" or "16:9". */
+  aspectRatio?: string;
+  /** Size: "512k", "1k", "2k", "4k" */
   size?: string;
 }
 
@@ -150,32 +151,23 @@ const stripMarkdownCodeFence = (text: string): string => {
 };
 
 /**
- * Maps shape parameter to Gemini aspect_ratio format.
- * Gemini supports: "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
+ * Maps an explicit aspect ratio to Gemini's aspect_ratio format.
  */
-function mapShapeToGeminiAspectRatio(shape?: string): string {
-  switch (shape) {
-    case "Portrait Rectangle":
-      return "3:4";
-    case "Landscape Rectangle":
-      return "4:3";
-    case "Square":
-    default:
-      return "1:1";
-  }
+function mapAspectRatioToGeminiAspectRatio(aspectRatio?: string): string {
+  return aspectRatio?.trim() || "1:1";
 }
 
 /**
- * Maps shape parameter to OpenAI size format.
+ * Maps an aspect ratio to OpenAI size format.
  * GPT image models support: "1024x1024", "1536x1024" (landscape), "1024x1536" (portrait)
  */
-function mapShapeToOpenAISize(shape?: string): string {
-  switch (shape) {
-    case "Portrait Rectangle":
+function mapAspectRatioToOpenAISize(aspectRatio?: string): string {
+  switch (getOpenAIOrientation(aspectRatio)) {
+    case "portrait":
       return "1024x1536";
-    case "Landscape Rectangle":
+    case "landscape":
       return "1536x1024";
-    case "Square":
+    case "square":
     default:
       return "1024x1024";
   }
@@ -183,11 +175,14 @@ function mapShapeToOpenAISize(shape?: string): string {
 
 /**
  * Maps size parameter to Gemini image_size format.
- * Gemini supports: "1K", "2K", "4K" (note: uppercase K required)
- * Note: Gemini 2.5 Flash only supports 1K; Gemini 3 Pro supports 1K, 2K, 4K
+ * Gemini supports: "1K", "2K", "4K" (note: uppercase K required).
+ * The UI exposes a 512k preset for Gemini 3.1 Flash, which maps to Gemini's
+ * lowest supported image-size tier.
  */
 function mapSizeToGeminiImageSize(size?: string): string {
   switch (size?.toLowerCase()) {
+    case "512k":
+      return "1K";
     case "2k":
       return "2K";
     case "4k":
@@ -241,10 +236,12 @@ export const editImage = async (
 
   // Build image generation parameters for different providers
   // Gemini-style: aspect_ratio and image_size in image_config
-  const geminiAspectRatio = mapShapeToGeminiAspectRatio(imageConfig?.shape);
+  const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(
+    imageConfig?.aspectRatio,
+  );
   const geminiImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
   // OpenAI-style: size as a direct parameter
-  const openAISize = mapShapeToOpenAISize(imageConfig?.shape);
+  const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
 
   const body: Record<string, any> = {
     model: modelToUse,

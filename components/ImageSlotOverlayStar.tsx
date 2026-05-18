@@ -37,19 +37,20 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
         position: "absolute",
         top: cornerOffset,
         left: cornerOffset,
-        padding: isStarred ? 3 : buttonPadding,
-        borderRadius: isStarred ? 0 : 999,
+        padding: buttonPadding,
+        borderRadius: 999,
         border: "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: isStarred ? "transparent" : theme.colors.overlay,
-        color: isStarred ? theme.colors.accent : theme.colors.textPrimary,
+        backgroundColor: isStarred ? theme.colors.accent : theme.colors.overlay,
+        color: isStarred ? theme.colors.textPrimary : theme.colors.textPrimary,
         opacity: isStarred ? 1 : isHovered ? 1 : 0,
         transition:
-          "opacity 120ms ease, color 120ms ease, box-shadow 120ms ease",
-        boxShadow: "none",
-        backdropFilter: isStarred ? "none" : "blur(6px)",
+          "opacity 120ms ease, color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease",
+        boxShadow: isStarred ? `0 6px 16px ${theme.colors.panelShadow}` : "none",
+        backdropFilter: "blur(6px)",
+        transform: isStarred ? "scale(1.05)" : "scale(1)",
         zIndex: 25,
         pointerEvents: disabled || (!isStarred && !isHovered) ? "none" : "auto",
       }}
@@ -57,8 +58,7 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
       {isStarred ? (
         <StarIcon
           sx={{
-            fontSize: 18,
-            filter: `drop-shadow(${theme.colors.panelShadow})`,
+            fontSize: 16,
           }}
         />
       ) : (

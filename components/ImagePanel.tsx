@@ -27,6 +27,7 @@ type SingleImagePanelProps = {
   layout?: "single";
   panelTestId?: string;
   image: ImageRecord | null;
+  isAnyDndDragging?: boolean;
   onUpload: (file: File) => void;
   isDropZone?: boolean;
   onDrop?: (imageId: string) => void;
@@ -49,6 +50,7 @@ type GridImagePanelProps = {
   layout: "grid";
   panelTestId?: string;
   slots: ImagePanelSlot[];
+  isAnyDndDragging?: boolean;
   disabled?: boolean;
   onSlotUpload: (file: File, slotIndex: number) => void;
   onSlotDrop: (imageId: string, slotIndex: number) => void;
@@ -71,6 +73,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       onSlotUpload,
       onSlotRemove,
       panelTestId,
+      isAnyDndDragging = false,
     } = props;
 
     const containerStyle: React.CSSProperties = {
@@ -154,6 +157,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                   >
                     <ImageSlot
                       image={slot.image}
+                      isAnyDndDragging={isAnyDndDragging}
                       disabled={disabled}
                       isDropZone={isSlotDropZone}
                       onDrop={(imageId) => onSlotDrop(imageId, slot.slotIndex)}
@@ -208,6 +212,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     onToggleStar,
     dndDropId,
     dndDragId,
+    isAnyDndDragging = false,
   } = props;
 
   const starState =
@@ -302,12 +307,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         dataTestId={panelTestId}
         label={label}
         image={image}
+        isAnyDndDragging={isAnyDndDragging}
         disabled={disabled}
         isDropZone={isDropZone}
         onDrop={onDrop}
         onUpload={showUploadControls ? onUpload : undefined}
         onRemove={onClear}
-        draggableImageId={draggableImageId}
         isLoading={isLoading}
         loadingProgress={loadingProgress}
         uploadInputTestId={uploadInputTestId}
@@ -328,6 +333,9 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
             : undefined
         }
         starState={starState}
+        // Keep pane-to-pane dragging on the dnd-kit wrapper only.
+        // Native image dragging here competes with pointer-based activation.
+        draggableImageId={undefined}
       />
     </DndImageSlotWrapper>
   );

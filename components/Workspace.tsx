@@ -132,6 +132,7 @@ interface WorkspaceProps {
   generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
   onToggleHistoryStar: (id: string) => void;
+  isAnyDndDragging?: boolean;
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({
@@ -152,6 +153,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   generationProgress,
   activeToolId,
   onToggleHistoryStar,
+  isAnyDndDragging = false,
 }) => {
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
@@ -407,6 +409,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               >
                 <ImagePanel
                   image={targetImage}
+                  isAnyDndDragging={isAnyDndDragging}
                   label="Image to Edit"
                   panelTestId="target-panel"
                   onUpload={onUploadTarget}
@@ -447,6 +450,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   layout="grid"
                   panelTestId="reference-panel"
                   slots={slots}
+                  isAnyDndDragging={isAnyDndDragging}
                   disabled={false}
                   onSlotUpload={(file, slotIndex) => onUploadReference(file, slotIndex)}
                   onSlotDrop={(imageId, slotIndex) => onSetReferenceAt(slotIndex, imageId)}
@@ -482,6 +486,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               layout="grid"
               panelTestId="result-panel"
               slots={resultSlots}
+              isAnyDndDragging={isAnyDndDragging}
               disabled={isProcessing}
               onSlotUpload={() => undefined}
               onSlotDrop={() => undefined}
@@ -490,6 +495,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           ) : (
             <ImagePanel
               image={rightImage}
+              isAnyDndDragging={isAnyDndDragging}
               label="Result"
               panelTestId="result-panel"
               onUpload={onUploadRight}

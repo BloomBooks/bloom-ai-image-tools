@@ -21,9 +21,8 @@ test.describe("history drag-and-drop", () => {
 
     const targetSrc = await targetImage.getAttribute("src");
     expect(targetSrc).toBeTruthy();
-    await expect(targetImage).toHaveAttribute("draggable", "true");
 
-    const from = await targetImage.boundingBox();
+    const from = await targetPanel.boundingBox();
     const to = await resultPanel.boundingBox();
     expect(from).toBeTruthy();
     expect(to).toBeTruthy();

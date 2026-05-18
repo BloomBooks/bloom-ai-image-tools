@@ -1,9 +1,5 @@
 import React, { useMemo } from "react";
-import {
-  ImageRecord,
-  ThumbnailStripId,
-  ThumbnailStripsSnapshot,
-} from "../../types";
+import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   THUMBNAIL_STRIP_ORDER,
   ThumbnailStripConfig,
@@ -32,16 +28,16 @@ interface ThumbnailStripsCollectionProps {
     stripId: ThumbnailStripId,
     dropIndex: number,
     draggedId: string | null,
-    event?: React.DragEvent | null
+    event?: React.DragEvent | null,
   ) => void;
+  onVisibleItemIdsChange: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   onActivateStrip: (stripId: ThumbnailStripId) => void;
   onTogglePin: (stripId: ThumbnailStripId) => void;
   onDragActivateStrip: (stripId: ThumbnailStripId) => void;
+  isAnyDndDragging?: boolean;
 }
 
-export const ThumbnailStripsCollection: React.FC<
-  ThumbnailStripsCollectionProps
-> = ({
+export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
   snapshot,
   entries,
   selectedId,
@@ -52,9 +48,11 @@ export const ThumbnailStripsCollection: React.FC<
   onToggleStar,
   onRemoveFromStrip,
   onDropToStrip,
+  onVisibleItemIdsChange,
   onActivateStrip,
   onTogglePin,
   onDragActivateStrip,
+  isAnyDndDragging = false,
 }) => {
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
 
@@ -66,12 +64,10 @@ export const ThumbnailStripsCollection: React.FC<
     return map;
   }, [entries]);
 
-  const pinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) =>
-    snapshot.pinnedStripIds.includes(id)
-  );
+  const pinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => snapshot.pinnedStripIds.includes(id));
 
   const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
-    (id) => !snapshot.pinnedStripIds.includes(id)
+    (id) => !snapshot.pinnedStripIds.includes(id),
   );
 
   const activeUnpinnedStripId = unpinnedStripIds.length
@@ -101,9 +97,7 @@ export const ThumbnailStripsCollection: React.FC<
         pinned={snapshot.pinnedStripIds.includes(stripId)}
         isActive={activeOverride ?? snapshot.activeStripId === stripId}
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
-        onRequestHistoryAccess={
-          stripId === "history" ? onRequestHistoryAccess : undefined
-        }
+        onRequestHistoryAccess={stripId === "history" ? onRequestHistoryAccess : undefined}
         emptyStateMessage={emptyStateMessage}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
@@ -111,6 +105,8 @@ export const ThumbnailStripsCollection: React.FC<
         onItemDropped={(targetStripId, dropIndex, draggedId, event) =>
           onDropToStrip(targetStripId, dropIndex, draggedId, event)
         }
+        onVisibleItemIdsChange={onVisibleItemIdsChange}
+        isAnyDndDragging={isAnyDndDragging}
       />
     );
   };

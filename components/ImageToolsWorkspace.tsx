@@ -8,7 +8,6 @@ import {
   GenerationTimingState,
   ImageRecord,
   ImageToolsStatePersistence,
-  HistoryManifest,
   ModelReasoningLevel,
   ModelReasoningLevelByModelId,
   PersistedAppState,
@@ -76,7 +75,6 @@ import {
   replaceStripItems,
   setActiveStrip,
   setStripPinState,
-  THUMBNAIL_STRIP_CONFIGS,
   THUMBNAIL_STRIP_ORDER,
   resolveThumbnailStripConfigs,
   ThumbnailStripConfig,
@@ -156,6 +154,8 @@ const DEFAULT_GENERATION_ESTIMATE_MS = 30000;
 const MAX_PROMPT_DURATION_ESTIMATES = 40;
 const MAX_TOOL_DURATION_ESTIMATES = 24;
 const PESSIMISTIC_MS = 3000;
+const HISTORY_HYDRATION_BATCH_SIZE = 8;
+const PERSISTENCE_POINTER_QUIET_MS = 1000;
 
 const getNowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
@@ -374,6 +374,14 @@ export function ImageToolsWorkspace({
     null,
   );
   const [resultImageIds, setResultImageIds] = useState<string[]>([]);
+  const [visibleStripItemIdsByStrip, setVisibleStripItemIdsByStrip] = useState<
+    Record<ThumbnailStripId, string[]>
+  >({
+    history: [],
+    starred: [],
+    reference: [],
+    environment: [],
+  });
   const [modelReasoningLevels, setModelReasoningLevels] = useState<ModelReasoningLevelByModelId>(
     {},
   );
@@ -733,22 +741,77 @@ export function ImageToolsWorkspace({
     };
   }, []);
 
+  const handleVisibleStripItemIdsChange = useCallback(
+    (stripId: ThumbnailStripId, visibleItemIds: string[]) => {
+      setVisibleStripItemIdsByStrip((prev) => {
+        const nextIds = visibleItemIds.filter((id, index, ids) => ids.indexOf(id) === index);
+        const currentIds = prev[stripId] || [];
+        if (
+          currentIds.length === nextIds.length &&
+          currentIds.every((id, index) => id === nextIds[index])
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [stripId]: nextIds,
+        };
+      });
+    },
+    [],
+  );
+
+  const hydrateCandidateIds = useMemo(() => {
+    const ids = new Set<string>();
+    const addId = (id: string | null | undefined) => {
+      if (id) {
+        ids.add(id);
+      }
+    };
+
+    addId(state.targetImageId);
+    addId(state.rightPanelImageId);
+    state.referenceImageIds.forEach(addId);
+    resultImageIds.forEach(addId);
+    Object.values(visibleStripItemIdsByStrip).forEach((visibleIds) => {
+      visibleIds.forEach(addId);
+    });
+
+    return Array.from(ids);
+  }, [
+    resultImageIds,
+    state.referenceImageIds,
+    state.rightPanelImageId,
+    state.targetImageId,
+    visibleStripItemIdsByStrip,
+  ]);
+
   useEffect(() => {
     if (!isHydrated || !fsBinding) {
       return;
     }
 
-    const itemsNeedingData = state.history.filter(
-      (item) => !item.imageData && !!item.imageFileName,
-    );
+    const itemsNeedingData = hydrateCandidateIds
+      .map((id) => state.history.find((item) => item.id === id) || null)
+      .filter((item): item is ImageRecord =>
+        Boolean(item && !item.imageData && !!item.imageFileName),
+      );
     if (itemsNeedingData.length === 0) {
       return;
     }
 
+    const nextBatch = itemsNeedingData.slice(0, HISTORY_HYDRATION_BATCH_SIZE);
+
     let cancelled = false;
-    (async () => {
+    void (async () => {
+      const start = getNowMs();
+      debugLog("historyHydrate(start)", {
+        batchCount: nextBatch.length,
+        remainingCount: itemsNeedingData.length,
+      });
+
       const updatedItems = await Promise.all(
-        itemsNeedingData.map((item) => loadHistoryImageFromFolder(item)),
+        nextBatch.map((item) => loadHistoryImageFromFolder(item)),
       );
       if (cancelled) {
         return;
@@ -766,12 +829,18 @@ export function ImageToolsWorkspace({
         });
         return changed ? { ...prev, history: nextHistory } : prev;
       });
+
+      debugLog("historyHydrate(done)", {
+        batchCount: nextBatch.length,
+        remainingCount: Math.max(itemsNeedingData.length - nextBatch.length, 0),
+        durationMs: Math.round(getNowMs() - start),
+      });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, fsBinding, state.history, loadHistoryImageFromFolder]);
+  }, [isHydrated, fsBinding, hydrateCandidateIds, state.history, loadHistoryImageFromFolder]);
 
   useEffect(() => {
     if (!fsSupported) {
@@ -779,7 +848,7 @@ export function ImageToolsWorkspace({
     }
 
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const binding = await restoreFileSystemImageBinding();
       if (!cancelled && binding) {
         setFsBinding(binding);
@@ -793,7 +862,7 @@ export function ImageToolsWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const persisted = await persistence.load();
         if (cancelled) {
@@ -985,7 +1054,7 @@ export function ImageToolsWorkspace({
     fsManifestHandleRef.current = fsBinding.directoryHandle;
 
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const folderState = await readFolderPersistedState(fsBinding);
       if (cancelled) {
         return;
@@ -1050,6 +1119,7 @@ export function ImageToolsWorkspace({
     saving: boolean;
     dirty: boolean;
   }>({ idleHandle: null, timeoutHandle: null, saving: false, dirty: false });
+  const pointerActivityRef = useRef({ isPointerDown: false, lastAt: 0 });
 
   const accessibleHistoryItems = useMemo(
     () => state.history.filter((item) => !!item.imageData),
@@ -1062,6 +1132,30 @@ export function ImageToolsWorkspace({
     }
     return state.history.some((item) => !item.imageData && !!item.imageFileName);
   }, [fsBinding, fsSupported, state.history]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const markPointerDown = () => {
+      pointerActivityRef.current = { isPointerDown: true, lastAt: getNowMs() };
+    };
+
+    const markPointerUp = () => {
+      pointerActivityRef.current = { isPointerDown: false, lastAt: getNowMs() };
+    };
+
+    window.addEventListener("pointerdown", markPointerDown, true);
+    window.addEventListener("pointerup", markPointerUp, true);
+    window.addEventListener("pointercancel", markPointerUp, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", markPointerDown, true);
+      window.removeEventListener("pointerup", markPointerUp, true);
+      window.removeEventListener("pointercancel", markPointerUp, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isHydrated || !persistence) return;
@@ -1126,6 +1220,36 @@ export function ImageToolsWorkspace({
       selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
     });
 
+    const scheduleSave = (debounceMs = 250) => {
+      if (typeof window === "undefined") {
+        void runSave();
+        return;
+      }
+
+      const sched = persistenceScheduleRef.current;
+      sched.dirty = true;
+      clearPending();
+
+      const win = window as IdleFriendlyWindow;
+      // Debounce a bit to coalesce rapid state changes, then run during idle time.
+      const scheduleImpl = () => {
+        if (typeof win.requestIdleCallback === "function") {
+          sched.idleHandle = win.requestIdleCallback(
+            () => {
+              void runSave();
+            },
+            { timeout: 1500 },
+          );
+        } else {
+          sched.timeoutHandle = window.setTimeout(() => {
+            void runSave();
+          }, 0);
+        }
+      };
+
+      sched.timeoutHandle = window.setTimeout(scheduleImpl, debounceMs);
+    };
+
     const runSave = async () => {
       const sched = persistenceScheduleRef.current;
       clearPending();
@@ -1133,6 +1257,19 @@ export function ImageToolsWorkspace({
       if (sched.saving) {
         sched.dirty = true;
         return;
+      }
+
+      if (typeof window !== "undefined") {
+        const pointer = pointerActivityRef.current;
+        const quietRemaining = pointer.isPointerDown
+          ? PERSISTENCE_POINTER_QUIET_MS
+          : Math.max(0, PERSISTENCE_POINTER_QUIET_MS - (getNowMs() - pointer.lastAt));
+
+        if (quietRemaining > 0) {
+          debugLog("save(defer:pointer)", { quietRemainingMs: Math.round(quietRemaining) });
+          scheduleSave(quietRemaining);
+          return;
+        }
       }
 
       sched.saving = true;
@@ -1161,36 +1298,6 @@ export function ImageToolsWorkspace({
       }
     };
 
-    const scheduleSave = () => {
-      if (typeof window === "undefined") {
-        void runSave();
-        return;
-      }
-
-      const sched = persistenceScheduleRef.current;
-      sched.dirty = true;
-      clearPending();
-
-      const win = window as IdleFriendlyWindow;
-      // Debounce a bit to coalesce rapid state changes, then run during idle time.
-      const scheduleImpl = () => {
-        if (typeof win.requestIdleCallback === "function") {
-          sched.idleHandle = win.requestIdleCallback(
-            () => {
-              void runSave();
-            },
-            { timeout: 1500 },
-          );
-        } else {
-          sched.timeoutHandle = window.setTimeout(() => {
-            void runSave();
-          }, 0);
-        }
-      };
-
-      sched.timeoutHandle = window.setTimeout(scheduleImpl, 250);
-    };
-
     scheduleSave();
 
     return () => {
@@ -1217,7 +1324,7 @@ export function ImageToolsWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         setAuthLoading(true);
         const key = await handleOAuthCallback();
@@ -1813,7 +1920,7 @@ export function ImageToolsWorkspace({
       }
 
       if (hasReferenceCapacity) {
-        handleUploadReference(file);
+        void handleUploadReference(file);
         return;
       }
 
@@ -2272,7 +2379,7 @@ export function ImageToolsWorkspace({
             resultImages={resultItems}
             activeToolId={activeToolId}
             toolParams={paramsByTool}
-            historyItems={accessibleHistoryItems}
+            historyItems={state.history}
             hasHiddenHistory={hasHiddenHistory}
             onRequestHistoryAccess={() => {
               if (!fsSupported) {
@@ -2288,6 +2395,7 @@ export function ImageToolsWorkspace({
             onStripPinToggle={handleStripPinToggle}
             onStripActivate={handleStripActivate}
             onStripDragActivate={handleStripDragActivate}
+            onVisibleStripItemIdsChange={handleVisibleStripItemIdsChange}
             onApplyTool={handleApplyTool}
             onCancelProcessing={handleCancelProcessing}
             onToolSelect={handleToolSelectWithConstraints}

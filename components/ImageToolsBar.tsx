@@ -3,10 +3,17 @@ import { Box, IconButton, Stack, Typography } from "@mui/material";
 import {
   closestCenter,
   DndContext,
+  DragCancelEvent,
   DragEndEvent,
   DragOverlay,
+  DragStartEvent,
+  MeasuringStrategy,
+  type CollisionDetection,
   type Modifier,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
+  useDndMonitor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -22,12 +29,19 @@ import {
 import { ImageTool } from "./tools/ImageTool";
 import { Workspace } from "./Workspace";
 import { ThumbnailStripsCollection } from "./thumbnailStrips/ThumbnailStripsCollection";
-import { ImageSlot } from "./ImageSlot";
 import { theme } from "../themes";
+import { emitDragDebugLog, isDragDebugEnabled } from "./dragConstants";
 import { Icon, Icons } from "./Icons";
 import type { ThumbnailStripConfig } from "../lib/thumbnailStrips";
 
 const DRAG_PREVIEW_SIZE = 112;
+
+type DragPreviewMode = "image" | "lite";
+
+type ActiveDragPreview = {
+  imageId: string;
+  imageData: string | null;
+};
 
 const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
 
@@ -98,6 +112,280 @@ const parsePanelDrop = (
   return null;
 };
 
+const getDragPreviewMode = (): DragPreviewMode => {
+  if (typeof window === "undefined") {
+    return "image";
+  }
+
+  // Default: show the real image while dragging. ?dndPreview=lite forces the
+  // lightweight badge (useful if perf is poor).
+  const mode = new URLSearchParams(window.location.search).get("dndPreview");
+  return mode === "lite" ? "lite" : "image";
+};
+
+const pointerFirstCollisionDetection: CollisionDetection = (args) => {
+  const pointerMatches = pointerWithin(args);
+  if (pointerMatches.length > 0) {
+    return pointerMatches;
+  }
+
+  const rectMatches = rectIntersection(args);
+  if (rectMatches.length > 0) {
+    return rectMatches;
+  }
+
+  return closestCenter(args);
+};
+
+const DragPreview: React.FC<{
+  preview: ActiveDragPreview;
+  mode: DragPreviewMode;
+  activeDragStartRef: React.MutableRefObject<number | null>;
+  debugLog: (...args: any[]) => void;
+}> = ({ preview, mode, activeDragStartRef, debugLog }) => {
+  const imageRef = React.useRef<HTMLImageElement | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (activeDragStartRef.current == null) {
+      return;
+    }
+
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const img = imageRef.current;
+    const mountSummary = {
+      phase: "dragPreview-mounted",
+      dtMs: Math.round(now - activeDragStartRef.current),
+      previewMode: mode,
+      imageComplete: img?.complete ?? null,
+      naturalWidth: img?.naturalWidth ?? null,
+      naturalHeight: img?.naturalHeight ?? null,
+    };
+
+    try {
+      (window as any).__BLOOM_DND_OVERLAY_LAST = mountSummary;
+    } catch {
+      // ignore
+    }
+
+    debugLog("overlay", mountSummary);
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        if (activeDragStartRef.current == null) {
+          return;
+        }
+        const rafNow = typeof performance !== "undefined" ? performance.now() : Date.now();
+        debugLog("overlay", {
+          phase: "dragPreview-first-raf",
+          dtMs: Math.round(rafNow - activeDragStartRef.current),
+          previewMode: mode,
+        });
+      });
+    }
+
+    if (mode !== "image" || !img || img.complete) {
+      return;
+    }
+
+    const handleLoad = () => {
+      if (activeDragStartRef.current == null) {
+        return;
+      }
+      const loadNow = typeof performance !== "undefined" ? performance.now() : Date.now();
+      debugLog("overlay", {
+        phase: "dragPreview-image-load",
+        dtMs: Math.round(loadNow - activeDragStartRef.current),
+        previewMode: mode,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight,
+      });
+    };
+
+    img.addEventListener("load", handleLoad, { once: true });
+    return () => {
+      img.removeEventListener("load", handleLoad);
+    };
+  }, [preview.imageData, mode, activeDragStartRef, debugLog]);
+
+  return (
+    <div
+      style={{
+        width: DRAG_PREVIEW_SIZE,
+        height: DRAG_PREVIEW_SIZE,
+        borderRadius: 18,
+        overflow: "hidden",
+        boxShadow: theme.colors.panelShadow,
+        background: theme.colors.surface,
+        pointerEvents: "none",
+      }}
+    >
+      {mode === "lite" ? (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0.04))",
+            color: theme.colors.textPrimary,
+            fontSize: 14,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          Dragging
+        </div>
+      ) : (
+        <img
+          ref={imageRef}
+          src={preview.imageData ?? undefined}
+          alt=""
+          draggable={false}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+const DragOverlayLayer: React.FC<{
+  historyItems: ImageRecord[];
+  dragPreviewMode: DragPreviewMode;
+  dragPerfRef: React.MutableRefObject<{
+    startT: number | null;
+    lastMoveT: number | null;
+    moveCount: number;
+    maxMoveDeltaMs: number;
+  }>;
+  activeDragStartRef: React.MutableRefObject<number | null>;
+  pendingDragProbeRef: React.MutableRefObject<{
+    token: number;
+    dragStarted: boolean;
+    timeoutIds: number[];
+  } | null>;
+  clearPendingDragProbe: () => void;
+  lastPointerDownRef: React.MutableRefObject<{
+    t: number;
+    x: number;
+    y: number;
+    pointerType: string;
+    targetTestId: string;
+  } | null>;
+  debugLog: (...args: any[]) => void;
+}> = ({
+  historyItems,
+  dragPreviewMode,
+  dragPerfRef,
+  activeDragStartRef,
+  pendingDragProbeRef,
+  clearPendingDragProbe,
+  lastPointerDownRef,
+  debugLog,
+}) => {
+  const [activeDragPreview, setActiveDragPreview] = React.useState<ActiveDragPreview | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (!activeDragPreview || activeDragStartRef.current == null) {
+      return;
+    }
+
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const summary = {
+      phase: "activeDragImage-committed",
+      dtMs: Math.round(now - activeDragStartRef.current),
+      previewMode: dragPreviewMode,
+      hasImageData: Boolean(activeDragPreview.imageData),
+      imageBytes: activeDragPreview.imageData?.length ?? 0,
+    };
+
+    try {
+      (window as any).__BLOOM_DND_OVERLAY_LAST = summary;
+    } catch {
+      // ignore
+    }
+
+    debugLog("overlay", summary);
+  }, [activeDragPreview, activeDragStartRef, dragPreviewMode, debugLog]);
+
+  useDndMonitor({
+    onDragStart(event: DragStartEvent) {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      activeDragStartRef.current = now;
+      if (pendingDragProbeRef.current) {
+        pendingDragProbeRef.current.dragStarted = true;
+      }
+      clearPendingDragProbe();
+
+      dragPerfRef.current.startT = now;
+      dragPerfRef.current.lastMoveT = now;
+      dragPerfRef.current.moveCount = 0;
+      dragPerfRef.current.maxMoveDeltaMs = 0;
+
+      const last = lastPointerDownRef.current;
+      if (last) {
+        debugLog(
+          `dragStart dt=${Math.round(now - last.t)}ms pointer=${last.pointerType} from=(${Math.round(
+            last.x,
+          )},${Math.round(last.y)}) targetTestId=${last.targetTestId || ""}`,
+        );
+      } else {
+        debugLog("dragStart (no prior pointerdown recorded)");
+      }
+
+      const imageId = (event.active.data.current as any)?.imageId as string | undefined;
+      if (!imageId) {
+        setActiveDragPreview(null);
+        return;
+      }
+
+      const previewImageData =
+        dragPreviewMode === "image"
+          ? historyItems.find((item) => item.id === imageId && !!item.imageData)?.imageData || null
+          : null;
+      debugLog("overlay", {
+        phase: "setActiveDragImage",
+        dtMs: Math.round(
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - now,
+        ),
+        previewMode: dragPreviewMode,
+        foundMatch: dragPreviewMode === "image" ? Boolean(previewImageData) : true,
+        imageBytes: previewImageData?.length ?? 0,
+      });
+      // EXPERIMENT 2026-05-18: removed flushSync wrapper (suspect of stall)
+      setActiveDragPreview({
+        imageId,
+        imageData: previewImageData,
+      });
+    },
+    onDragEnd(_event: DragEndEvent) {
+      setActiveDragPreview(null);
+    },
+    onDragCancel(_event: DragCancelEvent) {
+      setActiveDragPreview(null);
+    },
+  });
+
+  return (
+    <DragOverlay modifiers={[alignDragPreviewToCursor]}>
+      {activeDragPreview ? (
+        <DragPreview
+          preview={activeDragPreview}
+          mode={dragPreviewMode}
+          activeDragStartRef={activeDragStartRef}
+          debugLog={debugLog}
+        />
+      ) : null}
+    </DragOverlay>
+  );
+};
+
 interface ImageToolsPanelBar {
   appState: AppState;
   selectedModel: ModelInfo | null;
@@ -124,6 +412,7 @@ interface ImageToolsPanelBar {
   onStripPinToggle: (stripId: ThumbnailStripId) => void;
   onStripActivate: (stripId: ThumbnailStripId) => void;
   onStripDragActivate: (stripId: ThumbnailStripId) => void;
+  onVisibleStripItemIdsChange: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   selectedArtStyleId: string | null;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
   onCancelProcessing: () => void;
@@ -166,6 +455,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onStripPinToggle,
   onStripActivate,
   onStripDragActivate,
+  onVisibleStripItemIdsChange,
   selectedArtStyleId,
   onApplyTool,
   onCancelProcessing,
@@ -186,13 +476,12 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onToggleHistoryStar,
   onDismissError,
 }) => {
-  const majorElementGap = "30px";
+  const majorElementGap = { xs: 1.5, md: 3.75 } as const;
   const hasTargetImage = !!targetImage;
   const debugLog = React.useCallback((...args: any[]) => {
     try {
-      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
-        // eslint-disable-next-line no-console
-        console.log("[dnd-timing]", ...args);
+      if (isDragDebugEnabled()) {
+        emitDragDebugLog("[dnd-timing]", ...args);
       }
     } catch {
       // ignore
@@ -206,6 +495,22 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     pointerType: string;
     targetTestId: string;
   } | null>(null);
+  const pendingDragProbeRef = React.useRef<{
+    token: number;
+    dragStarted: boolean;
+    timeoutIds: number[];
+  } | null>(null);
+
+  const clearPendingDragProbe = React.useCallback(() => {
+    const current = pendingDragProbeRef.current;
+    if (!current || typeof window === "undefined") {
+      pendingDragProbeRef.current = null;
+      return;
+    }
+
+    current.timeoutIds.forEach((id) => window.clearTimeout(id));
+    pendingDragProbeRef.current = null;
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -215,7 +520,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     }),
   );
 
-  const [activeDragImage, setActiveDragImage] = React.useState<ImageRecord | null>(null);
+  const dragPreviewMode = React.useMemo(() => getDragPreviewMode(), []);
+  const activeDragStartRef = React.useRef<number | null>(null);
 
   const dragPerfRef = React.useRef<{
     startT: number | null;
@@ -227,7 +533,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   const flushDragPerf = React.useCallback(
     (phase: "end" | "cancel") => {
       try {
-        if (typeof window === "undefined" || !(window as any).__E2E_VERBOSE) {
+        if (typeof window === "undefined" || !isDragDebugEnabled()) {
           return;
         }
         const perf = dragPerfRef.current;
@@ -248,36 +554,13 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     [debugLog],
   );
 
-  const DragPreview: React.FC<{ image: ImageRecord }> = ({ image }) => {
-    return (
-      <div
-        style={{
-          width: DRAG_PREVIEW_SIZE,
-          height: DRAG_PREVIEW_SIZE,
-          borderRadius: 18,
-          overflow: "hidden",
-          boxShadow: theme.colors.panelShadow,
-          background: theme.colors.surface,
-          pointerEvents: "none",
-        }}
-      >
-        <img
-          src={image.imageData}
-          alt=""
-          draggable={false}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-      </div>
-    );
-  };
+  React.useEffect(() => {
+    return () => {
+      clearPendingDragProbe();
+    };
+  }, [clearPendingDragProbe]);
 
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveDragImage(null);
     const imageId = (event.active.data.current as any)?.imageId as string | undefined;
     if (!imageId) return;
 
@@ -415,32 +698,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={(event) => {
-            const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-
-            dragPerfRef.current.startT = now;
-            dragPerfRef.current.lastMoveT = now;
-            dragPerfRef.current.moveCount = 0;
-            dragPerfRef.current.maxMoveDeltaMs = 0;
-
-            const last = lastPointerDownRef.current;
-            if (last) {
-              debugLog(
-                `dragStart dt=${Math.round(now - last.t)}ms pointer=${last.pointerType} from=(${Math.round(
-                  last.x,
-                )},${Math.round(last.y)}) targetTestId=${last.targetTestId || ""}`,
-              );
-            } else {
-              debugLog("dragStart (no prior pointerdown recorded)");
-            }
-
-            const imageId = (event.active.data.current as any)?.imageId as string | undefined;
-            if (!imageId) return;
-            // `historyItems` contains the same records used by strips and panels.
-            const match = historyItems.find((item) => item.id === imageId) || null;
-            setActiveDragImage(match);
-          }}
+          collisionDetection={pointerFirstCollisionDetection}
+          measuring={{ droppable: { strategy: MeasuringStrategy.BeforeDragging } }}
           onDragMove={() => {
             const now = typeof performance !== "undefined" ? performance.now() : Date.now();
             const perf = dragPerfRef.current;
@@ -452,11 +711,14 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             perf.moveCount += 1;
           }}
           onDragCancel={() => {
-            setActiveDragImage(null);
+            activeDragStartRef.current = null;
+            clearPendingDragProbe();
             flushDragPerf("cancel");
           }}
           onDragEnd={(event) => {
+            clearPendingDragProbe();
             handleDragEnd(event);
+            activeDragStartRef.current = null;
             flushDragPerf("end");
           }}
         >
@@ -480,6 +742,34 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
                 pointerType: (pe as any).pointerType || "unknown",
                 targetTestId,
               };
+
+              clearPendingDragProbe();
+              if (typeof window !== "undefined" && isDragDebugEnabled()) {
+                const token = lastPointerDownRef.current.t;
+                const logAfter = (delayMs: number) => {
+                  return window.setTimeout(() => {
+                    const probe = pendingDragProbeRef.current;
+                    const last = lastPointerDownRef.current;
+                    if (!probe || probe.token !== token || probe.dragStarted || !last) {
+                      return;
+                    }
+
+                    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+                    debugLog(
+                      `drag pending ${delayMs}ms after pointerDown targetTestId=${last.targetTestId || ""} pointer=${last.pointerType}`,
+                    );
+                    debugLog(
+                      `pending dt=${Math.round(now - last.t)}ms from=(${Math.round(last.x)},${Math.round(last.y)})`,
+                    );
+                  }, delayMs);
+                };
+
+                pendingDragProbeRef.current = {
+                  token,
+                  dragStarted: false,
+                  timeoutIds: [logAfter(120), logAfter(400), logAfter(1000)],
+                };
+              }
 
               debugLog(
                 `pointerDown (${lastPointerDownRef.current.pointerType}) @(${Math.round(
@@ -527,15 +817,23 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onToggleStar={onToggleHistoryStar}
               onRemoveFromStrip={onStripRemoveItem}
               onDropToStrip={onStripItemDrop}
+              onVisibleItemIdsChange={onVisibleStripItemIdsChange}
               onActivateStrip={onStripActivate}
               onTogglePin={onStripPinToggle}
               onDragActivateStrip={onStripDragActivate}
             />
           </Box>
 
-          <DragOverlay modifiers={[alignDragPreviewToCursor]}>
-            {activeDragImage ? <DragPreview image={activeDragImage} /> : null}
-          </DragOverlay>
+          <DragOverlayLayer
+            historyItems={historyItems}
+            dragPreviewMode={dragPreviewMode}
+            dragPerfRef={dragPerfRef}
+            activeDragStartRef={activeDragStartRef}
+            pendingDragProbeRef={pendingDragProbeRef}
+            clearPendingDragProbe={clearPendingDragProbe}
+            lastPointerDownRef={lastPointerDownRef}
+            debugLog={debugLog}
+          />
         </DndContext>
       </Box>
     </Box>

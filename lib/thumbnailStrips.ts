@@ -22,7 +22,7 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     label: "History",
     allowRemove: true,
     allowReorder: false,
-    allowDrop: false,
+    allowDrop: true,
     pinByDefault: true,
   },
   starred: {

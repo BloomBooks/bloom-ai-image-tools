@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  startTransition,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   Box,
@@ -21,12 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import type {
-  ModelInfo,
-  ToolDefinition,
-  ToolParameter,
-  ToolParamsById,
-} from "../../types";
+import type { ModelInfo, ToolDefinition, ToolParameter, ToolParamsById } from "../../types";
 import { TOOLS } from "./tools-registry";
 import { Icon, Icons } from "../Icons";
 import { CapabilityPanel } from "../CapabilityPanel";
@@ -39,10 +27,7 @@ import {
   getDefaultAspectRatioValue,
   resolveAspectRatioValue,
 } from "../../lib/aspectRatios";
-import {
-  getReferenceConstraints,
-  toolRequiresEditImage,
-} from "../../lib/toolHelpers";
+import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
 
 const ADVANCED_TOOL_IDS = new Set([
   "generate_image",
@@ -100,10 +85,7 @@ interface ToolPanelProps {
   onArtStyleChange: (styleId: string) => void;
 }
 type IdleFriendlyWindow = Window & {
-  requestIdleCallback?: (
-    callback: () => void,
-    options?: { timeout?: number },
-  ) => number;
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
   cancelIdleCallback?: (handle: number) => void;
 };
 
@@ -248,8 +230,8 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       const resolvedLineHeight = Number.isFinite(lineHeight)
         ? lineHeight
         : Number.isFinite(fontSize)
-        ? fontSize * 1.5
-        : 20;
+          ? fontSize * 1.5
+          : 20;
       const paddingTop = Number.parseFloat(styles.paddingTop);
       const paddingBottom = Number.parseFloat(styles.paddingBottom);
       const borderTopWidth = Number.parseFloat(styles.borderTopWidth);
@@ -281,10 +263,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       if (!Number.isFinite(stored) || stored <= 0) return;
 
       const maxReasonable = Math.max(160, Math.floor(window.innerHeight * 0.9));
-      const clamped = Math.max(
-        minimumHeight,
-        Math.min(Math.round(stored), maxReasonable),
-      );
+      const clamped = Math.max(minimumHeight, Math.min(Math.round(stored), maxReasonable));
       textarea.style.height = `${clamped}px`;
     };
 
@@ -438,13 +417,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     if (!resolvedActiveToolId) return;
     // Use a small delay to ensure the form is rendered
     const timeoutId = setTimeout(() => {
-      const toolPanel = document.querySelector(
-        `[data-tool-id="${resolvedActiveToolId}"]`,
-      );
+      const toolPanel = document.querySelector(`[data-tool-id="${resolvedActiveToolId}"]`);
       if (toolPanel) {
-        const firstInput = toolPanel.querySelector<
-          HTMLInputElement | HTMLTextAreaElement
-        >('input:not([type="hidden"]), textarea');
+        const firstInput = toolPanel.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+          'input:not([type="hidden"]), textarea',
+        );
         if (firstInput) {
           firstInput.focus();
         }
@@ -461,23 +438,13 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   );
 
   const defaultTools = useMemo(
-    () =>
-      TOOLS.filter(
-        (tool) =>
-          !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id),
-      ),
+    () => TOOLS.filter((tool) => !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id)),
     [],
   );
 
-  const advancedTools = useMemo(
-    () => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)),
-    [],
-  );
+  const advancedTools = useMemo(() => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)), []);
 
-  const textTools = useMemo(
-    () => TOOLS.filter((tool) => TEXT_TOOL_IDS.has(tool.id)),
-    [],
-  );
+  const textTools = useMemo(() => TOOLS.filter((tool) => TEXT_TOOL_IDS.has(tool.id)), []);
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
     const toolParams = paramsByTool[tool.id] || {};
@@ -486,35 +453,25 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         return false;
       }
       if (param.type === "art-style") {
-        const stylesForPicker = getArtStylesByCategories(
-          param.artStyleCategories,
-          { excludeNone: param.excludeNoneStyle },
-        );
-        const candidate =
-          toolParams[param.name] ??
-          param.defaultValue ??
-          selectedArtStyleId ??
-          "";
+        const stylesForPicker = getArtStylesByCategories(param.artStyleCategories, {
+          excludeNone: param.excludeNoneStyle,
+        });
+        const candidate = toolParams[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
         if (!candidate.trim()) {
           return true;
         }
-        const hasMatch = stylesForPicker.some(
-          (style) => style.id === candidate,
-        );
+        const hasMatch = stylesForPicker.some((style) => style.id === candidate);
         return !hasMatch;
       }
       return !toolParams[param.name]?.trim();
     });
   };
 
-  const handleSubmit = (
-    event: React.FormEvent<HTMLFormElement>,
-    tool: ToolDefinition,
-  ) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>, tool: ToolDefinition) => {
     event.preventDefault();
     if (isProcessing) return;
     const payload: Record<string, string> = {
-      ...(paramsByTool[tool.id] || {}),
+      ...paramsByTool[tool.id],
     };
 
     const formData = new FormData(event.currentTarget);
@@ -524,8 +481,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
     tool.parameters.forEach((param) => {
       if (param.type === "art-style") {
-        const styleValue =
-          payload[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
+        const styleValue = payload[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
         payload[param.name] = styleValue;
       }
     });
@@ -541,8 +497,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const storedValue = value;
         const cacheKey = `${tool.id}:${param.name}`;
         const stylesForPicker = artStyleOptionsByParam.get(cacheKey) ?? [];
-        const pickerValue =
-          storedValue || param.defaultValue || selectedArtStyleId || "";
+        const pickerValue = storedValue || param.defaultValue || selectedArtStyleId || "";
 
         return (
           <Stack key={param.name} spacing={1} sx={{ width: "100%" }}>
@@ -561,11 +516,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               styles={stylesForPicker}
               value={pickerValue}
               onChange={onArtStyleChange}
-              disabled={
-                isProcessing ||
-                stylesForPicker.length === 0 ||
-                ART_STYLES.length === 0
-              }
+              disabled={isProcessing || stylesForPicker.length === 0 || ART_STYLES.length === 0}
               data-testid={inputTestId}
             />
           </Stack>
@@ -586,9 +537,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             rows={3}
             persistHeightKey={persistHeightKey}
             inputTestId={inputTestId}
-            onCommit={(nextValue) =>
-              handleParamChange(tool.id, param.name, nextValue)
-            }
+            onCommit={(nextValue) => handleParamChange(tool.id, param.name, nextValue)}
           />
         );
       }
@@ -603,18 +552,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const aspectRatioValue =
           isEditTool && rawAspectRatioValue === AUTO_ASPECT_RATIO
             ? AUTO_ASPECT_RATIO
-            : resolveAspectRatioValue(
-                rawAspectRatioValue,
-                undefined,
-                supportedAspectRatios,
-              );
+            : resolveAspectRatioValue(rawAspectRatioValue, undefined, supportedAspectRatios);
         return (
           <AspectRatioPicker
             key={param.name}
             value={aspectRatioValue}
-            onChange={(newValue) =>
-              handleParamChange(tool.id, param.name, newValue)
-            }
+            onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
             disabled={isProcessing}
             label={param.label}
             allowAuto={isEditTool}
@@ -629,10 +572,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "size") {
-        const sizeOptions = getOrderedSizeOptions(
-          param.options,
-          selectedModel?.id,
-        );
+        const sizeOptions = getOrderedSizeOptions(param.options, selectedModel?.id);
         const shouldPreferModelDefault =
           selectedModel?.id === GEMINI_3_1_FLASH_MODEL_ID &&
           (!value || value === param.defaultValue);
@@ -655,9 +595,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             <TextField
               select
               value={sizeValue}
-              onChange={(event) =>
-                handleParamChange(tool.id, param.name, event.target.value)
-              }
+              onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
               name={param.name}
               size="small"
               disabled={isProcessing}
@@ -684,9 +622,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             select
             label={param.label}
             value={value}
-            onChange={(event) =>
-              handleParamChange(tool.id, param.name, event.target.value)
-            }
+            onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
             name={param.name}
             fullWidth
             size="small"
@@ -715,9 +651,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           value={value}
           disabled={isProcessing}
           inputTestId={inputTestId}
-          onCommit={(nextValue) =>
-            handleParamChange(tool.id, param.name, nextValue)
-          }
+          onCommit={(nextValue) => handleParamChange(tool.id, param.name, nextValue)}
         />
       );
     },
@@ -757,17 +691,18 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const requiresDescriptionOrReference =
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
-    const submitDisabledReason = !isAuthenticated && requiresOpenRouter
-      ? "Connect to OpenRouter"
-      : needsTarget
-      ? "Add an image to edit -->"
-      : needsReference
-      ? "Add reference image"
-      : requiresDescriptionOrReference
-      ? "Add a description or reference image"
-      : missingRequired
-      ? "Fill in required fields"
-      : undefined;
+    const submitDisabledReason =
+      !isAuthenticated && requiresOpenRouter
+        ? "Connect to OpenRouter"
+        : needsTarget
+          ? "Add an image to edit -->"
+          : needsReference
+            ? "Add reference image"
+            : requiresDescriptionOrReference
+              ? "Add a description or reference image"
+              : missingRequired
+                ? "Fill in required fields"
+                : undefined;
     const isSubmitDisabled =
       isProcessing ||
       (requiresOpenRouter && !isAuthenticated) ||
@@ -779,7 +714,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const effectiveCapabilities = isSelected
       ? tool.referenceImages === "1+" && referenceImageCount > 1
         ? {
-            ...(tool.capabilities ?? {}),
+            ...tool.capabilities,
             "edit-with-reference-image": true,
           }
         : tool.capabilities
@@ -845,10 +780,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               {tool.title}
             </Typography>
             {isSelected && tool.description && (
-              <Typography
-                variant="body2"
-                sx={{ mt: 0.5, color: "rgba(255, 247, 236, 0.82)" }}
-              >
+              <Typography variant="body2" sx={{ mt: 0.5, color: "rgba(255, 247, 236, 0.82)" }}>
                 {tool.description}
               </Typography>
             )}
@@ -875,10 +807,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   const param = params[i];
                   const nextParam = params[i + 1];
                   const paramValue = toolParams[param.name] ?? "";
-                  if (
-                    param.name === "aspectRatio" &&
-                    nextParam?.name === "size"
-                  ) {
+                  if (param.name === "aspectRatio" && nextParam?.name === "size") {
                     const nextParamValue = toolParams[nextParam.name] ?? "";
                     elements.push(
                       <Box
@@ -889,23 +818,15 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                           alignItems: "flex-start",
                         }}
                       >
-                        <Box sx={{ flex: 1 }}>
-                          {renderParameterField(tool, param, paramValue)}
-                        </Box>
+                        <Box sx={{ flex: 1 }}>{renderParameterField(tool, param, paramValue)}</Box>
                         <Box sx={{ width: 80, flexShrink: 0 }}>
-                          {renderParameterField(
-                            tool,
-                            nextParam,
-                            nextParamValue,
-                          )}
+                          {renderParameterField(tool, nextParam, nextParamValue)}
                         </Box>
                       </Box>,
                     );
                     i += 2;
                   } else {
-                    elements.push(
-                      renderParameterField(tool, param, paramValue),
-                    );
+                    elements.push(renderParameterField(tool, param, paramValue));
                     i += 1;
                   }
                 }
@@ -942,14 +863,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                     <>
                       <span>
                         {tool.actionButtonLabel ||
-                          (tool.id === "generate_image"
-                            ? "Generate Image"
-                            : "Apply Changes")}
+                          (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
                       </span>
-                      <Icon
-                        path={Icons.ArrowRight}
-                        style={{ width: 18, height: 18 }}
-                      />
+                      <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                     </>
                   )}
                 </Button>
@@ -987,7 +903,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     <Box
       component="aside"
       sx={{
-        width: 320,
+        width: { xs: 184, sm: 240, md: 280, lg: 320 },
+        flexShrink: 0,
+        maxWidth: "100%",
         display: "flex",
         flexDirection: "column",
         height: "100%",

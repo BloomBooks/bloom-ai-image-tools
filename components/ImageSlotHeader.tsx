@@ -66,7 +66,7 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
               width: 32,
               height: 32,
               borderRadius: "50%",
-              color: isStarred ? theme.colors.textPrimary : theme.colors.textMuted,
+              color: isStarred ? theme.colors.textOnAccent : theme.colors.textMuted,
               bgcolor: isStarred ? theme.colors.accent : "transparent",
               boxShadow: isStarred ? `0 6px 16px ${theme.colors.panelShadow}` : "none",
               transition: "color 120ms ease, background-color 120ms ease, box-shadow 120ms ease",

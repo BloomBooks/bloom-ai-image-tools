@@ -14,6 +14,7 @@ export const theme = {
     textSecondary: "#d9cdb9",
     textMuted: "#ad9a81",
     accent: kPrimary,
+    textOnAccent: "#1a1205",
     accentHover: kPrimaryTextBackground,
     accentSubtle: "rgba(214, 187, 123, 0.18)",
     accentShadow: "0 10px 25px rgba(122, 101, 56, 0.28)",

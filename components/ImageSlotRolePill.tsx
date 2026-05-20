@@ -11,9 +11,7 @@ export interface ImageSlotRolePillProps {
   pill: ImageSlotRolePillModel;
 }
 
-export const ImageSlotRolePill: React.FC<ImageSlotRolePillProps> = ({
-  pill,
-}) => {
+export const ImageSlotRolePill: React.FC<ImageSlotRolePillProps> = ({ pill }) => {
   return (
     <div
       data-testid={pill.testId}
@@ -28,9 +26,8 @@ export const ImageSlotRolePill: React.FC<ImageSlotRolePillProps> = ({
         letterSpacing: "0.08em",
         userSelect: "none",
         zIndex: 10,
-        backgroundColor:
-          pill.kind === "target" ? theme.colors.accent : theme.colors.overlay,
-        color: theme.colors.textPrimary,
+        backgroundColor: pill.kind === "target" ? theme.colors.accent : theme.colors.overlay,
+        color: pill.kind === "target" ? theme.colors.textOnAccent : theme.colors.textPrimary,
         border: `1px solid ${theme.colors.panelBorder}`,
         boxShadow: theme.colors.insetShadow,
       }}

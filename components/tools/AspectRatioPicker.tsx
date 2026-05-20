@@ -72,14 +72,11 @@ const AspectRatioValue: React.FC<{
         <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
           {isAuto ? "Auto" : value}
         </Typography>
-        <Typography
-          variant="caption"
-          sx={{ color: "text.secondary", lineHeight: 1.2 }}
-        >
-          {isAuto
-            ? `Closest to input image${autoResolvedValue ? ` (${autoResolvedValue})` : ""}`
-            : `Aspect ratio ${value}`}
-        </Typography>
+        {isAuto && (
+          <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.2 }}>
+            {`Closest to input image${autoResolvedValue ? ` (${autoResolvedValue})` : ""}`}
+          </Typography>
+        )}
       </Stack>
     </Stack>
   );
@@ -95,9 +92,7 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
   options,
 }) => {
   const supportedOptions = getSupportedAspectRatioValues(options);
-  const menuOptions = allowAuto
-    ? [AUTO_ASPECT_RATIO, ...supportedOptions]
-    : supportedOptions;
+  const menuOptions = allowAuto ? [AUTO_ASPECT_RATIO, ...supportedOptions] : supportedOptions;
 
   return (
     <Stack spacing={1} sx={{ width: "100%" }}>
@@ -124,10 +119,7 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
         SelectProps={{
           MenuProps: { disablePortal: false },
           renderValue: (selected) => (
-            <AspectRatioValue
-              value={String(selected)}
-              autoResolvedValue={autoResolvedValue}
-            />
+            <AspectRatioValue value={String(selected)} autoResolvedValue={autoResolvedValue} />
           ),
         }}
       >
@@ -137,10 +129,7 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
             value={option}
             data-testid={`aspect-ratio-option-${option.replace(":", "-")}`}
           >
-            <AspectRatioValue
-              value={option}
-              autoResolvedValue={autoResolvedValue}
-            />
+            <AspectRatioValue value={option} autoResolvedValue={autoResolvedValue} />
           </MenuItem>
         ))}
       </TextField>

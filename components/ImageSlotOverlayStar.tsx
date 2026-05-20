@@ -44,7 +44,7 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: isStarred ? theme.colors.accent : theme.colors.overlay,
-        color: isStarred ? theme.colors.textPrimary : theme.colors.textPrimary,
+        color: isStarred ? theme.colors.textOnAccent : theme.colors.textPrimary,
         opacity: isStarred ? 1 : isHovered ? 1 : 0,
         transition:
           "opacity 120ms ease, color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease",

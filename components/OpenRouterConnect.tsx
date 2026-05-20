@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Box, Button, Stack, TextField, Typography } from "@mui/material";
+import ContentPasteIcon from "@mui/icons-material/ContentPaste";
+import {
+  Box,
+  Button,
+  Divider,
+  IconButton,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { theme } from "../themes";
 
 type ConnectionMode = "disconnected" | "apiKey" | "oauth";
@@ -41,12 +51,21 @@ export function OpenRouterConnect({
   const connectionMode: ConnectionMode = hasOAuthConnection
     ? "oauth"
     : hasApiKey
-    ? "apiKey"
-    : "disconnected";
+      ? "apiKey"
+      : "disconnected";
 
   const handleDisconnect = () => {
     onDisconnect();
     setKeyValue("");
+  };
+
+  const handlePaste = async () => {
+    const text = await navigator.clipboard.readText();
+    const trimmed = text.trim();
+    if (trimmed) {
+      setKeyValue(trimmed);
+      onProvideKey(trimmed);
+    }
   };
 
   const handleKeyBlur = () => {
@@ -84,7 +103,7 @@ export function OpenRouterConnect({
     description: OptionText,
     content: React.ReactNode,
     testId: string,
-    containerStyle: React.CSSProperties = {}
+    containerStyle: React.CSSProperties = {},
   ) => (
     <Box
       key={value}
@@ -94,10 +113,7 @@ export function OpenRouterConnect({
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        backgroundColor:
-          connectionMode === value
-            ? theme.colors.surfaceAlt
-            : theme.colors.surface,
+        backgroundColor: connectionMode === value ? theme.colors.surfaceAlt : theme.colors.surface,
         ...containerStyle,
       }}
     >
@@ -131,26 +147,18 @@ export function OpenRouterConnect({
               mt: 0.5,
             }}
           >
-            {connectionMode === value
-              ? description.active
-              : description.inactive}
+            {connectionMode === value ? description.active : description.inactive}
           </Typography>
         </Box>
       </Stack>
-      <Box sx={{ pl: 4, fontSize: "0.9rem", color: theme.colors.textPrimary }}>
-        {content}
-      </Box>
+      <Box sx={{ pl: 4, fontSize: "0.9rem", color: theme.colors.textPrimary }}>{content}</Box>
     </Box>
   );
 
-  const oauthButtonLabel =
-    connectionMode === "oauth" ? "Disconnect" : "Connect";
-  const oauthButtonAction =
-    connectionMode === "oauth" ? handleDisconnect : onConnect;
+  const oauthButtonLabel = connectionMode === "oauth" ? "Disconnect" : "Connect";
+  const oauthButtonAction = connectionMode === "oauth" ? handleDisconnect : onConnect;
   const oauthButtonTestId =
-    connectionMode === "oauth"
-      ? "openrouter-oauth-disconnect"
-      : "openrouter-oauth-connect";
+    connectionMode === "oauth" ? "openrouter-oauth-disconnect" : "openrouter-oauth-connect";
 
   const apiKeyDescriptions: OptionText = usingEnvKey
     ? {
@@ -175,10 +183,47 @@ export function OpenRouterConnect({
       sx={{ border: "none", p: 0, m: 0, minInlineSize: 0 }}
     >
       <Typography variant="body2">
-        OpenRouter credits are how you pre-pay for use of the AI Image Tools
-        from Google and others. Once you have an OpenRouter account, you can
-        either connect to it via login or paste in an API key.
+        OpenRouter credits are how you pre-pay for use of the AI Image Tools from Google and others.
+        Once you have an OpenRouter account, you can either connect to it via login or paste in an
+        API key.
       </Typography>
+
+      {renderOptionCard(
+        "oauth",
+        {
+          active: "Logged in with OpenRouter",
+          inactive: "Connect with OpenRouter login",
+        },
+        oauthDescriptions,
+        <Button
+          type="button"
+          data-testid={oauthButtonTestId}
+          onClick={oauthButtonAction}
+          disabled={isLoading}
+          variant="contained"
+          sx={{
+            borderRadius: 2,
+            fontWeight: 600,
+            px: 3,
+            backgroundColor: theme.colors.accent,
+            color: theme.colors.textOnAccent,
+            opacity: isLoading ? 0.6 : 1,
+            "&:hover": {
+              backgroundColor: theme.colors.accent,
+              opacity: 0.9,
+            },
+          }}
+        >
+          {isLoading ? "Working..." : oauthButtonLabel}
+        </Button>,
+        "openrouter-option-oauth",
+      )}
+
+      <Divider
+        sx={{ color: theme.colors.textSecondary, fontSize: "0.75rem", letterSpacing: "0.08em" }}
+      >
+        OR
+      </Divider>
 
       {renderOptionCard(
         "apiKey",
@@ -208,6 +253,24 @@ export function OpenRouterConnect({
                 flex: 1,
                 bgcolor: theme.colors.surface,
               }}
+              InputProps={{
+                endAdornment: !usingEnvKey && connectionMode !== "oauth" && !keyValue && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={handlePaste}
+                      aria-label="Paste API key"
+                      edge="end"
+                      sx={{
+                        color: theme.colors.textSecondary,
+                        "&:hover": { color: theme.colors.textPrimary },
+                      }}
+                    >
+                      <ContentPasteIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             {hasManualKey && !usingEnvKey && (
               <Button
@@ -228,46 +291,12 @@ export function OpenRouterConnect({
 
           {usingEnvKey && (
             <Typography variant="caption" color="text.secondary">
-              This key is provided by the environment and cannot be changed in
-              this interface.
+              This key is provided by the environment and cannot be changed in this interface.
             </Typography>
           )}
         </Stack>,
         "openrouter-option-api-key",
-        connectionMode === "oauth"
-          ? { opacity: 0.3, pointerEvents: "none" }
-          : {}
-      )}
-
-      {renderOptionCard(
-        "oauth",
-        {
-          active: "Logged in with OpenRouter",
-          inactive: "Connect with OpenRouter login",
-        },
-        oauthDescriptions,
-        <Button
-          type="button"
-          data-testid={oauthButtonTestId}
-          onClick={oauthButtonAction}
-          disabled={isLoading}
-          variant="contained"
-          sx={{
-            borderRadius: 2,
-            fontWeight: 600,
-            px: 3,
-            backgroundColor: theme.colors.accent,
-            color: theme.colors.textPrimary,
-            opacity: isLoading ? 0.6 : 1,
-            "&:hover": {
-              backgroundColor: theme.colors.accent,
-              opacity: 0.9,
-            },
-          }}
-        >
-          {isLoading ? "Working..." : oauthButtonLabel}
-        </Button>,
-        "openrouter-option-oauth"
+        connectionMode === "oauth" ? { opacity: 0.3, pointerEvents: "none" } : {},
       )}
     </Stack>
   );

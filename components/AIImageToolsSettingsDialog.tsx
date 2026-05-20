@@ -74,7 +74,7 @@ const primaryContainedButtonStyles = {
   px: 3,
   boxShadow: appTheme.colors.accentShadow,
   backgroundColor: appTheme.colors.accent,
-  color: appTheme.colors.textPrimary,
+  color: appTheme.colors.textOnAccent,
   "&:hover": {
     backgroundColor: appTheme.colors.accentHover,
     boxShadow: appTheme.colors.accentShadow,
@@ -83,9 +83,12 @@ const primaryContainedButtonStyles = {
 
 const dialogBackground = "#000";
 
-export const AIImageToolsSettingsDialog: React.FC<
-  AIImageToolsSettingsDialogProps
-> = ({ isOpen, onClose, openRouter, history }) => {
+export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProps> = ({
+  isOpen,
+  onClose,
+  openRouter,
+  history,
+}) => {
   const folderPath = folderPathFromName(history.directoryName);
   const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
 
@@ -119,16 +122,7 @@ export const AIImageToolsSettingsDialog: React.FC<
           }}
         >
           <Stack direction="row" spacing={2} alignItems="center">
-            <Box
-              sx={{
-                p: 1.5,
-                borderRadius: 2,
-                display: "inline-flex",
-                backgroundColor: appTheme.colors.surface,
-              }}
-            >
-              <Icon path={Icons.Gear} width={20} height={20} />
-            </Box>
+            <Icon path={Icons.Gear} width={20} height={20} />
             <Typography variant="h6" component="p" fontWeight={600}>
               AI Image Tools settings
             </Typography>
@@ -169,11 +163,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                     alt="OpenRouter"
                     sx={{ width: 24, height: 24 }}
                   />
-                  <Typography
-                    id="openrouter-section-title"
-                    variant="subtitle1"
-                    fontWeight={600}
-                  >
+                  <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
                     OpenRouter connection
                   </Typography>
                 </Stack>
@@ -192,8 +182,8 @@ export const AIImageToolsSettingsDialog: React.FC<
                     />
                     {openRouter.usingEnvKey && (
                       <Typography variant="caption" color="text.secondary">
-                        This environment-provided key cannot be edited here.
-                        Restart the session to switch accounts.
+                        This environment-provided key cannot be edited here. Restart the session to
+                        switch accounts.
                       </Typography>
                     )}
                   </Stack>
@@ -211,16 +201,11 @@ export const AIImageToolsSettingsDialog: React.FC<
                 <Stack direction="row" spacing={2} alignItems="flex-start">
                   <Icon path={Icons.History} width={20} height={20} />
                   <Box>
-                    <Typography
-                      id="history-section-title"
-                      variant="subtitle1"
-                      fontWeight={600}
-                    >
+                    <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
                       History storage
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Keep more than the recent few entries by using a folder on
-                      your computer.
+                      Link a folder on your computer to save your full history.
                     </Typography>
                   </Box>
                 </Stack>
@@ -230,11 +215,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                     severity="warning"
                     icon={
                       <Box component="span" sx={{ display: "inline-flex" }}>
-                        <Icon
-                          path={Icons.AlertTriangle}
-                          width={20}
-                          height={20}
-                        />
+                        <Icon path={Icons.AlertTriangle} width={20} height={20} />
                       </Box>
                     }
                   >
@@ -242,8 +223,8 @@ export const AIImageToolsSettingsDialog: React.FC<
                       Local folders need Chromium-based browsers
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Try Chrome, Edge, Arc, or another Chromium browser to
-                      unlock folder-backed history.
+                      Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed
+                      history.
                     </Typography>
                   </Alert>
                 )}
@@ -252,10 +233,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                   <Box sx={nestedCardStyles}>
                     <Typography variant="body2" color="text.secondary">
                       Images are written to{" "}
-                      <Box
-                        component="span"
-                        sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}
-                      >
+                      <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
                         {folderPath || "your folder"}
                       </Box>
                       .
@@ -264,7 +242,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                       <Button
                         variant="contained"
                         color="primary"
-                        onClick={() => void history.onDisableFolder()}
+                        onClick={() => history.onDisableFolder()}
                         disabled={history.isLoading}
                         sx={{
                           borderRadius: 999,
@@ -277,8 +255,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                           },
                         }}
                       >
-                        {historyLoadingLabel ||
-                          "Stop storing history in folder"}
+                        {historyLoadingLabel || "Stop storing history in folder"}
                       </Button>
                     </Stack>
                   </Box>
@@ -286,7 +263,7 @@ export const AIImageToolsSettingsDialog: React.FC<
                   <Button
                     variant="contained"
                     color="primary"
-                    onClick={() => void history.onEnableFolder()}
+                    onClick={() => history.onEnableFolder()}
                     disabled={history.isLoading || !history.isSupported}
                     sx={{
                       ...primaryContainedButtonStyles,

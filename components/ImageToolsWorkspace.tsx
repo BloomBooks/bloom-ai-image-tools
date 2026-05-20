@@ -30,6 +30,7 @@ import { darkTheme } from "./materialUITheme";
 import { handleOAuthCallback, initiateOAuthFlow } from "../lib/openRouterOAuth";
 import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
 import { ModelChooserDialog } from "./ModelChooserDialog";
+import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { Icon, Icons } from "./Icons";
@@ -387,6 +388,8 @@ export function ImageToolsWorkspace({
   );
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isWelcomeDialogOpen, setIsWelcomeDialogOpen] = useState(false);
+  const hasShownWelcomeRef = useRef(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -724,6 +727,13 @@ export function ImageToolsWorkspace({
       isAuthenticated: !!(apiKey || envApiKey),
     }));
   }, [apiKey, envApiKey]);
+
+  useEffect(() => {
+    if (isHydrated && !effectiveApiKey && !hasShownWelcomeRef.current) {
+      hasShownWelcomeRef.current = true;
+      setIsWelcomeDialogOpen(true);
+    }
+  }, [isHydrated, effectiveApiKey]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -2417,6 +2427,15 @@ export function ImageToolsWorkspace({
             onDismissError={handleDismissError}
           />
         </Box>
+
+        <OpenRouterWelcomeDialog
+          isOpen={isWelcomeDialogOpen}
+          onConnect={() => {
+            setIsWelcomeDialogOpen(false);
+            setIsSettingsDialogOpen(true);
+          }}
+          onDismiss={() => setIsWelcomeDialogOpen(false)}
+        />
 
         <AIImageToolsSettingsDialog
           isOpen={isSettingsDialogOpen}

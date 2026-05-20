@@ -29,16 +29,19 @@ import {
 } from "../../lib/aspectRatios";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
 
-const ADVANCED_TOOL_IDS = new Set([
-  "generate_image",
+const GAMES_TOOL_IDS = new Set([
   "break_into_pieces",
   "make_gif",
+  "remove_object",
+  "remove_background",
+]);
+
+const ADVANCED_TOOL_IDS = new Set([
+  "generate_image",
   "change_style",
   "custom",
   "generate_pallet",
   "game_theme_generator",
-  "remove_object",
-  "remove_background",
 ]);
 
 const TEXT_TOOL_IDS = new Set(["change_text", "stylized_title"]);
@@ -363,11 +366,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId;
+  const [isGamesOpen, setIsGamesOpen] = useState(() =>
+    activeToolId ? GAMES_TOOL_IDS.has(activeToolId) : false,
+  );
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(() =>
     activeToolId ? ADVANCED_TOOL_IDS.has(activeToolId) : false,
   );
 
   useEffect(() => {
+    if (activeToolId && GAMES_TOOL_IDS.has(activeToolId)) {
+      setIsGamesOpen(true);
+    }
     if (activeToolId && ADVANCED_TOOL_IDS.has(activeToolId)) {
       setIsAdvancedOpen(true);
     }
@@ -438,9 +447,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   );
 
   const defaultTools = useMemo(
-    () => TOOLS.filter((tool) => !ADVANCED_TOOL_IDS.has(tool.id) && !TEXT_TOOL_IDS.has(tool.id)),
+    () =>
+      TOOLS.filter(
+        (tool) =>
+          !GAMES_TOOL_IDS.has(tool.id) &&
+          !ADVANCED_TOOL_IDS.has(tool.id) &&
+          !TEXT_TOOL_IDS.has(tool.id),
+      ),
     [],
   );
+
+  const gamesTools = useMemo(() => TOOLS.filter((tool) => GAMES_TOOL_IDS.has(tool.id)), []);
 
   const advancedTools = useMemo(() => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)), []);
 
@@ -476,7 +493,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
     const formData = new FormData(event.currentTarget);
     formData.forEach((formValue, key) => {
-      payload[key] = String(formValue);
+      if (typeof formValue === "string") {
+        payload[key] = formValue;
+      }
     });
 
     tool.parameters.forEach((param) => {
@@ -663,6 +682,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       selectedArtStyleId,
       selectedModel?.id,
       handleParamChange,
+      targetImageResolution,
     ],
   );
 
@@ -940,6 +960,33 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           </Stack>
         )}
 
+        {gamesTools.length > 0 && (
+          <Stack spacing={1.25}>
+            <ButtonBase
+              onClick={() => setIsGamesOpen((current) => !current)}
+              sx={{
+                width: "100%",
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: alpha(muiTheme.palette.text.secondary, 0.9),
+              }}
+            >
+              {renderSectionHeader("Games")}
+              <ExpandMoreIcon
+                sx={{
+                  transition: "transform 0.2s ease",
+                  transform: isGamesOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                }}
+              />
+            </ButtonBase>
+            {isGamesOpen && gamesTools.map(renderToolCard)}
+          </Stack>
+        )}
+
         {advancedTools.length > 0 && (
           <Stack spacing={1.25}>
             <ButtonBase
@@ -955,7 +1002,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Advanced")}
+              {renderSectionHeader("More")}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",

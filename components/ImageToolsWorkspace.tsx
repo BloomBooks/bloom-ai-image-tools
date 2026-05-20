@@ -394,7 +394,6 @@ export function ImageToolsWorkspace({
   const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
-  const [connectCtaAttentionKey, setConnectCtaAttentionKey] = useState(0);
   const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(null);
   const [fsLoading, setFsLoading] = useState(false);
   const [fsError, setFsError] = useState<string | null>(null);
@@ -2225,10 +2224,6 @@ export function ImageToolsWorkspace({
   const shouldShowConnectToOpenRouterCTA = !effectiveApiKey;
   const prototypeNoticeColor = theme.colors.accent;
 
-  const triggerConnectCtaAttention = useCallback(() => {
-    setConnectCtaAttentionKey((current) => current + 1);
-  }, []);
-
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
@@ -2293,7 +2288,6 @@ export function ImageToolsWorkspace({
               <OpenRouterCreditsHeader
                 shouldShowConnectToOpenRouterCTA={shouldShowConnectToOpenRouterCTA}
                 onOpenSettingsDialog={() => setIsSettingsDialogOpen(true)}
-                connectCtaAttentionKey={connectCtaAttentionKey}
                 creditsTooltipLabel={creditsTooltipLabel}
                 creditsTooltipLines={creditsTooltipLines}
                 creditsProgressFraction={creditsProgressFraction}
@@ -2381,8 +2375,6 @@ export function ImageToolsWorkspace({
           <ImageToolsBar
             appState={state}
             selectedModel={selectedModel || null}
-            isToolRailDisabled={shouldShowConnectToOpenRouterCTA}
-            onDisabledToolRailClick={triggerConnectCtaAttention}
             targetImage={targetImage}
             referenceImages={referenceItems}
             rightImage={rightItem}

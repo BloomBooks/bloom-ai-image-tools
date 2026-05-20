@@ -28,6 +28,7 @@ import {
   resolveAspectRatioValue,
 } from "../../lib/aspectRatios";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
+import { theme } from "../../themes";
 
 const GAMES_TOOL_IDS = new Set([
   "break_into_pieces",
@@ -711,18 +712,15 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const requiresDescriptionOrReference =
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
-    const submitDisabledReason =
-      !isAuthenticated && requiresOpenRouter
-        ? "Connect to OpenRouter"
-        : needsTarget
-          ? "Add an image to edit -->"
-          : needsReference
-            ? "Add reference image"
-            : requiresDescriptionOrReference
-              ? "Add a description or reference image"
-              : missingRequired
-                ? "Fill in required fields"
-                : undefined;
+    const submitDisabledReason = needsTarget
+      ? "Add an image to edit -->"
+      : needsReference
+        ? "Add reference image"
+        : requiresDescriptionOrReference
+          ? "Add a description or reference image"
+          : missingRequired
+            ? "Fill in required fields"
+            : undefined;
     const isSubmitDisabled =
       isProcessing ||
       (requiresOpenRouter && !isAuthenticated) ||
@@ -872,6 +870,10 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                     minHeight: 44,
                     fontWeight: 400,
                     gap: 1,
+                    "&.Mui-disabled": {
+                      backgroundColor: theme.colors.surfaceRaised,
+                      color: theme.colors.textSecondary,
+                    },
                   }}
                 >
                   {isProcessing ? (

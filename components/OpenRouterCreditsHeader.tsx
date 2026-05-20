@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import { keyframes } from "@emotion/react";
 
@@ -25,8 +25,6 @@ const wiggle = keyframes`
 export type OpenRouterCreditsHeaderProps = {
   shouldShowConnectToOpenRouterCTA: boolean;
   onOpenSettingsDialog: () => void;
-  connectCtaAttentionKey?: number;
-
   // Credits UI state (only used when shouldShowConnectToOpenRouterCTA=false)
   creditsTooltipLabel: string;
   creditsTooltipLines: string[];
@@ -54,7 +52,6 @@ export type OpenRouterCreditsHeaderProps = {
 export function OpenRouterCreditsHeader({
   shouldShowConnectToOpenRouterCTA,
   onOpenSettingsDialog,
-  connectCtaAttentionKey = 0,
   creditsTooltipLabel,
   creditsTooltipLines,
   creditsProgressFraction,
@@ -66,40 +63,6 @@ export function OpenRouterCreditsHeader({
   appColors,
 }: OpenRouterCreditsHeaderProps) {
   const [isWiggling, setIsWiggling] = useState(false);
-  const wiggleTimeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!shouldShowConnectToOpenRouterCTA || connectCtaAttentionKey === 0) {
-      return;
-    }
-
-    if (wiggleTimeoutRef.current !== null && typeof window !== "undefined") {
-      window.clearTimeout(wiggleTimeoutRef.current);
-    }
-
-    setIsWiggling(false);
-
-    let rafId = 0;
-    if (typeof window !== "undefined") {
-      rafId = window.requestAnimationFrame(() => {
-        setIsWiggling(true);
-        wiggleTimeoutRef.current = window.setTimeout(() => {
-          setIsWiggling(false);
-          wiggleTimeoutRef.current = null;
-        }, 560);
-      });
-    }
-
-    return () => {
-      if (typeof window !== "undefined") {
-        window.cancelAnimationFrame(rafId);
-        if (wiggleTimeoutRef.current !== null) {
-          window.clearTimeout(wiggleTimeoutRef.current);
-          wiggleTimeoutRef.current = null;
-        }
-      }
-    };
-  }, [connectCtaAttentionKey, shouldShowConnectToOpenRouterCTA]);
 
   if (shouldShowConnectToOpenRouterCTA) {
     return (
@@ -150,10 +113,9 @@ export function OpenRouterCreditsHeader({
         outline: "none",
         textDecoration: "none",
         color: "inherit",
-        "&:hover [data-role='credits-tooltip'], &:focus-within [data-role='credits-tooltip']":
-          {
-            opacity: 1,
-          },
+        "&:hover [data-role='credits-tooltip'], &:focus-within [data-role='credits-tooltip']": {
+          opacity: 1,
+        },
       }}
     >
       <Typography
@@ -187,10 +149,7 @@ export function OpenRouterCreditsHeader({
               borderRadius: 999,
               transition: "width 200ms ease",
               backgroundColor: progressFillColor,
-              width: `${Math.max(
-                0,
-                Math.min(100, (creditsProgressFraction ?? 0) * 100)
-              )}%`,
+              width: `${Math.max(0, Math.min(100, (creditsProgressFraction ?? 0) * 100))}%`,
               opacity: creditsProgressFraction !== null ? 1 : 0.35,
             }}
           />

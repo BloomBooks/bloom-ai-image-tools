@@ -58,6 +58,7 @@ export type ImageSlotActionsProps = {
   supportsUpload: boolean;
   supportsRemove: boolean;
   actionLabels?: Partial<Record<keyof SlotControls, string>>;
+  removeIcon?: string;
   iconSize: number;
   buttonPadding: number;
   cornerOffset: number;
@@ -84,6 +85,7 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       supportsUpload,
       supportsRemove,
       actionLabels,
+      removeIcon,
       iconSize,
       buttonPadding,
       cornerOffset,
@@ -238,7 +240,7 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       },
       {
         key: "remove",
-        icon: Icons.X,
+        icon: removeIcon ?? Icons.X,
         title: actionLabels?.remove ?? defaultActionLabels.remove,
         onClick: onRemove,
         isVisible: controls.remove && !!image && supportsRemove,

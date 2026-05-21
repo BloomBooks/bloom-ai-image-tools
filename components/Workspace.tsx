@@ -160,6 +160,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
+  const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;
   const canAddReferenceSlot =
     referenceImages.length < maxReferenceCount || !Number.isFinite(maxReferenceCount);
 
@@ -423,6 +424,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   dndDragId={targetImage ? `panelItem:target:${targetImage.id}` : undefined}
                   uploadInputTestId="target-upload-input"
                   onToggleStar={targetImage ? () => onToggleHistoryStar(targetImage.id) : undefined}
+                  needsImage={needsEditImage}
                 />
               </Box>
             )}

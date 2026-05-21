@@ -87,6 +87,7 @@ export interface ImageSlotProps {
   dropLabel?: string;
   dataTestId?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
+  removeIcon?: string;
   starState?: { isStarred: boolean; onToggle: () => void };
   isAnyDndDragging?: boolean;
 }
@@ -256,6 +257,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dropLabel = "Drop image",
   dataTestId,
   actionLabels,
+  removeIcon,
   starState,
   isAnyDndDragging: isAnyDndDraggingProp = false,
 }) => {
@@ -641,6 +643,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         supportsUpload={!!onUpload}
         supportsRemove={!!onRemove}
         actionLabels={actionLabels}
+        removeIcon={removeIcon}
         iconSize={ACTION_ICON_SIZE}
         buttonPadding={ACTION_BUTTON_PADDING}
         cornerOffset={OVERLAY_CORNER_OFFSET}
@@ -803,6 +806,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               supportsUpload={!!onUpload}
               supportsRemove={!!onRemove}
               actionLabels={actionLabels}
+              removeIcon={removeIcon}
               iconSize={ACTION_ICON_SIZE}
               buttonPadding={ACTION_BUTTON_PADDING}
               cornerOffset={OVERLAY_CORNER_OFFSET}

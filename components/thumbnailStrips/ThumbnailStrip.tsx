@@ -74,6 +74,7 @@ type StripThumbBaseProps = {
 // This is the expensive part. Memoized so it doesn't re-render every time
 // the dnd-kit context updates the wrapper's listeners.
 type ThumbVisualProps = {
+  stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
   isAnyDndDragging: boolean;
@@ -84,6 +85,7 @@ type ThumbVisualProps = {
 };
 
 const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
+  stripId,
   item,
   isSelected,
   isAnyDndDragging,
@@ -97,6 +99,7 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
     w.__thumbRenders = (w.__thumbRenders ?? 0) + 1;
   }
   const image = item.imageData ? item : null;
+  const isHistoryStrip = stripId === "history";
   return (
     <ImageSlot
       image={image}
@@ -114,8 +117,10 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
         remove: allowRemove,
       }}
       onRemove={allowRemove ? onRemove : undefined}
+      removeIcon={isHistoryStrip ? Icons.Trash : undefined}
+      actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
       starState={{
-        isStarred: Boolean(item.isStarred),
+        isStarred: Boolean(item.isStarred) || stripId === "starred",
         onToggle: onToggleStar,
       }}
     />
@@ -126,6 +131,7 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
 // the parent every render but behave identically.
 const ThumbVisual = React.memo(ThumbVisualInner, (prev, next) => {
   return (
+    prev.stripId === next.stripId &&
     prev.item.id === next.item.id &&
     prev.item.imageData === next.item.imageData &&
     prev.item.isStarred === next.item.isStarred &&
@@ -176,6 +182,7 @@ const StripThumbBase: React.FC<StripThumbBaseProps> = ({
       {...listeners}
     >
       <ThumbVisual
+        stripId={stripId}
         item={item}
         isSelected={isSelected}
         isAnyDndDragging={isAnyDndDragging}

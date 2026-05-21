@@ -28,7 +28,7 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
   starred: {
     id: "starred",
     label: "Starred",
-    allowRemove: true,
+    allowRemove: false,
     allowReorder: true,
     allowDrop: true,
   },

@@ -27,7 +27,11 @@ import {
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { darkTheme } from "./materialUITheme";
-import { handleOAuthCallback, initiateOAuthFlow } from "../lib/openRouterOAuth";
+import {
+  getOAuthCodeFromUrl,
+  handleOAuthCallback,
+  initiateOAuthFlow,
+} from "../lib/openRouterOAuth";
 import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
 import { ModelChooserDialog } from "./ModelChooserDialog";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
@@ -728,7 +732,7 @@ export function ImageToolsWorkspace({
   }, [apiKey, envApiKey]);
 
   useEffect(() => {
-    if (isHydrated && !effectiveApiKey && !hasShownWelcomeRef.current) {
+    if (isHydrated && !effectiveApiKey && !hasShownWelcomeRef.current && !getOAuthCodeFromUrl()) {
       hasShownWelcomeRef.current = true;
       setIsWelcomeDialogOpen(true);
     }
@@ -2098,23 +2102,39 @@ export function ImageToolsWorkspace({
 
   const handleStripDragActivate = handleStripActivate;
 
+  const handleDeleteFromHistory = useCallback(
+    (imageId: string) => {
+      const entry = state.history.find((item) => item.id === imageId);
+      if (entry) {
+        void deleteHistoryImageFromFolder(entry);
+      }
+      setState((prev) => ({
+        ...prev,
+        history: prev.history.filter((item) => item.id !== imageId),
+        targetImageId: prev.targetImageId === imageId ? null : prev.targetImageId,
+        rightPanelImageId: prev.rightPanelImageId === imageId ? null : prev.rightPanelImageId,
+        referenceImageIds: prev.referenceImageIds.filter((id) => id !== imageId),
+      }));
+      setResultImageIds((prev) => prev.filter((id) => id !== imageId));
+      setThumbnailStrips((prev) => removeItemsFromAllStrips(prev, [imageId]));
+    },
+    [state.history, deleteHistoryImageFromFolder],
+  );
+
   const handleStripRemoveItem = useCallback(
     (stripId: ThumbnailStripId, imageId: string) => {
       const config = resolvedThumbnailStripConfigs[stripId];
       if (!config.allowRemove) {
         return;
       }
-      if (stripId === "starred") {
-        const entry = state.history.find((item) => item.id === imageId);
-        if (entry?.isStarred) {
-          handleToggleHistoryStar(imageId);
-        }
+      if (stripId === "history") {
+        handleDeleteFromHistory(imageId);
         return;
       }
 
       setThumbnailStrips((prev) => removeItemFromStrip(prev, stripId, imageId));
     },
-    [handleToggleHistoryStar, state.history, resolvedThumbnailStripConfigs],
+    [handleDeleteFromHistory, resolvedThumbnailStripConfigs],
   );
 
   const handleDismissError = () => {
@@ -2424,7 +2444,7 @@ export function ImageToolsWorkspace({
           isOpen={isWelcomeDialogOpen}
           onConnect={() => {
             setIsWelcomeDialogOpen(false);
-            setIsSettingsDialogOpen(true);
+            void handleConnect();
           }}
           onDismiss={() => setIsWelcomeDialogOpen(false)}
         />

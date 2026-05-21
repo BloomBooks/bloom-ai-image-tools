@@ -1,11 +1,17 @@
 import React from "react";
 import { Box } from "@mui/material";
+import { keyframes } from "@emotion/react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
 import { ImageSlotHeader } from "./ImageSlotHeader";
+
+const editImagePulse = keyframes`
+  0%, 100% { background-color: transparent; }
+  50% { background-color: rgba(240, 213, 154, 0.10); }
+`;
 
 export type ImagePanelSlot = {
   slotIndex: number;
@@ -43,6 +49,7 @@ type SingleImagePanelProps = {
   onToggleStar?: () => void;
   dndDropId?: string;
   dndDragId?: string;
+  needsImage?: boolean;
 };
 
 type GridImagePanelProps = {
@@ -213,6 +220,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     dndDropId,
     dndDragId,
     isAnyDndDragging = false,
+    needsImage = false,
   } = props;
 
   const starState =
@@ -247,6 +255,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
             background: "none",
             border: "none",
             cursor: showUploadControls ? "pointer" : "default",
+            borderRadius: "24px",
+            ...(needsImage && {
+              animation: `${editImagePulse} 2.8s ease-in-out infinite`,
+            }),
           }}
         >
           <Box
@@ -258,12 +270,29 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
               maxWidth: "220px",
               width: "100%",
               height: "auto",
-              mb: 3,
+              mb: needsImage ? 1.5 : 3,
               mx: "auto",
               objectFit: "contain",
               opacity: 0.3,
             }}
           />
+          {needsImage && (
+            <Box
+              component="p"
+              sx={{
+                m: 0,
+                fontSize: "0.8rem",
+                opacity: 0.8,
+                fontWeight: 500,
+                textAlign: "center",
+                px: 2,
+                color: theme.colors.textMuted,
+                pointerEvents: "none",
+              }}
+            >
+              Drop or paste an image to edit
+            </Box>
+          )}
         </Box>
       );
     }

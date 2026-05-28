@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
+  getOtherStripsContainingItem,
   hydrateThumbnailStripsSnapshot,
   mergeThumbnailStripsSnapshots,
   removeItemsFromAllStrips,
@@ -74,6 +75,7 @@ describe("thumbnail strip helpers", () => {
         starred: ["drop"],
         reference: ["keep", "drop"],
         environment: ["drop", "keep"],
+        characters: [],
       },
     };
 
@@ -83,6 +85,27 @@ describe("thumbnail strip helpers", () => {
     expect(stripped.itemIdsByStrip.starred).toEqual([]);
     expect(stripped.itemIdsByStrip.reference).toEqual(["keep"]);
     expect(stripped.itemIdsByStrip.environment).toEqual(["keep"]);
+  });
+
+  it("finds other strips that still contain a history item", () => {
+    const base = createDefaultThumbnailStripsSnapshot();
+    const seeded = {
+      ...base,
+      itemIdsByStrip: {
+        ...base.itemIdsByStrip,
+        history: ["shared", "history-only"],
+        characters: ["shared"],
+        starred: ["shared"],
+        reference: [],
+        environment: [],
+      },
+    };
+
+    expect(getOtherStripsContainingItem(seeded, "history", "shared")).toEqual([
+      "characters",
+      "starred",
+    ]);
+    expect(getOtherStripsContainingItem(seeded, "history", "history-only")).toEqual([]);
   });
 
   it("hydrates snapshot from persisted data and entries", () => {
@@ -104,6 +127,7 @@ describe("thumbnail strip helpers", () => {
         starred: [],
         reference: [],
         environment: [],
+        characters: [],
       },
     };
 
@@ -126,6 +150,7 @@ describe("thumbnail strip helpers", () => {
         starred: ["local"],
         reference: ["ref"],
         environment: [],
+        characters: [],
       },
     };
     const incoming = {
@@ -136,6 +161,7 @@ describe("thumbnail strip helpers", () => {
         starred: [],
         reference: [],
         environment: [],
+        characters: [],
       },
     };
 

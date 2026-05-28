@@ -1,5 +1,9 @@
 import type { ModelReasoningLevel } from "../types";
 import { getOpenAIOrientation } from "../lib/aspectRatios";
+import {
+  canUseLocalDummyModelWithoutApiKey,
+  LOCAL_DUMMY_MODEL_ID,
+} from "../lib/localModels";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
@@ -173,6 +177,226 @@ function mapAspectRatioToOpenAISize(aspectRatio?: string): string {
   }
 }
 
+const getNow = () =>
+  typeof performance !== "undefined" ? performance.now() : Date.now();
+
+const resolveLocalDummyDimensions = (aspectRatio?: string) => {
+  const match = aspectRatio?.trim().match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+  if (!match) {
+    return { width: 1024, height: 1024 };
+  }
+
+  const widthRatio = Number(match[1]);
+  const heightRatio = Number(match[2]);
+  if (!Number.isFinite(widthRatio) || !Number.isFinite(heightRatio) || heightRatio <= 0) {
+    return { width: 1024, height: 1024 };
+  }
+
+  const ratio = widthRatio / heightRatio;
+  if (ratio >= 1) {
+    return {
+      width: 1280,
+      height: Math.max(720, Math.round(1280 / ratio)),
+    };
+  }
+
+  return {
+    width: Math.max(720, Math.round(1280 * ratio)),
+    height: 1280,
+  };
+};
+
+type DummyFigurePalette = {
+  skin: string;
+  shirt: string;
+  accent: string;
+  bottoms: string;
+  hair: string;
+};
+
+const drawDummyFigure = (
+  context: CanvasRenderingContext2D,
+  centerX: number,
+  baselineY: number,
+  scale: number,
+  palette: DummyFigurePalette,
+) => {
+  const headRadius = 34 * scale;
+  const headY = baselineY - 168 * scale;
+  const torsoTop = headY + 42 * scale;
+  const torsoBottom = baselineY - 66 * scale;
+  const shoulderWidth = 54 * scale;
+  const hipWidth = 38 * scale;
+
+  context.save();
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.strokeStyle = "#332117";
+  context.lineWidth = 6 * scale;
+
+  context.fillStyle = palette.skin;
+  context.beginPath();
+  context.arc(centerX, headY, headRadius, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = palette.hair;
+  context.beginPath();
+  context.arc(centerX, headY - 5 * scale, headRadius * 0.98, Math.PI, Math.PI * 2);
+  context.lineTo(centerX + headRadius * 0.88, headY);
+  context.quadraticCurveTo(centerX, headY - headRadius * 1.2, centerX - headRadius * 0.88, headY);
+  context.closePath();
+  context.fill();
+
+  context.fillStyle = palette.accent;
+  context.beginPath();
+  context.arc(centerX - 12 * scale, headY + 4 * scale, 5 * scale, 0, Math.PI * 2);
+  context.arc(centerX + 12 * scale, headY + 4 * scale, 5 * scale, 0, Math.PI * 2);
+  context.fill();
+
+  context.strokeStyle = "#59392a";
+  context.lineWidth = 3 * scale;
+  context.beginPath();
+  context.arc(centerX - 12 * scale, headY + 4 * scale, 6 * scale, 0, Math.PI * 2);
+  context.arc(centerX + 12 * scale, headY + 4 * scale, 6 * scale, 0, Math.PI * 2);
+  context.stroke();
+
+  context.beginPath();
+  context.arc(centerX - 6 * scale, headY + 14 * scale, 3 * scale, 0, Math.PI * 2);
+  context.arc(centerX + 6 * scale, headY + 14 * scale, 3 * scale, 0, Math.PI * 2);
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(centerX - 14 * scale, headY + 24 * scale);
+  context.quadraticCurveTo(centerX, headY + 34 * scale, centerX + 14 * scale, headY + 24 * scale);
+  context.stroke();
+
+  context.fillStyle = palette.shirt;
+  context.strokeStyle = "#332117";
+  context.lineWidth = 5 * scale;
+  context.beginPath();
+  context.moveTo(centerX - shoulderWidth, torsoTop);
+  context.lineTo(centerX + shoulderWidth, torsoTop);
+  context.lineTo(centerX + hipWidth, torsoBottom);
+  context.lineTo(centerX - hipWidth, torsoBottom);
+  context.closePath();
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = palette.accent;
+  context.beginPath();
+  context.moveTo(centerX - 10 * scale, torsoTop);
+  context.lineTo(centerX + 10 * scale, torsoTop);
+  context.lineTo(centerX, torsoTop + 18 * scale);
+  context.closePath();
+  context.fill();
+
+  context.strokeStyle = palette.skin;
+  context.lineWidth = 10 * scale;
+  context.beginPath();
+  context.moveTo(centerX - shoulderWidth + 4 * scale, torsoTop + 18 * scale);
+  context.lineTo(centerX - 64 * scale, torsoTop + 70 * scale);
+  context.moveTo(centerX + shoulderWidth - 4 * scale, torsoTop + 18 * scale);
+  context.lineTo(centerX + 64 * scale, torsoTop + 70 * scale);
+  context.stroke();
+
+  context.strokeStyle = "#59392a";
+  context.lineWidth = 4 * scale;
+  context.beginPath();
+  context.moveTo(centerX - shoulderWidth + 4 * scale, torsoTop + 18 * scale);
+  context.lineTo(centerX - 64 * scale, torsoTop + 70 * scale);
+  context.moveTo(centerX + shoulderWidth - 4 * scale, torsoTop + 18 * scale);
+  context.lineTo(centerX + 64 * scale, torsoTop + 70 * scale);
+  context.stroke();
+
+  context.fillStyle = palette.bottoms;
+  context.strokeStyle = "#332117";
+  context.lineWidth = 5 * scale;
+  context.fillRect(centerX - 34 * scale, torsoBottom - 2 * scale, 68 * scale, 38 * scale);
+  context.strokeRect(centerX - 34 * scale, torsoBottom - 2 * scale, 68 * scale, 38 * scale);
+
+  context.strokeStyle = palette.skin;
+  context.lineWidth = 10 * scale;
+  context.beginPath();
+  context.moveTo(centerX - 18 * scale, torsoBottom + 36 * scale);
+  context.lineTo(centerX - 26 * scale, baselineY);
+  context.moveTo(centerX + 18 * scale, torsoBottom + 36 * scale);
+  context.lineTo(centerX + 26 * scale, baselineY);
+  context.stroke();
+
+  context.strokeStyle = "#59392a";
+  context.lineWidth = 4 * scale;
+  context.beginPath();
+  context.moveTo(centerX - 18 * scale, torsoBottom + 36 * scale);
+  context.lineTo(centerX - 26 * scale, baselineY);
+  context.moveTo(centerX + 18 * scale, torsoBottom + 36 * scale);
+  context.lineTo(centerX + 26 * scale, baselineY);
+  context.stroke();
+
+  context.strokeStyle = "#5c3d2e";
+  context.lineWidth = 6 * scale;
+  context.beginPath();
+  context.moveTo(centerX - 38 * scale, baselineY + 6 * scale);
+  context.lineTo(centerX - 16 * scale, baselineY + 6 * scale);
+  context.moveTo(centerX + 16 * scale, baselineY + 6 * scale);
+  context.lineTo(centerX + 38 * scale, baselineY + 6 * scale);
+  context.stroke();
+  context.restore();
+};
+
+const createLocalDummyImage = async (aspectRatio?: string): Promise<string> => {
+  if (typeof document === "undefined") {
+    throw new Error("Local dummy model requires a browser environment.");
+  }
+
+  const { width, height } = resolveLocalDummyDimensions(aspectRatio);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas context unavailable for local dummy model.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+
+  const baselineY = Math.round(height * 0.8);
+  const figureScale = Math.min(width / 1280, height / 960);
+
+  context.strokeStyle = "#d7d7d7";
+  context.lineWidth = Math.max(2, Math.round(2 * figureScale));
+  context.lineCap = "round";
+  context.beginPath();
+  context.moveTo(width * 0.18, baselineY + 8 * figureScale);
+  context.lineTo(width * 0.82, baselineY + 8 * figureScale);
+  context.stroke();
+
+  drawDummyFigure(context, width * 0.28, baselineY, figureScale * 1.08, {
+    skin: "#8d5a3b",
+    shirt: "#e6b80f",
+    accent: "#b33b2d",
+    bottoms: "#7e5637",
+    hair: "#3c2415",
+  });
+  drawDummyFigure(context, width * 0.5, baselineY + 8 * figureScale, figureScale * 0.88, {
+    skin: "#9b6643",
+    shirt: "#e8b0c0",
+    accent: "#b55d7d",
+    bottoms: "#d88aa0",
+    hair: "#3c2415",
+  });
+  drawDummyFigure(context, width * 0.72, baselineY + 4 * figureScale, figureScale, {
+    skin: "#8c5738",
+    shirt: "#8e5bc7",
+    accent: "#6b3fa8",
+    bottoms: "#63baa8",
+    hair: "#3c2415",
+  });
+
+  return canvas.toDataURL("image/png");
+};
+
 /**
  * Maps size parameter to Gemini image_size format.
  * Gemini supports: "1K", "2K", "4K" (note: uppercase K required).
@@ -209,6 +433,18 @@ export const editImage = async (
   modelId?: string,
   options?: EditImageOptions,
 ): Promise<EditImageResult> => {
+  const startTime = getNow();
+  const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
+
+  if (canUseLocalDummyModelWithoutApiKey(modelToUse)) {
+    return {
+      imageData: await createLocalDummyImage(options?.imageConfig?.aspectRatio),
+      duration: getNow() - startTime,
+      model: LOCAL_DUMMY_MODEL_ID,
+      cost: 0,
+    };
+  }
+
   const key = apiKey?.trim();
   if (!key) {
     throw new Error(
@@ -218,10 +454,9 @@ export const editImage = async (
 
   const { signal, imageConfig } = options ?? {};
   const reasoningLevel = options?.reasoningLevel ?? "default";
-  const startTime = performance.now();
+  const localStartTime = getNow();
   const images = (base64Images || []).filter((x) => !!x);
   const hasImage = images.length > 0;
-  const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   const content: any[] = [{ type: "text", text: prompt }];
   if (hasImage) {
@@ -355,7 +590,7 @@ export const editImage = async (
 
   return {
     imageData: b64,
-    duration: performance.now() - startTime,
+    duration: getNow() - localStartTime,
     model: responseModel,
     cost: responseCost,
   };

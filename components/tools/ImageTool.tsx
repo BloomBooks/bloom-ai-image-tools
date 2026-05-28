@@ -28,6 +28,7 @@ import {
   getDefaultAspectRatioValue,
   resolveAspectRatioValue,
 } from "../../lib/aspectRatios";
+import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
 import { theme } from "../../themes";
 
@@ -589,7 +590,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   handleParamChange(tool.id, param.name, String(event.target.checked))
                 }
                 disabled={isProcessing}
-                inputProps={{ "data-testid": inputTestId }}
+                inputProps={{ "data-testid": inputTestId } as React.InputHTMLAttributes<HTMLInputElement>}
               />
             }
             label={param.label}
@@ -740,7 +741,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
-    const requiresOpenRouter = tool.id !== "remove_background";
+    const requiresOpenRouter =
+      tool.id !== "remove_background" &&
+      !canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;

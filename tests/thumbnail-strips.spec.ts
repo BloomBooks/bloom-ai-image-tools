@@ -146,6 +146,40 @@ test.describe("thumbnail strips", () => {
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(1);
   });
 
+  test("disables deleting history entries that also exist in another strip", async ({ page }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const starredTab = page.getByTestId("thumbnail-tab-starred");
+    const starredStrip = page.getByTestId("thumbnail-strip-starred");
+
+    const firstHistoryCard = historyStrip.getByTestId("history-card").first();
+    await firstHistoryCard.hover();
+    await firstHistoryCard.locator('button[title="Star image"]').click();
+
+    await starredTab.click();
+    await expect(starredStrip.getByTestId("history-card")).toHaveCount(1);
+
+    await page.getByTestId("thumbnail-tab-history").click();
+
+    const deleteActionWrapper = firstHistoryCard.locator(
+      'span[aria-label="Cannot delete this image because it also exists in the Starred strip."]',
+    );
+    const deleteActionContainer = deleteActionWrapper.locator("..");
+    await expect(deleteActionContainer).toHaveCSS("opacity", "0");
+
+    await firstHistoryCard.hover();
+    await expect(deleteActionContainer).toHaveCSS("opacity", "1");
+
+    const deleteButton = firstHistoryCard.getByRole("button", {
+      name: /Cannot delete this image because it also exists in the Starred strip\./,
+    });
+    await expect(deleteButton).toBeDisabled();
+
+    await deleteActionWrapper.hover();
+    await expect(page.getByRole("tooltip")).toContainText(
+      "Cannot delete this image because it also exists in the Starred strip.",
+    );
+  });
+
   test("shows newest history item first", async ({ page }) => {
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
 
@@ -177,6 +211,125 @@ test.describe("thumbnail strips", () => {
     await expect(firstHistoryThumbImg).toBeVisible();
     const firstThumbSrc = await firstHistoryThumbImg.getAttribute("src");
     expect(firstThumbSrc).toEqual(updatedTargetSrc);
+  });
+
+  test("allows reordering history items", async ({ page }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+
+    const initialTargetSrc = await page
+      .getByRole("img", { name: "Image to Edit" })
+      .getAttribute("src");
+    expect(initialTargetSrc).toBeTruthy();
+
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+
+    const firstHistoryCard = historyStrip.getByTestId("history-card").nth(0);
+    const secondHistoryCard = historyStrip.getByTestId("history-card").nth(1);
+
+    await expect(firstHistoryCard).toBeVisible();
+    await expect(secondHistoryCard).toBeVisible();
+
+    const firstSrcBefore = await firstHistoryCard.locator("img").first().getAttribute("src");
+    const secondSrcBefore = await secondHistoryCard.locator("img").first().getAttribute("src");
+    expect(firstSrcBefore).toBeTruthy();
+    expect(secondSrcBefore).toBeTruthy();
+    expect(firstSrcBefore).not.toEqual(secondSrcBefore);
+
+    const firstSortableCard = historyStrip.getByTestId("thumbnail-strip-item-history").nth(0);
+    const secondSortableCard = historyStrip.getByTestId("thumbnail-strip-item-history").nth(1);
+
+    const fromBox = await firstSortableCard.boundingBox();
+    const toBox = await secondSortableCard.boundingBox();
+    expect(fromBox).toBeTruthy();
+    expect(toBox).toBeTruthy();
+    if (!fromBox || !toBox) return;
+
+    await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
+      steps: 10,
+    });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => {
+        const firstSrcAfter = await historyStrip
+          .getByTestId("history-card")
+          .nth(0)
+          .locator("img")
+          .first()
+          .getAttribute("src");
+        const secondSrcAfter = await historyStrip
+          .getByTestId("history-card")
+          .nth(1)
+          .locator("img")
+          .first()
+          .getAttribute("src");
+
+        return [firstSrcAfter, secondSrcAfter];
+      })
+      .toEqual([secondSrcBefore, firstSrcBefore]);
+  });
+
+  test("opens the full-screen preview dialog when control is released after selecting thumbnails", async ({ page }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
+
+    const newestCard = historyStrip.getByTestId("history-card").nth(0);
+    const olderCard = historyStrip.getByTestId("history-card").nth(1);
+
+    await page.keyboard.down("Control");
+    await newestCard.hover();
+    await expect(newestCard).toHaveCSS("cursor", "zoom-in");
+
+    await newestCard.click();
+    await expect(newestCard.getByTestId("preview-selection-indicator")).toBeVisible();
+
+    await olderCard.click();
+    await expect(olderCard.getByTestId("preview-selection-indicator")).toBeVisible();
+
+    await expect(page.getByTestId("image-preview-dialog")).toHaveCount(0);
+
+    await page.keyboard.up("Control");
+
+    const previewDialog = page.getByTestId("image-preview-dialog");
+    await expect(previewDialog).toBeVisible();
+    await expect(page.getByTestId(/image-preview-dialog-item-/)).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+    await expect(page.getByTestId("preview-selection-indicator")).toHaveCount(0);
+
+    await page.getByTestId("image-preview-dialog-close").click();
+    await expect(previewDialog).toBeHidden();
+  });
+
+  test("deduplicates preview selections when the same thumbnail is control-clicked multiple times", async ({ page }) => {
+    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
+
+    const newestCard = historyStrip.getByTestId("history-card").nth(0);
+    const newestCardImage = newestCard.locator("img").first();
+    const newestSrc = await newestCardImage.getAttribute("src");
+    expect(newestSrc).toBeTruthy();
+
+    await page.keyboard.down("Control");
+    await newestCard.click();
+    await newestCard.click();
+    await expect(newestCard.getByTestId("preview-selection-indicator")).toBeVisible();
+    await page.keyboard.up("Control");
+
+    const previewDialog = page.getByTestId("image-preview-dialog");
+    await expect(previewDialog).toBeVisible();
+    await expect(page.getByTestId(/image-preview-dialog-item-/)).toHaveCount(1);
+
+    const previewImage = previewDialog.locator("img").first();
+    await expect(previewImage).toHaveAttribute("src", newestSrc ?? "");
+
+    await page.getByTestId("image-preview-dialog-close").click();
+    await expect(previewDialog).toBeHidden();
   });
 
   test("environment strip is editable for sample app (Book pages)", async ({ page }) => {

@@ -69,6 +69,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   }
 
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
+  const pinnedStripIds = new Set(snapshot.pinnedStripIds);
 
   const resolvedActiveId = activeStripId !== undefined ? activeStripId : snapshot.activeStripId;
   const isCompact = stripIds.length === 1;
@@ -76,10 +77,6 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   const railPaddingY = isCompact ? 0.25 : 0.5;
   const pinSize = isCompact ? 22 : 26;
   const tabGap = isCompact ? 0.5 : 0.75;
-
-  const handleTabClick = (stripId: ThumbnailStripId) => {
-    onActivate(stripId);
-  };
 
   const handleDragEnter = (event: React.DragEvent, stripId: ThumbnailStripId) => {
     event.preventDefault();
@@ -92,31 +89,9 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     onTogglePin(stripId);
   };
 
-  const renderPinButton = (stripId: ThumbnailStripId, isPinned: boolean) => (
-    <IconButton
-      component="span"
-      size="small"
-      disableRipple
-      onClick={(event) => handlePinClick(event, stripId)}
-      title={isPinned ? "Unpin strip" : "Pin strip"}
-      aria-label={
-        isPinned
-          ? `Unpin ${resolvedStripConfigs[stripId].label}`
-          : `Pin ${resolvedStripConfigs[stripId].label}`
-      }
-      data-testid={`thumbnail-tab-pin-${stripId}`}
-      sx={{
-        ...PIN_BUTTON_SX,
-        width: pinSize,
-        height: pinSize,
-      }}
-    >
-      {isPinned ? <PushPinIcon fontSize="inherit" /> : <PushPinOutlinedIcon fontSize="inherit" />}
-    </IconButton>
-  );
   const renderTab = (stripId: ThumbnailStripId) => {
     const IconComponent = STRIP_ICONS[stripId];
-    const isPinned = snapshot.pinnedStripIds.includes(stripId);
+    const isPinned = pinnedStripIds.has(stripId);
     const isActive = resolvedActiveId === stripId;
     const tabId = `thumbnail-tab-${stripId}`;
     const label = resolvedStripConfigs[stripId].label;
@@ -153,7 +128,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
             type="button"
             id={tabId}
             data-testid={tabId}
-            onClick={() => handleTabClick(stripId)}
+            onClick={() => onActivate(stripId)}
             onDragEnter={(event) => handleDragEnter(event, stripId)}
             style={{
               width: "100%",
@@ -179,7 +154,30 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
               border: "none",
             }}
           >
-            {renderPinButton(stripId, isPinned)}
+            <IconButton
+              component="span"
+              size="small"
+              disableRipple
+              onClick={(event) => handlePinClick(event, stripId)}
+              title={isPinned ? "Unpin strip" : "Pin strip"}
+              aria-label={
+                isPinned
+                  ? `Unpin ${resolvedStripConfigs[stripId].label}`
+                  : `Pin ${resolvedStripConfigs[stripId].label}`
+              }
+              data-testid={`thumbnail-tab-pin-${stripId}`}
+              sx={{
+                ...PIN_BUTTON_SX,
+                width: pinSize,
+                height: pinSize,
+              }}
+            >
+              {isPinned ? (
+                <PushPinIcon fontSize="inherit" />
+              ) : (
+                <PushPinOutlinedIcon fontSize="inherit" />
+              )}
+            </IconButton>
           </Box>
         </Box>
       </Tooltip>

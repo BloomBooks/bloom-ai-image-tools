@@ -152,8 +152,13 @@ export const getOpenAIOrientation = (
 export const getAspectRatioPromptHint = (
   value: string | null | undefined,
   autoResolution?: ImageResolutionLike | null,
+  supportedValues?: readonly string[] | null,
 ): string => {
-  const resolvedValue = resolveAspectRatioValue(value, autoResolution);
+  const resolvedValue = resolveAspectRatioValue(
+    value,
+    autoResolution,
+    supportedValues,
+  );
 
   switch (resolvedValue) {
     case "1:8":

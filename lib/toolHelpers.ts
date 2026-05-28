@@ -1,5 +1,6 @@
-import { CapabilityName, ModelInfo, ToolDefinition } from "../types";
+import { CapabilityName, ModelInfo, ToolDefinition, ToolParams } from "../types";
 import { TOOLS } from "../components/tools/tools-registry";
+import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "./aspectRatios";
 
 export type ReferenceMode = ToolDefinition["referenceImages"];
 
@@ -43,6 +44,20 @@ export const toolRequiresEditImage = (tool: ToolDefinition | null): boolean => {
     return false;
   }
   return tool.editImage !== false;
+};
+
+export const getRequestedAspectRatioValue = (
+  tool: ToolDefinition | null,
+  params: ToolParams | null | undefined,
+): string => {
+  const configuredValue = params?.aspectRatio?.trim();
+  if (configuredValue) {
+    return configuredValue;
+  }
+
+  return tool?.editImage === false
+    ? DEFAULT_CREATE_ASPECT_RATIO
+    : AUTO_ASPECT_RATIO;
 };
 
 export const toolRequiresReferenceImage = (

@@ -430,6 +430,8 @@ interface ImageToolsPanelBar {
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
+  previewModifierActive?: boolean;
+  previewSelectionImageIds?: string[];
   onDismissError: () => void;
 }
 
@@ -472,6 +474,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
+  previewModifierActive = false,
+  previewSelectionImageIds = [],
   onDismissError,
 }) => {
   const majorElementGap = { xs: 1.5, md: 3.75 } as const;
@@ -798,6 +802,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               snapshot={thumbnailStrips}
               entries={historyItems}
               selectedId={appState.rightPanelImageId}
+              previewModifierActive={previewModifierActive}
+              previewSelectionImageIds={previewSelectionImageIds}
               stripConfigs={thumbnailStripConfigs}
               hasHiddenHistory={hasHiddenHistory}
               onRequestHistoryAccess={onRequestHistoryAccess}

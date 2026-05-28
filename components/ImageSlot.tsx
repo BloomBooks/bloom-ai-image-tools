@@ -1,7 +1,8 @@
 import React from "react";
 import imagePlaceholder from "../assets/image_placeholder.svg";
-import { GenerationProgressState, ImageRecord } from "../types";
+import { GenerationProgressState, ImageRecord, ImageSlotActionKey } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
+import { Icon, Icons } from "./Icons";
 import { kPrimary, theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
@@ -70,6 +71,8 @@ export interface ImageSlotProps {
   disabled?: boolean;
   isDropZone?: boolean;
   onClick?: () => void;
+  previewModifierActive?: boolean;
+  previewSelected?: boolean;
   isSelected?: boolean;
   onDrop?: (imageId: string) => void;
   onUpload?: (file: File) => void;
@@ -87,6 +90,7 @@ export interface ImageSlotProps {
   dropLabel?: string;
   dataTestId?: string;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
+  actionDisabledReasons?: Partial<Record<ImageSlotActionKey, string>>;
   removeIcon?: string;
   starState?: { isStarred: boolean; onToggle: () => void };
   isAnyDndDragging?: boolean;
@@ -240,6 +244,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   disabled = false,
   isDropZone = false,
   onClick,
+  previewModifierActive = false,
+  previewSelected = false,
   isSelected = false,
   onDrop,
   onUpload,
@@ -257,6 +263,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dropLabel = "Drop image",
   dataTestId,
   actionLabels,
+  actionDisabledReasons,
   removeIcon,
   starState,
   isAnyDndDragging: isAnyDndDraggingProp = false,
@@ -643,6 +650,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         supportsUpload={!!onUpload}
         supportsRemove={!!onRemove}
         actionLabels={actionLabels}
+        actionDisabledReasons={actionDisabledReasons}
         removeIcon={removeIcon}
         iconSize={ACTION_ICON_SIZE}
         buttonPadding={ACTION_BUTTON_PADDING}
@@ -710,7 +718,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                   ? 1
                   : 0.8
               : 1,
-          cursor: !disabled && (onClick || variant === "thumb") ? "pointer" : "default",
+          cursor:
+            !disabled && variant === "thumb" && !!image && previewModifierActive
+              ? "zoom-in"
+              : !disabled && (onClick || variant === "thumb")
+                ? "pointer"
+                : "default",
           pointerEvents: disabled ? "none" : "auto",
           filter: disabled ? "grayscale(1)" : "none",
           borderColor: isDragOver
@@ -795,6 +808,37 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               emptyStateContent
             )}
 
+            {variant === "thumb" && image && previewSelected ? (
+              <div
+                data-testid="preview-selection-indicator"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(7, 12, 20, 0.34)",
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "rgba(255, 255, 255, 0.92)",
+                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.32)",
+                    color: theme.colors.textPrimary,
+                  }}
+                >
+                  <Icon path={Icons.Magnifier} width={28} height={28} />
+                </div>
+              </div>
+            ) : null}
+
             <ImageSlotActions
               ref={thumbActionsRef}
               placement="overlay"
@@ -806,6 +850,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               supportsUpload={!!onUpload}
               supportsRemove={!!onRemove}
               actionLabels={actionLabels}
+              actionDisabledReasons={actionDisabledReasons}
               removeIcon={removeIcon}
               iconSize={ACTION_ICON_SIZE}
               buttonPadding={ACTION_BUTTON_PADDING}

@@ -1,7 +1,7 @@
 import React from "react";
 import { ClickAwayListener, IconButton, Popper, Tooltip } from "@mui/material";
 import type { SxProps, Theme as MuiTheme } from "@mui/material/styles";
-import { ImageRecord } from "../types";
+import { ImageRecord, ImageSlotActionKey } from "../types";
 import { theme } from "../themes";
 import { Icon, Icons } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
@@ -14,13 +14,14 @@ type SlotControls = {
   remove: boolean;
 };
 
-type SlotActionKey = keyof SlotControls | "info" | "magnifier" | "more";
+type SlotActionKey = ImageSlotActionKey | "info" | "magnifier" | "more";
 
 type SlotActionButton = {
   key: SlotActionKey;
   icon: string;
   title: string;
   onClick: () => void;
+  disabled?: boolean;
   ariaPressed?: boolean;
   isActive?: boolean;
   testId?: string;
@@ -58,6 +59,7 @@ export type ImageSlotActionsProps = {
   supportsUpload: boolean;
   supportsRemove: boolean;
   actionLabels?: Partial<Record<keyof SlotControls, string>>;
+  actionDisabledReasons?: Partial<Record<ImageSlotActionKey, string>>;
   removeIcon?: string;
   iconSize: number;
   buttonPadding: number;
@@ -85,6 +87,7 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       supportsUpload,
       supportsRemove,
       actionLabels,
+      actionDisabledReasons,
       removeIcon,
       iconSize,
       buttonPadding,
@@ -241,8 +244,9 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       {
         key: "remove",
         icon: removeIcon ?? Icons.X,
-        title: actionLabels?.remove ?? defaultActionLabels.remove,
+        title: actionDisabledReasons?.remove ?? actionLabels?.remove ?? defaultActionLabels.remove,
         onClick: onRemove,
+        disabled: Boolean(actionDisabledReasons?.remove),
         isVisible: controls.remove && !!image && supportsRemove,
       },
     ] satisfies SlotActionButton[];
@@ -282,7 +286,16 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
 
     const renderActionButton = (action: SlotActionButton, sxOverride?: SxProps<MuiTheme>) => {
       const isActive = action.isActive ?? false;
-      const usesTooltip = action.key === "info" && !!image;
+      const usesInfoTooltip = action.key === "info" && !!image;
+      const tooltipTitle = usesInfoTooltip
+        ? (
+            <div data-testid="image-info-tooltip">
+              <ImageInfoPanel item={image} />
+            </div>
+          )
+        : action.disabled
+          ? action.title
+          : null;
 
       const baseSx: SxProps<MuiTheme> = {
         p: `${buttonPadding}px`,
@@ -324,11 +337,13 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            if (action.disabled) return;
             action.onClick();
           }}
+          disabled={action.disabled}
           data-testid={action.testId}
           sx={[baseSx, sxOverride] as SxProps<MuiTheme>}
-          title={usesTooltip ? undefined : action.title}
+          title={tooltipTitle ? undefined : action.title}
           aria-label={action.title}
           aria-pressed={typeof action.ariaPressed === "boolean" ? action.ariaPressed : undefined}
         >
@@ -336,26 +351,26 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
         </IconButton>
       );
 
-      if (usesTooltip) {
+      if (tooltipTitle) {
         return (
           <Tooltip
             key={action.key}
             placement="top"
             enterDelay={150}
-            title={
-              <div data-testid="image-info-tooltip">
-                <ImageInfoPanel item={image} />
-              </div>
+            title={tooltipTitle}
+            slotProps={
+              usesInfoTooltip
+                ? {
+                    tooltip: {
+                      sx: {
+                        maxWidth: "min(360px, calc(100vw - 32px))",
+                      },
+                    },
+                  }
+                : undefined
             }
-            slotProps={{
-              tooltip: {
-                sx: {
-                  maxWidth: "min(360px, calc(100vw - 32px))",
-                },
-              },
-            }}
           >
-            {buttonNode}
+            <span style={{ display: "inline-flex" }}>{buttonNode}</span>
           </Tooltip>
         );
       }
@@ -455,14 +470,12 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
                 flexDirection: "column",
                 gap: 4,
                 zIndex: 20,
-                pointerEvents: disabled ? "none" : "auto",
+                opacity: showRemove ? 1 : 0,
+                pointerEvents: disabled ? "none" : showRemove ? "auto" : "none",
+                transition: "opacity 120ms ease",
               }}
             >
-              {renderActionButton(removeAction, {
-                opacity: showRemove ? 1 : 0,
-                pointerEvents: showRemove ? "auto" : "none",
-                transition: "opacity 120ms ease",
-              })}
+              {renderActionButton(removeAction)}
             </div>
           ) : null}
 

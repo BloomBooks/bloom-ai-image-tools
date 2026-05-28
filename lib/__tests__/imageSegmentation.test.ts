@@ -51,7 +51,10 @@ describe("extractPieceBoundsFromRaster", () => {
     fillRect(data, width, { left: 10, top: 46, right: 24, bottom: 66 }, { r: 80, g: 180, b: 120 });
     fillRect(data, width, { left: 46, top: 44, right: 62, bottom: 68 }, { r: 200, g: 140, b: 60 });
 
-    const bounds = extractPieceBoundsFromRaster({ data, width, height });
+    const bounds = extractPieceBoundsFromRaster(
+      { data, width, height },
+      { preferSeparatedSubjects: true },
+    );
 
     expect(bounds).toHaveLength(4);
     expect(bounds[0].top).toBeLessThanOrEqual(bounds[1].top);
@@ -90,7 +93,10 @@ describe("extractPieceBoundsFromRaster", () => {
     fillRect(data, width, { left: 4, top: 4, right: 14, bottom: 20 }, { r: 40, g: 140, b: 220 });
     fillRect(data, width, { left: 34, top: 6, right: 48, bottom: 22 }, { r: 220, g: 120, b: 60 });
 
-    const bounds = extractPieceBoundsFromRaster({ data, width, height });
+    const bounds = extractPieceBoundsFromRaster(
+      { data, width, height },
+      { preferSeparatedSubjects: true },
+    );
 
     expect(bounds).toHaveLength(2);
     expectBoundsToContain(bounds[0], {
@@ -118,7 +124,10 @@ describe("extractPieceBoundsFromRaster", () => {
     fillRect(data, width, { left: 66, top: 11, right: 75, bottom: 23 }, { r: 220, g: 180, b: 70 });
     fillRect(data, width, { left: 82, top: 6, right: 92, bottom: 29 }, { r: 170, g: 90, b: 210 });
 
-    const bounds = extractPieceBoundsFromRaster({ data, width, height });
+    const bounds = extractPieceBoundsFromRaster(
+      { data, width, height },
+      { preferSeparatedSubjects: true },
+    );
 
     expect(bounds).toHaveLength(5);
     expectBoundsToContain(bounds[0], {
@@ -150,6 +159,79 @@ describe("extractPieceBoundsFromRaster", () => {
       top: 6,
       right: 92,
       bottom: 29,
+    });
+  });
+
+  it("ignores a thin horizontal bridge when splitting a character sheet", () => {
+    const width = 120;
+    const height = 64;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 8, top: 10, right: 28, bottom: 49 }, { r: 220, g: 80, b: 80 });
+    fillRect(data, width, { left: 48, top: 12, right: 68, bottom: 51 }, { r: 80, g: 120, b: 220 });
+    fillRect(data, width, { left: 88, top: 11, right: 108, bottom: 50 }, { r: 80, g: 180, b: 120 });
+
+    fillRect(data, width, { left: 8, top: 52, right: 108, bottom: 53 }, { r: 180, g: 180, b: 180 });
+
+    const bounds = extractPieceBoundsFromRaster(
+      { data, width, height },
+      { preferSeparatedSubjects: true },
+    );
+
+    expect(bounds).toHaveLength(3);
+    expectBoundsToContain(bounds[0], {
+      left: 8,
+      top: 10,
+      right: 28,
+      bottom: 49,
+    });
+    expectBoundsToContain(bounds[1], {
+      left: 48,
+      top: 12,
+      right: 68,
+      bottom: 51,
+    });
+    expectBoundsToContain(bounds[2], {
+      left: 88,
+      top: 11,
+      right: 108,
+      bottom: 50,
+    });
+  });
+
+  it("drops a wide lower artifact band while keeping separated subjects", () => {
+    const width = 140;
+    const height = 110;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 14, top: 12, right: 34, bottom: 62 }, { r: 220, g: 80, b: 80 });
+    fillRect(data, width, { left: 56, top: 18, right: 80, bottom: 67 }, { r: 80, g: 120, b: 220 });
+    fillRect(data, width, { left: 100, top: 14, right: 122, bottom: 64 }, { r: 80, g: 180, b: 120 });
+    fillRect(data, width, { left: 10, top: 74, right: 126, bottom: 89 }, { r: 110, g: 110, b: 110 });
+
+    const bounds = extractPieceBoundsFromRaster(
+      { data, width, height },
+      { preferSeparatedSubjects: true },
+    );
+
+    expect(bounds).toHaveLength(3);
+    expectBoundsToContain(bounds[0], {
+      left: 14,
+      top: 12,
+      right: 34,
+      bottom: 62,
+    });
+    expectBoundsToContain(bounds[1], {
+      left: 56,
+      top: 18,
+      right: 80,
+      bottom: 67,
+    });
+    expectBoundsToContain(bounds[2], {
+      left: 100,
+      top: 14,
+      right: 122,
+      bottom: 64,
     });
   });
 });

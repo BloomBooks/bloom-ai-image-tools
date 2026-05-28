@@ -12,7 +12,10 @@ interface ThumbnailStripProps {
   stripId: ThumbnailStripId;
   itemIds: string[];
   itemsById: Record<string, ImageRecord>;
+  removeDisabledReasonById?: Partial<Record<string, string>>;
   selectedId: string | null;
+  previewModifierActive?: boolean;
+  previewSelectionImageIds?: string[];
   allowDrop: boolean;
   allowRemove: boolean;
   allowReorder: boolean;
@@ -60,7 +63,10 @@ type StripThumbBaseProps = {
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
+  isPreviewSelected: boolean;
+  previewModifierActive: boolean;
   allowRemove: boolean;
+  removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
   onSelect: () => void;
   onToggleStar: () => void;
@@ -80,8 +86,11 @@ type ThumbVisualProps = {
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
+  isPreviewSelected: boolean;
+  previewModifierActive: boolean;
   isAnyDndDragging: boolean;
   allowRemove: boolean;
+  removeDisabledReason?: string;
   onSelect: () => void;
   onToggleStar: () => void;
   onRemove?: () => void;
@@ -91,8 +100,11 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
   stripId,
   item,
   isSelected,
+  isPreviewSelected,
+  previewModifierActive,
   isAnyDndDragging,
   allowRemove,
+  removeDisabledReason,
   onSelect,
   onToggleStar,
   onRemove,
@@ -108,6 +120,8 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
       image={image}
       variant="thumb"
       isAnyDndDragging={isAnyDndDragging}
+      previewModifierActive={previewModifierActive}
+      previewSelected={isPreviewSelected}
       dataTestId="history-card"
       onClick={onSelect}
       isSelected={isSelected}
@@ -122,6 +136,9 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
       onRemove={allowRemove ? onRemove : undefined}
       removeIcon={isHistoryStrip ? Icons.Trash : undefined}
       actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
+      actionDisabledReasons={
+        removeDisabledReason ? { remove: removeDisabledReason } : undefined
+      }
       starState={{
         isStarred: Boolean(item.isStarred) || stripId === "starred",
         onToggle: onToggleStar,
@@ -139,8 +156,11 @@ const ThumbVisual = React.memo(ThumbVisualInner, (prev, next) => {
     prev.item.imageData === next.item.imageData &&
     prev.item.isStarred === next.item.isStarred &&
     prev.isSelected === next.isSelected &&
+    prev.isPreviewSelected === next.isPreviewSelected &&
+    prev.previewModifierActive === next.previewModifierActive &&
     prev.isAnyDndDragging === next.isAnyDndDragging &&
-    prev.allowRemove === next.allowRemove
+    prev.allowRemove === next.allowRemove &&
+    prev.removeDisabledReason === next.removeDisabledReason
   );
 });
 
@@ -151,7 +171,10 @@ const StripThumbBase: React.FC<StripThumbBaseProps> = ({
   stripId,
   item,
   isSelected,
+  isPreviewSelected,
+  previewModifierActive,
   allowRemove,
+  removeDisabledReason,
   isAnyDndDragging = false,
   onSelect,
   onToggleStar,
@@ -188,8 +211,11 @@ const StripThumbBase: React.FC<StripThumbBaseProps> = ({
         stripId={stripId}
         item={item}
         isSelected={isSelected}
+        isPreviewSelected={isPreviewSelected}
+        previewModifierActive={previewModifierActive}
         isAnyDndDragging={isAnyDndDragging}
         allowRemove={allowRemove}
+        removeDisabledReason={removeDisabledReason}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRemove={onRemove}
@@ -202,7 +228,10 @@ const SortableStripThumb: React.FC<{
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
+  isPreviewSelected: boolean;
+  previewModifierActive: boolean;
   allowRemove: boolean;
+  removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
   onSelect: () => void;
   onToggleStar: () => void;
@@ -234,7 +263,10 @@ const DraggableStripThumb: React.FC<{
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
+  isPreviewSelected: boolean;
+  previewModifierActive: boolean;
   allowRemove: boolean;
+  removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
   onSelect: () => void;
   onToggleStar: () => void;
@@ -321,7 +353,10 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   stripId,
   itemIds,
   itemsById,
+  removeDisabledReasonById,
   selectedId,
+  previewModifierActive = false,
+  previewSelectionImageIds = [],
   allowDrop,
   allowRemove,
   allowReorder,
@@ -354,6 +389,10 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   const orderedItems = useMemo(() => {
     return itemIds.map((id) => itemsById[id]).filter((item): item is ImageRecord => Boolean(item));
   }, [itemIds, itemsById]);
+  const previewSelectionIdSet = useMemo(
+    () => new Set(previewSelectionImageIds),
+    [previewSelectionImageIds],
+  );
 
   const orderedItemIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
   const showCharacterStack = stripId === "characters" && orderedItemIds.length > 0;
@@ -436,61 +475,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         position: "relative",
       }}
     >
-      {showCharacterStack && (
-        <CharacterStackThumb
-          stripId={stripId}
-          imageIds={orderedItemIds}
-          frontImage={orderedItems[0] || null}
-          onSelect={() => onSelect(orderedItemIds[0])}
-        />
-      )}
-      {allowReorder ? (
-        <SortableContext
-          items={orderedItems.map((item) => buildStripItemId(stripId, item.id))}
-          strategy={horizontalListSortingStrategy}
-        >
-          {orderedItems.map((item) => (
-            <SortableStripThumb
-              key={`${stripId}-${item.id}`}
-              stripId={stripId}
-              item={item}
-              isSelected={item.id === selectedId}
-              allowRemove={allowRemove}
-              isAnyDndDragging={isAnyDndDragging}
-              onSelect={() => onSelect(item.id)}
-              onToggleStar={() => onToggleStar(item.id)}
-              onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
-            />
-          ))}
-        </SortableContext>
-      ) : (
-        orderedItems.map((item) => (
-          <DraggableStripThumb
-            key={`${stripId}-${item.id}`}
-            stripId={stripId}
-            item={item}
-            isSelected={item.id === selectedId}
-            allowRemove={allowRemove}
-            isAnyDndDragging={isAnyDndDragging}
-            onSelect={() => onSelect(item.id)}
-            onToggleStar={() => onToggleStar(item.id)}
-            onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
-          />
-        ))
-      )}
-
-      {!orderedItems.length && emptyStateMessage && (
-        <div
-          style={{
-            width: "100%",
-            padding: "24px 16px",
-            textAlign: "left",
-            color: theme.colors.textMuted,
-          }}
-        >
-          {emptyStateMessage}
-        </div>
-      )}
       {hasHiddenHistory && onRequestHistoryAccess && (
         <button
           type="button"
@@ -522,6 +506,67 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
             Reconnect folder
           </span>
         </button>
+      )}
+      {showCharacterStack && (
+        <CharacterStackThumb
+          stripId={stripId}
+          imageIds={orderedItemIds}
+          frontImage={orderedItems[0] || null}
+          onSelect={() => onSelect(orderedItemIds[0])}
+        />
+      )}
+      {allowReorder ? (
+        <SortableContext
+          items={orderedItems.map((item) => buildStripItemId(stripId, item.id))}
+          strategy={horizontalListSortingStrategy}
+        >
+          {orderedItems.map((item) => (
+            <SortableStripThumb
+              key={`${stripId}-${item.id}`}
+              stripId={stripId}
+              item={item}
+              isSelected={item.id === selectedId}
+              isPreviewSelected={previewSelectionIdSet.has(item.id)}
+              previewModifierActive={previewModifierActive}
+              allowRemove={allowRemove}
+              removeDisabledReason={removeDisabledReasonById?.[item.id]}
+              isAnyDndDragging={isAnyDndDragging}
+              onSelect={() => onSelect(item.id)}
+              onToggleStar={() => onToggleStar(item.id)}
+              onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
+            />
+          ))}
+        </SortableContext>
+      ) : (
+        orderedItems.map((item) => (
+          <DraggableStripThumb
+            key={`${stripId}-${item.id}`}
+            stripId={stripId}
+            item={item}
+            isSelected={item.id === selectedId}
+            isPreviewSelected={previewSelectionIdSet.has(item.id)}
+            previewModifierActive={previewModifierActive}
+            allowRemove={allowRemove}
+            removeDisabledReason={removeDisabledReasonById?.[item.id]}
+            isAnyDndDragging={isAnyDndDragging}
+            onSelect={() => onSelect(item.id)}
+            onToggleStar={() => onToggleStar(item.id)}
+            onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
+          />
+        ))
+      )}
+
+      {!orderedItems.length && emptyStateMessage && (
+        <div
+          style={{
+            width: "100%",
+            padding: "24px 16px",
+            textAlign: "left",
+            color: theme.colors.textMuted,
+          }}
+        >
+          {emptyStateMessage}
+        </div>
       )}
     </div>
   ) : (

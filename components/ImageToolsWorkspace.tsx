@@ -47,11 +47,13 @@ import {
   handleOAuthCallback,
   initiateOAuthFlow,
 } from "../lib/openRouterOAuth";
+import { canUseLocalDummyModelWithoutApiKey } from "../lib/localModels";
 import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
 import { ModelChooserDialog } from "./ModelChooserDialog";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
+import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
 import {
@@ -62,6 +64,7 @@ import {
   API_KEY_STORAGE_KEY,
   AUTH_METHOD_STORAGE_KEY,
 } from "../lib/authStorage";
+import { WELCOME_DIALOG_SKIP_FLAG } from "../lib/authFlags";
 import {
   IMAGE_TOOLS_STATE_VERSION,
   LOCAL_HISTORY_CACHE_LIMIT,
@@ -79,19 +82,23 @@ import {
   restoreFileSystemImageBinding,
   supportsFileSystemAccess,
   writeFolderAppState,
-  writeImageFile,
+  writeHistoryImageRecord,
 } from "../services/persistence/fileSystemAccess";
 import {
   getStyleIdFromParams,
   getStyleIdFromImageRecord,
 } from "../lib/artStyles";
-import { resolveAspectRatioValue } from "../lib/aspectRatios";
+import {
+  getAspectRatioPromptHint,
+  resolveAspectRatioValue,
+} from "../lib/aspectRatios";
 import {
   getImageDimensions,
   getMimeTypeFromUrl,
   prepareImageBlob,
 } from "../lib/imageUtils";
 import {
+  getRequestedAspectRatioValue,
   getReferenceConstraints,
   getToolReferenceMode,
 } from "../lib/toolHelpers";
@@ -447,6 +454,13 @@ export function ImageToolsWorkspace({
   const [generationProgress, setGenerationProgress] =
     useState<GenerationProgressState | null>(null);
   const [resultImageIds, setResultImageIds] = useState<string[]>([]);
+  const [isPreviewModifierActive, setIsPreviewModifierActive] = useState(false);
+  const [previewSelectionImageIds, setPreviewSelectionImageIds] = useState<
+    string[]
+  >([]);
+  const [previewDialogImageIds, setPreviewDialogImageIds] = useState<string[]>(
+    [],
+  );
   const [visibleStripItemIdsByStrip, setVisibleStripItemIdsByStrip] = useState<
     Record<ThumbnailStripId, string[]>
   >({
@@ -474,13 +488,19 @@ export function ImageToolsWorkspace({
   const [fsSupported, setFsSupported] = useState(() =>
     supportsFileSystemAccess(),
   );
+  const [isFsBindingRestoreReady, setIsFsBindingRestoreReady] = useState(
+    !supportsFileSystemAccess(),
+  );
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
+  const pendingPreviewImageIdsRef = useRef<string[]>([]);
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) ||
     DEFAULT_MODEL;
   const envApiKey = envApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
+  const canUseSelectedModelWithoutApiKey =
+    canUseLocalDummyModelWithoutApiKey(selectedModelId);
   const usingEnvKey = !!(envApiKey && !apiKey);
   const resolvedEnvironmentEntries = useMemo(() => {
     return environmentImageUrls
@@ -489,6 +509,21 @@ export function ImageToolsWorkspace({
       .map(({ url, index }) => buildEnvironmentEntry(url as string, index));
   }, [environmentImageUrls]);
   const isFolderPersistenceActive = !!fsBinding;
+  const historyItemsById = useMemo(() => {
+    const entriesById: Record<string, ImageRecord> = {};
+    state.history.forEach((item) => {
+      entriesById[item.id] = item;
+    });
+    return entriesById;
+  }, [state.history]);
+  const previewDialogImages = useMemo(
+    () =>
+      previewDialogImageIds
+        .map((id) => historyItemsById[id])
+        .filter((item): item is ImageRecord => Boolean(item))
+        .slice(-4),
+    [historyItemsById, previewDialogImageIds],
+  );
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
       ? "OpenRouter key supplied by environment"
@@ -513,11 +548,7 @@ export function ImageToolsWorkspace({
       }
       try {
         const mime = getMimeTypeFromUrl(item.imageData) ?? "image/png";
-        const fileName = item.imageFileName
-          ? item.imageFileName
-          : deriveImageFileName(item.id, mime);
-        await writeImageFile(bindingToUse, fileName, item.imageData);
-        return { ...item, imageFileName: fileName };
+        return await writeHistoryImageRecord(bindingToUse, item);
       } catch (error) {
         const debugInfo = await collectHistoryImageDebugInfo(
           bindingToUse,
@@ -569,7 +600,9 @@ export function ImageToolsWorkspace({
       if (!dataUrl) {
         return item;
       }
-      return { ...item, imageData: dataUrl };
+
+      const resolution = item.resolution ?? (await getImageDimensions(dataUrl));
+      return { ...item, imageData: dataUrl, resolution };
     },
     [fsBinding],
   );
@@ -826,16 +859,22 @@ export function ImageToolsWorkspace({
   }, [apiKey, envApiKey]);
 
   useEffect(() => {
+    const shouldSkipWelcomeDialog =
+      typeof window !== "undefined" &&
+      window.sessionStorage?.getItem(WELCOME_DIALOG_SKIP_FLAG) === "1";
+
     if (
       isHydrated &&
       !effectiveApiKey &&
+      !canUseSelectedModelWithoutApiKey &&
       !hasShownWelcomeRef.current &&
+      !shouldSkipWelcomeDialog &&
       !getOAuthCodeFromUrl()
     ) {
       hasShownWelcomeRef.current = true;
       setIsWelcomeDialogOpen(true);
     }
-  }, [isHydrated, effectiveApiKey]);
+  }, [isHydrated, effectiveApiKey, canUseSelectedModelWithoutApiKey]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -966,14 +1005,29 @@ export function ImageToolsWorkspace({
 
   useEffect(() => {
     if (!fsSupported) {
+      setIsFsBindingRestoreReady(true);
       return;
     }
 
     let cancelled = false;
     void (async () => {
-      const binding = await restoreFileSystemImageBinding();
-      if (!cancelled && binding) {
-        setFsBinding(binding);
+      try {
+        const binding = await restoreFileSystemImageBinding();
+        if (cancelled) {
+          return;
+        }
+
+        if (binding) {
+          setFsBinding(binding);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to restore history folder binding", error);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsFsBindingRestoreReady(true);
+        }
       }
     })();
 
@@ -985,6 +1039,10 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      if (!isFsBindingRestoreReady) {
+        return;
+      }
+
       try {
         const persisted = await persistence.load();
         if (cancelled) {
@@ -1079,7 +1137,12 @@ export function ImageToolsWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [persistence, envApiKey, updateAllArtStyleParams]);
+  }, [
+    isFsBindingRestoreReady,
+    persistence,
+    envApiKey,
+    updateAllArtStyleParams,
+  ]);
 
   useEffect(() => {
     if (!isHydrated || apiKey || typeof window === "undefined") {
@@ -1662,7 +1725,28 @@ export function ImageToolsWorkspace({
     let shouldRefreshCredits = false;
 
     try {
+      const targetImageResolution =
+        targetImage?.resolution ??
+        (targetImage?.imageData
+          ? await getImageDimensions(targetImage.imageData)
+          : undefined);
+      if (
+        targetImage &&
+        targetImageResolution &&
+        targetImage.resolution !== targetImageResolution
+      ) {
+        setState((prev) => ({
+          ...prev,
+          history: prev.history.map((item) =>
+            item.id === targetImage.id
+              ? { ...item, resolution: targetImageResolution }
+              : item,
+          ),
+        }));
+      }
+
       const basePrompt = tool.promptTemplate(params);
+      const requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
 
       const constrainedReferences = referenceItems.slice(0, max);
       const referenceStyleId =
@@ -1685,12 +1769,19 @@ export function ImageToolsWorkspace({
         ...constrainedReferences.map((h) => h.imageData),
       ];
 
-      const prompt =
+      const promptWithoutAspectRatio =
         tool.id === "custom"
           ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
           : basePrompt;
 
       const usesLocalBackgroundRemoval = tool.id === "remove_background";
+      const prompt = usesLocalBackgroundRemoval
+        ? promptWithoutAspectRatio
+        : `${promptWithoutAspectRatio}\n\n${getAspectRatioPromptHint(
+            requestedAspectRatio,
+            targetImageResolution,
+            selectedModel?.supportedAspectRatios,
+          )}`;
       const modelTimingKey = usesLocalBackgroundRemoval
         ? "local-background-removal"
         : envApiKey && !apiKey
@@ -1737,7 +1828,10 @@ export function ImageToolsWorkspace({
         model = result.model;
       } else {
         const resolvedApiKey = effectiveApiKey;
-        if (!resolvedApiKey) {
+        const canRunWithoutApiKey = canUseLocalDummyModelWithoutApiKey(
+          selectedModel?.id,
+        );
+        if (!resolvedApiKey && !canRunWithoutApiKey) {
           setGenerationProgress(null);
           setState((prev) => ({
             ...prev,
@@ -1747,13 +1841,16 @@ export function ImageToolsWorkspace({
           return;
         }
 
-        shouldRefreshCredits = true;
+        shouldRefreshCredits = !canRunWithoutApiKey;
 
         // In E2E, we authenticate via an env key. In that mode we want the model
         // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
         // rather than whatever the UI's default model happens to be.
-        const modelIdForRequest =
-          envApiKey && !apiKey ? undefined : selectedModel?.id;
+        const modelIdForRequest = canRunWithoutApiKey
+          ? selectedModel?.id
+          : envApiKey && !apiKey
+            ? undefined
+            : selectedModel?.id;
         const selectedModelIdForReasoning = selectedModel?.id || "";
         const configuredReasoningLevel =
           modelReasoningLevels[selectedModelIdForReasoning];
@@ -1768,8 +1865,8 @@ export function ImageToolsWorkspace({
         // Build image configuration from tool parameters.
         const imageConfig: ImageConfig = {
           aspectRatio: resolveAspectRatioValue(
-            params.aspectRatio,
-            targetImage?.resolution,
+            requestedAspectRatio,
+            targetImageResolution,
             selectedModel?.supportedAspectRatios,
           ),
           size: params.size,
@@ -1879,19 +1976,31 @@ export function ImageToolsWorkspace({
           params.splitIntoSeparateFiles === "true";
 
         if (!shouldSplitDerivedItems) {
-          const newItem = await createHistoryItem(processedImageData, constrainedReferences[0]?.id || null);
+          const newItem = await createHistoryItem(
+            processedImageData,
+            constrainedReferences[0]?.id || null,
+          );
           appendHistoryEntry(newItem);
           setThumbnailStrips((prev) => {
             const nextCharacterIds = [
-              ...(prev.itemIdsByStrip.characters || []).filter((id) => id !== newItem.id),
+              ...(prev.itemIdsByStrip.characters || []).filter(
+                (id) => id !== newItem.id,
+              ),
               newItem.id,
             ];
-            const next = replaceStripItems(prev, "characters", nextCharacterIds);
+            const next = replaceStripItems(
+              prev,
+              "characters",
+              nextCharacterIds,
+            );
             return setActiveStrip(next, "characters");
           });
 
           if (progressStartedAt > 0) {
-            const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
+            const observedDurationMs = Math.max(
+              1,
+              getNowMs() - progressStartedAt,
+            );
             setGenerationTiming((prev) =>
               updateGenerationTiming(
                 prev,
@@ -1915,6 +2024,7 @@ export function ImageToolsWorkspace({
           processedImageData,
           {
             signal: abortController.signal,
+            preferSeparatedSubjects: tool.id === "extract_cast_of_characters",
           },
         );
         durationMs += derivedItemsResult.durationMs;
@@ -2301,7 +2411,8 @@ export function ImageToolsWorkspace({
           ...prev,
           referenceImageIds: filteredIds.slice(0, max),
           rightPanelImageId:
-            prev.rightPanelImageId && incomingIds.includes(prev.rightPanelImageId)
+            prev.rightPanelImageId &&
+            incomingIds.includes(prev.rightPanelImageId)
               ? null
               : prev.rightPanelImageId,
         };
@@ -2327,7 +2438,70 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: null }));
   };
 
+  const queuePreviewImage = useCallback((id: string) => {
+    const nextIds = [
+      ...pendingPreviewImageIdsRef.current.filter(
+        (existingId) => existingId !== id,
+      ),
+      id,
+    ].slice(-4);
+    pendingPreviewImageIdsRef.current = nextIds;
+    setPreviewSelectionImageIds(nextIds);
+  }, []);
+
+  const commitPreviewSelection = useCallback(() => {
+    const nextIds = pendingPreviewImageIdsRef.current.filter(
+      (id, index, ids) => ids.indexOf(id) === index,
+    );
+
+    pendingPreviewImageIdsRef.current = [];
+    setPreviewSelectionImageIds([]);
+    if (!nextIds.length) {
+      return;
+    }
+
+    setPreviewDialogImageIds(nextIds.slice(-4));
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Control") {
+        setIsPreviewModifierActive(true);
+      }
+    };
+
+    const finishPreviewSelection = () => {
+      setIsPreviewModifierActive(false);
+      commitPreviewSelection();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === "Control") {
+        finishPreviewSelection();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      finishPreviewSelection();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [commitPreviewSelection]);
+
   const handleSelectHistoryItem = (id: string) => {
+    if (isPreviewModifierActive) {
+      queuePreviewImage(id);
+      return;
+    }
+
     setResultImageIds([]);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
@@ -2526,11 +2700,11 @@ export function ImageToolsWorkspace({
     creditsTooltipLines.join(". ") || creditsPrimaryLabel;
 
   const creditsProgressFraction =
-    credits && credits.limit !== null && credits.limit > 0 && credits.limitRemaining !== null
-      ? Math.min(
-          1,
-          Math.max(0, credits.limitRemaining / credits.limit),
-        )
+    credits &&
+    credits.limit !== null &&
+    credits.limit > 0 &&
+    credits.limitRemaining !== null
+      ? Math.min(1, Math.max(0, credits.limitRemaining / credits.limit))
       : null;
 
   const creditsProgressAriaProps: React.HTMLAttributes<HTMLElement> =
@@ -2568,7 +2742,8 @@ export function ImageToolsWorkspace({
       ? theme.colors.danger
       : theme.colors.accent;
 
-  const shouldShowConnectToOpenRouterCTA = !effectiveApiKey;
+  const shouldShowConnectToOpenRouterCTA =
+    !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
   const prototypeNoticeColor = theme.colors.accent;
 
   return (
@@ -2778,9 +2953,40 @@ export function ImageToolsWorkspace({
             onSelectHistoryItem={handleSelectHistoryItem}
             onToggleHistoryStar={handleToggleHistoryStar}
             generationProgress={generationProgress}
+            previewModifierActive={isPreviewModifierActive}
+            previewSelectionImageIds={previewSelectionImageIds}
             onDismissError={handleDismissError}
           />
         </Box>
+
+        <Box
+          component="footer"
+          sx={{
+            px: 3,
+            py: 1.5,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: 52,
+            backgroundColor: "rgba(15, 23, 42, 0.52)",
+            color: theme.colors.textMuted,
+            textAlign: "center",
+          }}
+        >
+          <Typography variant="body2" sx={{ lineHeight: 1.4, maxWidth: 720 }}>
+            💡Tip: To compare images, hold down the control key while clicking
+            one or more of them.
+          </Typography>
+        </Box>
+
+        <ImagePreviewDialog
+          open={previewDialogImages.length > 0}
+          images={previewDialogImages}
+          onClose={() => {
+            setPreviewSelectionImageIds([]);
+            setPreviewDialogImageIds([]);
+          }}
+        />
 
         <OpenRouterWelcomeDialog
           isOpen={isWelcomeDialogOpen}

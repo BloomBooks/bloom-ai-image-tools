@@ -168,6 +168,8 @@ export interface ThumbnailStripsSnapshot {
   itemIdsByStrip: Record<ThumbnailStripId, string[]>;
 }
 
+export type ImageSlotActionKey = "upload" | "paste" | "copy" | "download" | "remove";
+
 export interface AuthState {
   apiKey: string | null;
   authMethod: "oauth" | "manual" | null;

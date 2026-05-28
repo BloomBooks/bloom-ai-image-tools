@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
-import { readFolderPersistedState, readImageFile, writeImageFile } from "../fileSystemAccess";
+import { ImageRecord } from "../../../types";
+import {
+  readFolderPersistedState,
+  readImageFile,
+  writeHistoryImageRecord,
+  writeImageFile,
+} from "../fileSystemAccess";
 
 type MockDirState = {
   files: Record<string, { type: string; lastModified: number; dataB64: string }>;
@@ -8,6 +14,29 @@ type MockDirState = {
 
 const SAMPLE_PNG_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=";
+
+const installMockImage = (width: number, height: number) => {
+  const originalImage = globalThis.Image;
+
+  class MockImage {
+    naturalWidth = width;
+    naturalHeight = height;
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+
+    set src(_value: string) {
+      queueMicrotask(() => {
+        this.onload?.();
+      });
+    }
+  }
+
+  globalThis.Image = MockImage as unknown as typeof Image;
+
+  return () => {
+    globalThis.Image = originalImage;
+  };
+};
 
 const encodeText = (text: string) => Buffer.from(text, "utf8").toString("base64");
 
@@ -86,6 +115,27 @@ type MockFileRecord = {
   createWritableCalls: number;
 };
 
+const buildImageRecord = (overrides: Partial<ImageRecord> = {}): ImageRecord => ({
+  id: "img-1",
+  parentId: null,
+  imageData: SAMPLE_PNG_DATA_URL,
+  imageFileName: null,
+  toolId: "test",
+  parameters: {},
+  sourceStyleId: null,
+  durationMs: 0,
+  cost: 0,
+  model: "model",
+  reasoningLevel: null,
+  timestamp: 1,
+  promptUsed: "prompt",
+  sourceSummary: null,
+  resolution: undefined,
+  isStarred: false,
+  origin: "uploaded",
+  ...overrides,
+});
+
 describe("writeImageFile", () => {
   it("retries once when createWritable first fails with InvalidStateError", async () => {
     const files = new Map<string, MockFileRecord>();
@@ -125,6 +175,28 @@ describe("writeImageFile", () => {
 
     expect(createWritableAttempts).toBe(2);
     expect(files.get("example.png")?.writes).toHaveLength(1);
+  });
+
+  it("writes image bytes and a sidecar for folder-backed history records", async () => {
+    const root = makeDir();
+    const binding = {
+      directoryHandle: createMockDirectoryHandle(root) as unknown as FileSystemDirectoryHandle,
+      directoryName: "dropbox-history",
+    };
+
+    const saved = await writeHistoryImageRecord(binding, buildImageRecord({ id: "saved" }));
+
+    expect(saved.imageFileName).toBe("saved.png");
+    expect(root.dirs.images.files["saved.png"]).toBeDefined();
+    expect(root.dirs.images.files["saved.json"]).toBeDefined();
+
+    const sidecar = JSON.parse(
+      Buffer.from(root.dirs.images.files["saved.json"].dataB64, "base64").toString("utf8"),
+    );
+
+    expect(sidecar.id).toBe("saved");
+    expect(sidecar.imageMime).toBe("image/png");
+    expect(sidecar.promptUsed).toBe("prompt");
   });
 
   it("returns null for zero-byte image files", async () => {
@@ -269,5 +341,107 @@ describe("writeImageFile", () => {
     expect(root.dirs.images.files["zero.json"]).toBeUndefined();
     expect(root.dirs.images.files["missing.json"]).toBeUndefined();
     expect(root.dirs.images.files["zero.png"]).toBeUndefined();
+  });
+
+  it("recovers orphan image files even when app-state.json exists", async () => {
+    const restoreImage = installMockImage(640, 480);
+    const root = makeDir();
+    root.dirs.images = makeDir();
+
+    root.files["app-state.json"] = {
+      type: "application/json",
+      lastModified: Date.now(),
+      dataB64: encodeText(
+        JSON.stringify({
+          version: 1,
+          savedAt: Date.now(),
+          targetImageId: null,
+          referenceImageIds: [],
+          rightPanelImageId: null,
+          thumbnailStrips: {
+            activeStripId: "history",
+            pinnedStripIds: [],
+            itemIdsByStrip: {
+              history: [],
+              starred: [],
+              reference: [],
+              environment: [],
+            },
+          },
+        }),
+      ),
+    };
+
+    root.dirs.images.files["orphan.png"] = {
+      type: "image/png",
+      lastModified: 1234,
+      dataB64: SAMPLE_PNG_DATA_URL.split(",")[1],
+    };
+
+    const binding = {
+      directoryHandle: createMockDirectoryHandle(root) as unknown as FileSystemDirectoryHandle,
+      directoryName: "dropbox-history",
+    };
+
+    const persisted = await readFolderPersistedState(binding);
+    restoreImage();
+
+    expect(persisted?.appState.history.map((item) => item.id)).toEqual(["orphan"]);
+    expect(persisted?.appState.history[0].imageFileName).toBe("orphan.png");
+    expect(persisted?.appState.history[0].promptUsed).toBe("Recovered image");
+    expect(persisted?.appState.history[0].resolution).toEqual({ width: 640, height: 480 });
+  });
+
+  it("restores recovered images into saved starred, character, and reference groupings", async () => {
+    const root = makeDir();
+    root.dirs.images = makeDir();
+
+    root.files["app-state.json"] = {
+      type: "application/json",
+      lastModified: Date.now(),
+      dataB64: encodeText(
+        JSON.stringify({
+          version: 1,
+          savedAt: Date.now(),
+          targetImageId: null,
+          referenceImageIds: ["book-page"],
+          rightPanelImageId: null,
+          thumbnailStrips: {
+            activeStripId: "history",
+            pinnedStripIds: [],
+            itemIdsByStrip: {
+              history: ["hero-cast", "starred-shot", "book-page"],
+              characters: ["hero-cast"],
+              starred: ["starred-shot"],
+              reference: [],
+              environment: [],
+            },
+          },
+        }),
+      ),
+    };
+
+    for (const fileName of ["hero-cast.png", "starred-shot.png", "book-page.png"]) {
+      root.dirs.images.files[fileName] = {
+        type: "image/png",
+        lastModified: 1234,
+        dataB64: SAMPLE_PNG_DATA_URL.split(",")[1],
+      };
+    }
+
+    const binding = {
+      directoryHandle: createMockDirectoryHandle(root) as unknown as FileSystemDirectoryHandle,
+      directoryName: "dropbox-history",
+    };
+
+    const persisted = await readFolderPersistedState(binding);
+
+    const byId = new Map(persisted?.appState.history.map((item) => [item.id, item]) ?? []);
+
+    expect(byId.get("hero-cast")?.toolId).toBe("extract_cast_of_characters");
+    expect(byId.get("starred-shot")?.isStarred).toBe(true);
+    expect(persisted?.thumbnailStrips?.itemIdsByStrip.characters).toEqual(["hero-cast"]);
+    expect(persisted?.thumbnailStrips?.itemIdsByStrip.starred).toEqual(["starred-shot"]);
+    expect(persisted?.thumbnailStrips?.itemIdsByStrip.reference).toEqual(["book-page"]);
   });
 });

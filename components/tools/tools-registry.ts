@@ -11,20 +11,29 @@ import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { ToolDefinition, ToolParameter } from "../../types";
-import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
+import {
+  applyArtStyleToPrompt,
+  DEFAULT_ART_STYLE_ID,
+  getArtStyleById,
+} from "../../lib/artStyles";
 import {
   AUTO_ASPECT_RATIO,
   DEFAULT_CREATE_ASPECT_RATIO,
-  getAspectRatioPromptHint,
 } from "../../lib/aspectRatios";
-import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
+import {
+  ETHNICITY_CATEGORIES,
+  getEthnicityByValue,
+} from "../../lib/ethnicities";
 
-const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
+const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map(
+  (category) => category.label,
+);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
 const SIZE_OPTIONS = ["512k", "1k", "2k", "4k"] as const;
 const DEFAULT_SIZE = SIZE_OPTIONS[0];
 const SIZE_HINTS: Record<string, string> = {
-  "512k": "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
+  "512k":
+    "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
   "1k": "1k image (1024px on the long edge.)",
   "2k": "2k image (2048px on the long edge.)",
   "4k": "4k image (4096px on the long edge.)",
@@ -79,7 +88,8 @@ export const TOOLS: ToolDefinition[] = (
           name: "prompt",
           label: "Image Description",
           type: "textarea",
-          placeholder: "A cute robot playing chess in a park, children's book style",
+          placeholder:
+            "A cute robot playing chess in a park, children's book style",
         },
         {
           name: "styleId",
@@ -102,12 +112,12 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) => {
         const promptText = (params.prompt || "").trim();
         const basePrompt = promptText || "Create a new illustration.";
-        const aspectRatioHint = getAspectRatioPromptHint(params.aspectRatio);
-        const selectedSize = (params.size && params.size.trim()) || DEFAULT_SIZE;
+        const selectedSize =
+          (params.size && params.size.trim()) || DEFAULT_SIZE;
         const sizeHint = SIZE_HINTS[selectedSize] || SIZE_HINTS[DEFAULT_SIZE];
         const noTextReminder =
           "Do not add any frame, no lettering or typography unless the description explicitly requests text.";
-        const combinedPrompt = `${basePrompt}\n\n${aspectRatioHint} ${sizeHint} ${noTextReminder}`;
+        const combinedPrompt = `${basePrompt}\n\n${sizeHint} ${noTextReminder}`;
         return applyArtStyleToPrompt(combinedPrompt, params.styleId);
       },
       referenceImages: "0+",
@@ -116,7 +126,8 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "break_into_pieces",
       title: "Break into Pieces",
-      description: "Turn one or more reference images into a clean sheet of separate game pieces.",
+      description:
+        "Turn one or more reference images into a clean sheet of separate game pieces.",
       group: "games",
       icon: CallSplitOutlinedIcon,
       parameters: [
@@ -169,10 +180,9 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const shouldSplit = params.splitIntoSeparateFiles === "true";
-        const basePrompt =
-          shouldSplit
-            ? "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
-            : "Using the supplied reference image or images, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
+        const basePrompt = shouldSplit
+          ? "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
+          : "Using the supplied reference image or images, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
         const extraInstructions = params.furtherInstructions?.trim();
         if (!extraInstructions) {
           return basePrompt;
@@ -204,7 +214,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const basePrompt =
-          "Using the supplied localized character reference images, update the characters in this image to match those localized character designs. Preserve the original scene composition, background, camera angle, pose, expressions, lighting, clothing intent, and overall art style unless the references clearly require a character-design change. Keep each localized character recognizable and consistent with the supplied references, and replace only the character design details needed to match the localized cast.";
+          "Using the supplied localized character reference images, update the characters in this image to match those localized character designs. Preserve the original scene composition, background, camera angle, pose, expressions, lighting, clothing intent, and overall art style unless the references clearly require a character-design change. Keep each localized character recognizable and consistent with the supplied references, especially hair and facial features, and replace only the character design details needed to match the localized cast.";
         return appendOptionalInstructions(
           basePrompt,
           params.furtherInstructions,
@@ -322,7 +332,9 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
-        const styleName = getArtStyleById(selectedStyleId)?.name || "the requested art direction";
+        const styleName =
+          getArtStyleById(selectedStyleId)?.name ||
+          "the requested art direction";
         const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
         return applyArtStyleToPrompt(base, selectedStyleId);
       },
@@ -332,7 +344,8 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "stylized_title",
       title: "Add Stylized Title",
-      description: "Add a stylized title overlay that fits well the illustration.",
+      description:
+        "Add a stylized title overlay that fits well the illustration.",
       group: "text",
       icon: TitleOutlinedIcon,
       parameters: [
@@ -378,13 +391,20 @@ export const TOOLS: ToolDefinition[] = (
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
-        const character = params.character?.trim() || "all characters in the image";
+        const character =
+          params.character?.trim() || "all characters in the image";
         const selectedEthnicity =
-          getEthnicityByValue(params.ethnicity) ?? ETHNICITY_CATEGORIES[0] ?? null;
+          getEthnicityByValue(params.ethnicity) ??
+          ETHNICITY_CATEGORIES[0] ??
+          null;
         const label =
-          selectedEthnicity?.label || params.ethnicity?.trim() || "the requested ethnicity";
+          selectedEthnicity?.label ||
+          params.ethnicity?.trim() ||
+          "the requested ethnicity";
         const description = selectedEthnicity?.description?.trim();
-        const ethnicityDetails = description ? `${label}. Appearance cues: ${description}` : label;
+        const ethnicityDetails = description
+          ? `${label}. Appearance cues: ${description}`
+          : label;
 
         return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style.  Do not put the people traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
       },
@@ -393,7 +413,8 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "custom",
       title: "Custom Edit",
-      description: "Edit the image, optionally with additional reference images.",
+      description:
+        "Edit the image, optionally with additional reference images.",
       group: "more",
       icon: TuneOutlinedIcon,
       parameters: [
@@ -410,7 +431,8 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "generate_pallet",
       title: "Generate Pallet",
-      description: "Create a simple reference color pallet, optionally based on a reference image.",
+      description:
+        "Create a simple reference color pallet, optionally based on a reference image.",
       group: "more",
       icon: ColorLensOutlinedIcon,
       parameters: [
@@ -485,7 +507,9 @@ export const TOOLS: ToolDefinition[] = (
     parameters: [
       ...tool.parameters,
       createAspectRatioParameter(
-        tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO,
+        tool.editImage === false
+          ? DEFAULT_CREATE_ASPECT_RATIO
+          : AUTO_ASPECT_RATIO,
       ),
     ],
   };

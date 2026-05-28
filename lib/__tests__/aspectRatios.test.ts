@@ -4,6 +4,7 @@ import {
   getClosestAspectRatioValue,
   getDefaultAspectRatioValue,
   getOpenAIOrientation,
+  getAspectRatioPromptHint,
   resolveAspectRatioValue,
 } from "../aspectRatios";
 
@@ -40,6 +41,11 @@ describe("aspect ratio helpers", () => {
       .toBe("1:1");
     expect(getDefaultAspectRatioValue(["2:3", "3:2"]))
       .toBe("2:3");
+  });
+
+  it("keeps the prompt hint aligned with the resolved supported ratio", () => {
+    expect(getAspectRatioPromptHint("21:9", undefined, ["2:3", "1:1", "3:2"]))
+      .toContain("1:1 aspect ratio");
   });
 
   it("reduces explicit ratios to an OpenAI-compatible orientation bucket", () => {

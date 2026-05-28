@@ -9,6 +9,21 @@ export interface ThumbnailStripConfig {
   pinByDefault?: boolean;
 }
 
+export const STRIP_DESCRIPTIONS: Record<
+  ThumbnailStripId,
+  string | ((config: ThumbnailStripConfig) => string)
+> = {
+  history: "",
+  characters: "Use this area to keep your cast of characters.",
+  starred: "Star images to keep them handy.",
+  reference:
+    "Use this area to keep reference images that you use in more that one book. E.g. how people dress, what trees look like.",
+  environment: (config) =>
+    config.allowDrop
+      ? "Drag images here to add book pages."
+      : "Environment images supplied by host application.",
+};
+
 export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
   "history",
   "characters",
@@ -22,7 +37,7 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     id: "history",
     label: "History",
     allowRemove: true,
-    allowReorder: false,
+    allowReorder: true,
     allowDrop: true,
     pinByDefault: true,
   },
@@ -169,6 +184,18 @@ export const removeItemsFromAllStrips = (
     ...snapshot,
     itemIdsByStrip: next,
   };
+};
+
+export const getOtherStripsContainingItem = (
+  snapshot: ThumbnailStripsSnapshot,
+  sourceStripId: ThumbnailStripId,
+  itemId: string,
+): ThumbnailStripId[] => {
+  return THUMBNAIL_STRIP_ORDER.filter(
+    (stripId) =>
+      stripId !== sourceStripId &&
+      (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
+  );
 };
 
 export const reorderItemInStrip = (

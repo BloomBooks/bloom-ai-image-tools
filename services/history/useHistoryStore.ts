@@ -14,7 +14,7 @@ import { supportsFolderStorage } from "./folder/FolderHistoryBackend";
 const DEFAULT_STRIPS: ThumbnailStripsSnapshot = {
   activeStripId: "history",
   pinnedStripIds: [],
-  itemIdsByStrip: { history: [], starred: [], reference: [], environment: [] },
+  itemIdsByStrip: { history: [], starred: [], reference: [], environment: [], characters: [] },
 };
 
 export const historyEntryToImageRecord = (

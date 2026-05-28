@@ -39,6 +39,14 @@ const LOCALIZE_TOOL_ORDER = [
   "ethnicity",
   "apply_localized_characters",
 ] as const;
+const ADVANCED_TOOL_IDS = new Set([
+  "generate_image",
+  "change_style",
+  "custom",
+  "improve_drawing",
+  "generate_pallet",
+  "game_theme_generator",
+]);
 
 const isGamesTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "games");

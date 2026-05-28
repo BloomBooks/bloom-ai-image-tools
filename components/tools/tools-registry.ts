@@ -461,6 +461,33 @@ export const TOOLS: ToolDefinition[] = (
       editImage: false,
     },
     {
+      id: "improve_drawing",
+      title: "Improve Drawing a Bit",
+      description:
+        "Correct anatomy and perspective while keeping everything else identical to the reference.",
+      icon: AutoFixHighOutlinedIcon,
+      parameters: [
+        {
+          name: "furtherInstructions",
+          label: "Further Instructions",
+          type: "textarea",
+          placeholder: "Optional: anything specific to fix or preserve.",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const basePrompt =
+          "Anatomy and perspective are made realistic. Everything else is exactly the same as the reference image. No labels added, no changes except what's needed to correct those problems.";
+        return appendOptionalInstructions(
+          basePrompt,
+          params.furtherInstructions,
+          "Additional instructions to follow closely:",
+        );
+      },
+      actionButtonLabel: "Improve Drawing",
+      referenceImages: "1",
+    },
+    {
       id: "remove_object",
       title: "Remove Object",
       description: "Remove unwanted objects or artifacts.",

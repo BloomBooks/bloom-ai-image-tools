@@ -7,8 +7,7 @@ export type ReferenceMode = ToolDefinition["referenceImages"];
 const DEFAULT_REFERENCE_MODE: ReferenceMode = "0";
 const CAPABILITY_READY_SCORE = 3;
 
-const normalizeId = (id: string | null | undefined): string =>
-  (id || "").trim().toLowerCase();
+const normalizeId = (id: string | null | undefined): string => (id || "").trim().toLowerCase();
 
 export const getToolById = (toolId: string | null): ToolDefinition | null => {
   if (!toolId) {
@@ -22,9 +21,7 @@ export const getToolReferenceMode = (toolId: string | null): ReferenceMode => {
   return tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
 };
 
-export const getReferenceConstraints = (
-  mode: ReferenceMode
-): { min: number; max: number } => {
+export const getReferenceConstraints = (mode: ReferenceMode): { min: number; max: number } => {
   switch (mode) {
     case "0":
       return { min: 0, max: 0 };
@@ -55,21 +52,20 @@ export const getRequestedAspectRatioValue = (
     return configuredValue;
   }
 
-  return tool?.editImage === false
-    ? DEFAULT_CREATE_ASPECT_RATIO
-    : AUTO_ASPECT_RATIO;
+  const hiddenDefault = tool?.hiddenAspectRatioDefault?.trim();
+  if (hiddenDefault) {
+    return hiddenDefault;
+  }
+
+  return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO;
 };
 
-export const toolRequiresReferenceImage = (
-  tool: ToolDefinition | null
-): boolean => {
+export const toolRequiresReferenceImage = (tool: ToolDefinition | null): boolean => {
   const mode = tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
   return getReferenceConstraints(mode).min > 0;
 };
 
-export const getRequiredCapabilities = (
-  tool: ToolDefinition | null
-): CapabilityName[] => {
+export const getRequiredCapabilities = (tool: ToolDefinition | null): CapabilityName[] => {
   if (!tool?.capabilities) {
     return [];
   }
@@ -93,7 +89,7 @@ export const isOllamaOrLocal = (model: ModelInfo | null): boolean => {
 
 export const hasRequiredCapabilities = (
   tool: ToolDefinition | null,
-  model: ModelInfo | null
+  model: ModelInfo | null,
 ): boolean => {
   const required = getRequiredCapabilities(tool);
   if (!required.length) {

@@ -4,9 +4,7 @@ import { getRequestedAspectRatioValue } from "../toolHelpers";
 
 describe("tool aspect ratio defaults", () => {
   it("inherits the target image shape for edit tools without a shape picker", () => {
-    const localizedCharactersTool = TOOLS.find(
-      (tool) => tool.id === "apply_localized_characters",
-    );
+    const localizedCharactersTool = TOOLS.find((tool) => tool.id === "apply_localized_characters");
 
     expect(getRequestedAspectRatioValue(localizedCharactersTool ?? null, {})).toBe("auto");
   });
@@ -17,11 +15,17 @@ describe("tool aspect ratio defaults", () => {
     expect(getRequestedAspectRatioValue(extractCastTool ?? null, {})).toBe("1:1");
   });
 
+  it("allows hidden tools to override their default shape", () => {
+    const paletteTool = TOOLS.find((tool) => tool.id === "generate_pallet");
+
+    expect(getRequestedAspectRatioValue(paletteTool ?? null, {})).toBe("21:9");
+  });
+
   it("keeps an explicit shape selection when the tool exposes one", () => {
     const generateImageTool = TOOLS.find((tool) => tool.id === "generate_image");
 
-    expect(
-      getRequestedAspectRatioValue(generateImageTool ?? null, { aspectRatio: "16:9" }),
-    ).toBe("16:9");
+    expect(getRequestedAspectRatioValue(generateImageTool ?? null, { aspectRatio: "16:9" })).toBe(
+      "16:9",
+    );
   });
 });

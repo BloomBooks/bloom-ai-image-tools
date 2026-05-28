@@ -51,6 +51,9 @@ const ADVANCED_TOOL_IDS = new Set([
 const isGamesTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "games");
 
+const isEnhanceTool = (toolId: string | null) =>
+  TOOLS.some((tool) => tool.id === toolId && tool.group === "enhance");
+
 const isAdvancedTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "more");
 
@@ -381,6 +384,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const [isLocalizeOpen, setIsLocalizeOpen] = useState(() => isLocalizedTool(activeToolId));
   const [isTextOpen, setIsTextOpen] = useState(() => isTextTool(activeToolId));
   const [isGamesOpen, setIsGamesOpen] = useState(() => isGamesTool(activeToolId));
+  const [isEnhanceOpen, setIsEnhanceOpen] = useState(() => isEnhanceTool(activeToolId));
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(() => isAdvancedTool(activeToolId));
 
   useEffect(() => {
@@ -392,6 +396,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     }
     if (isGamesTool(activeToolId)) {
       setIsGamesOpen(true);
+    }
+    if (isEnhanceTool(activeToolId)) {
+      setIsEnhanceOpen(true);
     }
     if (isAdvancedTool(activeToolId)) {
       setIsAdvancedOpen(true);
@@ -480,6 +487,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const textTools = useMemo(() => TOOLS.filter((tool) => tool.group === "text"), []);
 
   const gamesTools = useMemo(() => TOOLS.filter((tool) => tool.group === "games"), []);
+
+  const enhanceTools = useMemo(() => TOOLS.filter((tool) => tool.group === "enhance"), []);
 
   const advancedTools = useMemo(() => TOOLS.filter((tool) => tool.group === "more"), []);
 
@@ -605,7 +614,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   handleParamChange(tool.id, param.name, String(event.target.checked))
                 }
                 disabled={isProcessing}
-                inputProps={{ "data-testid": inputTestId } as React.InputHTMLAttributes<HTMLInputElement>}
+                inputProps={
+                  {
+                    "data-testid": inputTestId,
+                  } as React.InputHTMLAttributes<HTMLInputElement>
+                }
               />
             }
             label={param.label}
@@ -757,8 +770,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
     const requiresOpenRouter =
-      tool.id !== "remove_background" &&
-      !canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
+      tool.id !== "remove_background" && !canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
@@ -983,6 +995,33 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       >
         {defaultTools.map(renderToolCard)}
 
+        {enhanceTools.length > 0 && (
+          <Stack spacing={1.25}>
+            <ButtonBase
+              onClick={() => setIsEnhanceOpen((current) => !current)}
+              sx={{
+                width: "100%",
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: alpha(muiTheme.palette.text.secondary, 0.9),
+              }}
+            >
+              {renderSectionHeader("Enhance")}
+              <ExpandMoreIcon
+                sx={{
+                  transition: "transform 0.2s ease",
+                  transform: isEnhanceOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                }}
+              />
+            </ButtonBase>
+            {isEnhanceOpen && enhanceTools.map(renderToolCard)}
+          </Stack>
+        )}
+
         {localizedTools.length > 0 && (
           <Stack spacing={1.25}>
             <ButtonBase
@@ -998,7 +1037,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Localize Images")}
+              {renderSectionHeader("Localize")}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",

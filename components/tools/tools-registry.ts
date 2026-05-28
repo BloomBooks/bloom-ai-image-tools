@@ -11,29 +11,16 @@ import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { ToolDefinition, ToolParameter } from "../../types";
-import {
-  applyArtStyleToPrompt,
-  DEFAULT_ART_STYLE_ID,
-  getArtStyleById,
-} from "../../lib/artStyles";
-import {
-  AUTO_ASPECT_RATIO,
-  DEFAULT_CREATE_ASPECT_RATIO,
-} from "../../lib/aspectRatios";
-import {
-  ETHNICITY_CATEGORIES,
-  getEthnicityByValue,
-} from "../../lib/ethnicities";
+import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
+import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
+import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
 
-const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map(
-  (category) => category.label,
-);
+const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
 const SIZE_OPTIONS = ["512k", "1k", "2k", "4k"] as const;
 const DEFAULT_SIZE = SIZE_OPTIONS[0];
 const SIZE_HINTS: Record<string, string> = {
-  "512k":
-    "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
+  "512k": "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
   "1k": "1k image (1024px on the long edge.)",
   "2k": "2k image (2048px on the long edge.)",
   "4k": "4k image (4096px on the long edge.)",
@@ -52,7 +39,12 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "ethnicity",
   "apply_localized_characters",
   "enhance_drawing",
+  "change_style",
   "change_text",
+  "custom",
+  "generate_pallet",
+  "improve_drawing",
+  "remove_object",
   "stylized_title",
 ]);
 
@@ -88,8 +80,7 @@ export const TOOLS: ToolDefinition[] = (
           name: "prompt",
           label: "Image Description",
           type: "textarea",
-          placeholder:
-            "A cute robot playing chess in a park, children's book style",
+          placeholder: "A cute robot playing chess in a park, children's book style",
         },
         {
           name: "styleId",
@@ -112,8 +103,7 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) => {
         const promptText = (params.prompt || "").trim();
         const basePrompt = promptText || "Create a new illustration.";
-        const selectedSize =
-          (params.size && params.size.trim()) || DEFAULT_SIZE;
+        const selectedSize = (params.size && params.size.trim()) || DEFAULT_SIZE;
         const sizeHint = SIZE_HINTS[selectedSize] || SIZE_HINTS[DEFAULT_SIZE];
         const noTextReminder =
           "Do not add any frame, no lettering or typography unless the description explicitly requests text.";
@@ -126,8 +116,7 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "break_into_pieces",
       title: "Break into Pieces",
-      description:
-        "Turn one or more reference images into a clean sheet of separate game pieces.",
+      description: "Turn one or more reference images into a clean sheet of separate game pieces.",
       group: "games",
       icon: CallSplitOutlinedIcon,
       parameters: [
@@ -255,6 +244,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "enhance_drawing",
       title: "Enhance Line Drawing",
       description: "",
+      group: "enhance",
       icon: AutoFixHighOutlinedIcon,
       parameters: [
         {
@@ -328,9 +318,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
-        const styleName =
-          getArtStyleById(selectedStyleId)?.name ||
-          "the requested art direction";
+        const styleName = getArtStyleById(selectedStyleId)?.name || "the requested art direction";
         const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
         return applyArtStyleToPrompt(base, selectedStyleId);
       },
@@ -340,8 +328,7 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "stylized_title",
       title: "Add Stylized Title",
-      description:
-        "Add a stylized title overlay that fits well the illustration.",
+      description: "Add a stylized title overlay that fits well the illustration.",
       group: "text",
       icon: TitleOutlinedIcon,
       parameters: [
@@ -387,20 +374,13 @@ export const TOOLS: ToolDefinition[] = (
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
-        const character =
-          params.character?.trim() || "all characters in the image";
+        const character = params.character?.trim() || "all characters in the image";
         const selectedEthnicity =
-          getEthnicityByValue(params.ethnicity) ??
-          ETHNICITY_CATEGORIES[0] ??
-          null;
+          getEthnicityByValue(params.ethnicity) ?? ETHNICITY_CATEGORIES[0] ?? null;
         const label =
-          selectedEthnicity?.label ||
-          params.ethnicity?.trim() ||
-          "the requested ethnicity";
+          selectedEthnicity?.label || params.ethnicity?.trim() || "the requested ethnicity";
         const description = selectedEthnicity?.description?.trim();
-        const ethnicityDetails = description
-          ? `${label}. Appearance cues: ${description}`
-          : label;
+        const ethnicityDetails = description ? `${label}. Appearance cues: ${description}` : label;
 
         return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style.  Do not put the people traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
       },
@@ -409,9 +389,8 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "custom",
       title: "Custom Edit",
-      description:
-        "Edit the image, optionally with additional reference images.",
-      group: "more",
+      description: "Edit the image, optionally with additional reference images.",
+      group: "enhance",
       icon: TuneOutlinedIcon,
       parameters: [
         {
@@ -427,8 +406,7 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "generate_pallet",
       title: "Generate Pallet",
-      description:
-        "Create a simple reference color pallet, optionally based on a reference image.",
+      description: "Create a simple reference color pallet, optionally based on a reference image.",
       group: "more",
       icon: ColorLensOutlinedIcon,
       parameters: [
@@ -459,12 +437,14 @@ export const TOOLS: ToolDefinition[] = (
       actionButtonLabel: "Generate Pallet",
       referenceImages: "0+",
       editImage: false,
+      hiddenAspectRatioDefault: "21:9",
     },
     {
       id: "improve_drawing",
       title: "Improve Drawing a Bit",
       description:
         "Correct anatomy and perspective while keeping everything else identical to the reference.",
+      group: "enhance",
       icon: AutoFixHighOutlinedIcon,
       parameters: [
         {
@@ -530,9 +510,7 @@ export const TOOLS: ToolDefinition[] = (
     parameters: [
       ...tool.parameters,
       createAspectRatioParameter(
-        tool.editImage === false
-          ? DEFAULT_CREATE_ASPECT_RATIO
-          : AUTO_ASPECT_RATIO,
+        tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO,
       ),
     ],
   };

@@ -31,24 +31,14 @@ export type CapabilityName = string;
 
 // Model capability scores are on a 0-5 scale.
 export type CapabilityScore = 0 | 1 | 2 | 3 | 4 | 5;
-export type ModelCapabilities = Partial<
-  Record<CapabilityName, CapabilityScore>
->;
+export type ModelCapabilities = Partial<Record<CapabilityName, CapabilityScore>>;
 
 // Tool capability flags are boolean: true means the tool uses that capability.
 export type ToolCapabilities = Partial<Record<CapabilityName, boolean>>;
 
-export type ModelReasoningLevel =
-  | "default"
-  | "none"
-  | "low"
-  | "medium"
-  | "high";
+export type ModelReasoningLevel = "default" | "none" | "low" | "medium" | "high";
 
-export type ModelReasoningLevelByModelId = Record<
-  string,
-  ModelReasoningLevel
->;
+export type ModelReasoningLevelByModelId = Record<string, ModelReasoningLevel>;
 
 export interface ModelInfo {
   id: string;
@@ -82,7 +72,7 @@ export interface ToolDefinition {
   id: string;
   title: string;
   description: string;
-  group?: "default" | "localize" | "text" | "games" | "more";
+  group?: "default" | "enhance" | "localize" | "text" | "games" | "more";
   icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
@@ -96,6 +86,8 @@ export interface ToolDefinition {
   postProcessingFunctions?: string[];
   /** Optional derived output handling for tools that split a generated sheet into assets. */
   derivedResultMode?: ToolDerivedResultMode;
+  /** Hidden tools without a shape picker can still override their requested aspect ratio. */
+  hiddenAspectRatioDefault?: string;
 }
 
 export interface EthnicityCategory {
@@ -155,12 +147,7 @@ export interface GenerationTimingState {
   toolDurationsByKey: Record<string, number>;
 }
 
-export type ThumbnailStripId =
-  | "history"
-  | "characters"
-  | "starred"
-  | "reference"
-  | "environment";
+export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "environment";
 
 export interface ThumbnailStripsSnapshot {
   activeStripId: ThumbnailStripId;

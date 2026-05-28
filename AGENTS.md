@@ -63,8 +63,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Review Checklist
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Use `vp dev` for live browser investigations and `vp preview` when you specifically need to inspect the built output.
 - [ ] Run `vp check` and `vp test` to format, lint, type check and test changes.
-- [ ] Run `vp build` when you need to validate distributable output, and use `vp run <script>` only for script-specific workflows such as `vp run e2e` or `vp run build:lib`.
+- [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
 
 <!--VITE PLUS END-->

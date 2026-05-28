@@ -2711,15 +2711,34 @@ export function ImageToolsWorkspace({
   const creditsSecondaryLabel =
     effectiveApiKey && credits && !creditsLoading && !creditsError
       ? credits.limit !== null
-        ? `${formatCreditsValue(credits.usage)} used / ${formatCreditsValue(
-            credits.limit,
-          )} key limit${credits.limitReset ? ` (${credits.limitReset})` : ""}`
-        : "No key spending limit"
+        ? (() => {
+            const periodUsage =
+              credits.limitRemaining !== null
+                ? Math.max(0, credits.limit - credits.limitRemaining)
+                : credits.usage;
+            const periodSuffix = credits.limitReset
+              ? ` ${credits.limitReset}`
+              : "";
+            return `${formatCreditsValue(periodUsage)} of ${formatCreditsValue(
+              credits.limit,
+            )} used${periodSuffix}`;
+          })()
+        : `${formatCreditsValue(credits.usage)} used (no limit set)`
+      : null;
+
+  const creditsTotalLabel =
+    effectiveApiKey &&
+    credits &&
+    !creditsLoading &&
+    !creditsError &&
+    credits.limit !== null
+      ? `${formatCreditsValue(credits.usage)} total`
       : null;
 
   const creditsTooltipLines = [
     creditsPrimaryLabel,
     creditsSecondaryLabel,
+    creditsTotalLabel,
   ].filter((line): line is string => Boolean(line));
 
   const creditsTooltipLabel =
@@ -3018,7 +3037,7 @@ export function ImageToolsWorkspace({
           isOpen={isWelcomeDialogOpen}
           onConnect={() => {
             setIsWelcomeDialogOpen(false);
-            void handleConnect();
+            setIsSettingsDialogOpen(true);
           }}
           onDismiss={() => setIsWelcomeDialogOpen(false)}
         />

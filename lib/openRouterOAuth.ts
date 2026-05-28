@@ -60,17 +60,29 @@ export async function exchangeCodeForApiKey(code: string): Promise<string> {
     throw new Error("No code verifier found. Please try the OAuth flow again.");
   }
 
-  const response = await fetch(OPENROUTER_KEYS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      code,
-      code_verifier: codeVerifier,
-      code_challenge_method: "S256",
-    }),
-  });
+  const cleanUrl = window.location.origin + window.location.pathname;
+
+  let response: Response;
+  try {
+    response = await fetch(OPENROUTER_KEYS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code,
+        code_verifier: codeVerifier,
+        code_challenge_method: "S256",
+      }),
+    });
+  } catch (err) {
+    sessionStorage.removeItem(CODE_VERIFIER_KEY);
+    window.history.replaceState({}, document.title, cleanUrl);
+    throw err;
+  }
+
+  sessionStorage.removeItem(CODE_VERIFIER_KEY);
+  window.history.replaceState({}, document.title, cleanUrl);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -78,12 +90,6 @@ export async function exchangeCodeForApiKey(code: string): Promise<string> {
   }
 
   const data = await response.json();
-
-  sessionStorage.removeItem(CODE_VERIFIER_KEY);
-
-  const cleanUrl = window.location.origin + window.location.pathname;
-  window.history.replaceState({}, document.title, cleanUrl);
-
   return data.key;
 }
 

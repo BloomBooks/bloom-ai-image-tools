@@ -10,10 +10,11 @@ export const formatCreditsValue = (
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "--";
   }
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
+  const formatted = value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  return `US$${formatted}`;
 };
 
 /**

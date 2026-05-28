@@ -35,15 +35,6 @@ function getOpenRouterErrorDetail(data: any): string | undefined {
   );
 }
 
-function maskOpenRouterApiKey(apiKey: string): string {
-  const trimmed = apiKey.trim();
-  if (trimmed.length <= 16) {
-    return trimmed;
-  }
-
-  return `${trimmed.slice(0, 12)}...${trimmed.slice(-4)}`;
-}
-
 export async function fetchOpenRouterKeyStatus(
   apiKey: string,
   options?: FetchOpenRouterKeyStatusOptions,
@@ -55,7 +46,7 @@ export async function fetchOpenRouterKeyStatus(
     );
   }
 
-  const response = await fetch(`${OPENROUTER_BASE_URL}/keys`, {
+  const response = await fetch(`${OPENROUTER_BASE_URL}/key`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -75,17 +66,6 @@ export async function fetchOpenRouterKeyStatus(
 
   if (!response.ok) {
     const detailMessage = getOpenRouterErrorDetail(data);
-    if (
-      response.status === 403 &&
-      detailMessage?.toLowerCase().includes("management key")
-    ) {
-      throw new OpenRouterApiError("OpenRouter key status is unavailable.", {
-        status: response.status,
-        detailMessage,
-        infoUrl: OPENROUTER_KEYS_URL,
-      });
-    }
-
     const message = detailMessage || rawText || response.statusText || "";
     const preview =
       message.length > 500 ? `${message.slice(0, 500)}…` : message;
@@ -94,6 +74,7 @@ export async function fetchOpenRouterKeyStatus(
       {
         status: response.status,
         detailMessage,
+        infoUrl: OPENROUTER_KEYS_URL,
       },
     );
   }
@@ -112,30 +93,17 @@ export async function fetchOpenRouterKeyStatus(
     return Number.isFinite(num) ? num : null;
   };
 
-  const keyPreview = maskOpenRouterApiKey(key);
-  const keyEntries: Array<Record<string, unknown>> = Array.isArray(data?.data)
-    ? data.data
-    : [];
-  const matchingEntry =
-    keyEntries.find(
-      (entry: Record<string, unknown>) =>
-        normalizeErrorString(entry.label) === keyPreview,
-    ) ?? (keyEntries.length === 1 ? keyEntries[0] : null);
-
-  if (!matchingEntry) {
-    throw new OpenRouterApiError("OpenRouter key status is unavailable.", {
-      status: response.status,
-      detailMessage: "OpenRouter did not expose the active key in /keys.",
-      infoUrl: OPENROUTER_KEYS_URL,
-    });
-  }
+  const entry: Record<string, unknown> = (data?.data ?? {}) as Record<
+    string,
+    unknown
+  >;
 
   return {
-    label: normalizeErrorString(matchingEntry?.label) ?? null,
-    name: normalizeErrorString(matchingEntry?.name) ?? null,
-    limit: normalizeNullable(matchingEntry?.limit),
-    limitRemaining: normalizeNullable(matchingEntry?.limit_remaining),
-    limitReset: normalizeErrorString(matchingEntry?.limit_reset) ?? null,
-    usage: normalize(matchingEntry?.usage),
+    label: normalizeErrorString(entry.label) ?? null,
+    name: normalizeErrorString(entry.name) ?? null,
+    limit: normalizeNullable(entry.limit),
+    limitRemaining: normalizeNullable(entry.limit_remaining),
+    limitReset: normalizeErrorString(entry.limit_reset) ?? null,
+    usage: normalize(entry.usage),
   };
 }

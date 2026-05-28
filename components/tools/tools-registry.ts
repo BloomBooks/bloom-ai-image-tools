@@ -157,8 +157,6 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "extract_cast_of_characters",
       title: "1) Extract Cast of Characters",
-      description:
-        "Turn one or more reference images into separate character cutouts for future consistency.",
       group: "localize",
       icon: Diversity3OutlinedIcon,
       parameters: [
@@ -198,8 +196,6 @@ export const TOOLS: ToolDefinition[] = (
     {
       id: "apply_localized_characters",
       title: "3) Apply Localized Characters",
-      description:
-        "Use localized character references to update the characters in the current scene while keeping the scene intact.",
       group: "localize",
       icon: Diversity3OutlinedIcon,
       parameters: [

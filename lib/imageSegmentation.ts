@@ -791,5 +791,12 @@ export const segmentImageIntoPieces = async (
     return [];
   }
 
+  console.log("[ExtractCast/debug] segmentImageIntoPieces", {
+    width: raster.width,
+    height: raster.height,
+    boundsCount: bounds.length,
+    preferSeparatedSubjects: options.preferSeparatedSubjects,
+  });
+
   return Promise.all(bounds.map((bound) => cropBoundsToDataUrl(image, bound)));
 };

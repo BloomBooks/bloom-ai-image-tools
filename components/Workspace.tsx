@@ -161,11 +161,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
   const derivedResultLabel =
-    tool?.id === "extract_cast_of_characters"
-      ? "Characters"
-      : tool?.derivedResultMode === "split-images"
-        ? "Pieces"
-        : "Result";
+    tool?.id === "break_into_pieces" ? "Pieces" : "Result";
   const targetPanelLabel =
     tool?.id === "ethnicity" ? "Character grid or scene to change" : "Image to Edit";
   const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;

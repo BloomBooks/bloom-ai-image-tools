@@ -520,6 +520,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
     });
 
+    console.log("[ExtractCast/debug] handleSubmit payload", {
+      toolId: tool.id,
+      paramsFromState: paramsByTool[tool.id],
+      finalPayload: payload,
+    });
+
     onApplyTool(tool.id, payload);
   };
 
@@ -586,6 +592,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               <Checkbox
                 checked={checked}
                 name={param.name}
+                value="true"
                 onChange={(event) =>
                   handleParamChange(tool.id, param.name, String(event.target.checked))
                 }

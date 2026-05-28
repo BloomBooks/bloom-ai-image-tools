@@ -1974,6 +1974,11 @@ export function ImageToolsWorkspace({
         const shouldSplitDerivedItems =
           tool.id !== "extract_cast_of_characters" ||
           params.splitIntoSeparateFiles === "true";
+        console.log("[ExtractCast/debug] derived split decision", {
+          toolId: tool.id,
+          splitIntoSeparateFiles: params.splitIntoSeparateFiles,
+          shouldSplitDerivedItems,
+        });
 
         if (!shouldSplitDerivedItems) {
           const newItem = await createHistoryItem(
@@ -2028,11 +2033,25 @@ export function ImageToolsWorkspace({
           },
         );
         durationMs += derivedItemsResult.durationMs;
+        console.log("[ExtractCast/debug] extractDerivedImageItems result", {
+          toolId: tool.id,
+          itemCount: derivedItemsResult.imageDataItems.length,
+        });
 
         const parentId = constrainedReferences[0]?.id || null;
 
         if (tool.derivedResultMode === "split-images") {
           const createdPieces: ImageRecord[] = [];
+          let sheetItem: ImageRecord | null = null;
+
+          if (tool.id === "extract_cast_of_characters") {
+            // Also keep the unsplit cast sheet so the original AI output is
+            // not lost when splitting is enabled. It appears in regular
+            // history (via appendHistoryEntry), in the Characters strip
+            // alongside the pieces, and in the Result pane.
+            sheetItem = await createHistoryItem(processedImageData, parentId);
+            appendHistoryEntry(sheetItem);
+          }
 
           for (const pieceImage of derivedItemsResult.imageDataItems) {
             const pieceItem = await createHistoryItem(pieceImage, parentId);
@@ -2041,12 +2060,16 @@ export function ImageToolsWorkspace({
           }
 
           if (tool.id === "extract_cast_of_characters") {
+            const characterStripIds = [
+              ...(sheetItem ? [sheetItem.id] : []),
+              ...createdPieces.map((item) => item.id),
+            ];
             setThumbnailStrips((prev) => {
               const nextCharacterIds = [
                 ...(prev.itemIdsByStrip.characters || []).filter(
-                  (id) => !createdPieces.some((item) => item.id === id),
+                  (id) => !characterStripIds.includes(id),
                 ),
-                ...createdPieces.map((item) => item.id),
+                ...characterStripIds,
               ];
               const next = replaceStripItems(
                 prev,
@@ -2057,7 +2080,10 @@ export function ImageToolsWorkspace({
             });
           }
 
-          finalizeDerivedItems(createdPieces, { showAsCollection: true });
+          const resultItems = sheetItem
+            ? [sheetItem, ...createdPieces]
+            : createdPieces;
+          finalizeDerivedItems(resultItems, { showAsCollection: true });
           return;
         }
 

@@ -33,8 +33,8 @@ test("creates a new robot image via OpenRouter", async ({ page }) => {
   const generateButton = page.getByRole("button", { name: /Generate Image/i });
   await generateButton.click();
 
-  const processing = page.getByRole("button", { name: /Processing.../i });
-  await expect(processing).toBeDisabled();
+  const processing = page.getByRole("button", { name: /Click to Cancel/i });
+  await expect(processing).toBeEnabled();
 
   // Race: wait for either success (result image) or failure (error banner)
   // This ensures we fail fast on errors rather than waiting for the long timeout

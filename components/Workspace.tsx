@@ -160,6 +160,14 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
+  const derivedResultLabel =
+    tool?.id === "extract_cast_of_characters"
+      ? "Characters"
+      : tool?.derivedResultMode === "split-images"
+        ? "Pieces"
+        : "Result";
+  const targetPanelLabel =
+    tool?.id === "ethnicity" ? "Character grid or scene to change" : "Image to Edit";
   const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;
   const canAddReferenceSlot =
     referenceImages.length < maxReferenceCount || !Number.isFinite(maxReferenceCount);
@@ -194,11 +202,15 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           : []),
       ];
 
-  const referenceLabel = "Reference Images";
+  const referenceLabel =
+    tool?.id === "extract_cast_of_characters"
+      ? "Images from the book that show all the characters"
+      : "Characters and other Reference Images";
   const resultSlots: ImagePanelSlot[] = resultImages.map((image, index) => ({
     image,
     slotIndex: index,
     canRemove: false,
+    dndDragId: `panelItem:resultCollection:${index}:${image.id}`,
     controls: {
       upload: false,
       paste: false,
@@ -411,7 +423,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 <ImagePanel
                   image={targetImage}
                   isAnyDndDragging={isAnyDndDragging}
-                  label="Image to Edit"
+                  label={targetPanelLabel}
                   panelTestId="target-panel"
                   onUpload={onUploadTarget}
                   isDropZone={true}
@@ -484,7 +496,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         >
           {resultSlots.length ? (
             <ImagePanel
-              label="Pieces"
+              label={derivedResultLabel}
               layout="grid"
               panelTestId="result-panel"
               slots={resultSlots}

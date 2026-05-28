@@ -11,8 +11,9 @@ export interface ThumbnailStripConfig {
 
 export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
   "history",
-  "starred",
+  "characters",
   "reference",
+  "starred",
   "environment",
 ];
 
@@ -32,9 +33,16 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     allowReorder: true,
     allowDrop: true,
   },
+  characters: {
+    id: "characters",
+    label: "Characters",
+    allowRemove: true,
+    allowReorder: true,
+    allowDrop: true,
+  },
   reference: {
     id: "reference",
-    label: "Reference",
+    label: "Reference Images",
     allowRemove: true,
     allowReorder: true,
     allowDrop: true,
@@ -84,6 +92,7 @@ export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot 
   pinnedStripIds: [],
   itemIdsByStrip: {
     history: [],
+    characters: [],
     starred: [],
     reference: [],
     environment: [],
@@ -279,6 +288,9 @@ export const buildStripSnapshotFromEntries = (entries: ImageRecord[]): Thumbnail
     .map((entry) => entry.id)
     .reverse();
   base.itemIdsByStrip.history = orderedHistory;
+  base.itemIdsByStrip.characters = entries
+    .filter((entry) => entry.toolId === "extract_cast_of_characters")
+    .map((entry) => entry.id);
   base.itemIdsByStrip.starred = entries.filter((entry) => entry.isStarred).map((entry) => entry.id);
   return base;
 };
@@ -298,6 +310,15 @@ export const hydrateThumbnailStripsSnapshot = (
   starredIds.forEach((id) => {
     if (!sanitized.itemIdsByStrip.starred.includes(id)) {
       sanitized = addItemToStrip(sanitized, "starred", id);
+    }
+  });
+
+  const characterIds = entries
+    .filter((entry) => entry.toolId === "extract_cast_of_characters")
+    .map((entry) => entry.id);
+  characterIds.forEach((id) => {
+    if (!sanitized.itemIdsByStrip.characters.includes(id)) {
+      sanitized = addItemToStrip(sanitized, "characters", id);
     }
   });
 
@@ -331,6 +352,10 @@ export const mergeThumbnailStripsSnapshots = (
       history: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.history || [],
         incomingSanitized.itemIdsByStrip.history || [],
+      ),
+      characters: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.characters || [],
+        incomingSanitized.itemIdsByStrip.characters || [],
       ),
       starred: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.starred || [],

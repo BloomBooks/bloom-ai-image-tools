@@ -21,13 +21,13 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
     <Box
       sx={{
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "space-between",
         width: "100%",
         borderRadius: 3,
         px: 1.5,
         py: 1,
-        height: 48,
+        height: "auto",
         minHeight: 48,
         gap: 1,
         bgcolor: "transparent",
@@ -43,9 +43,10 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
           opacity: 0.85,
           fontSize: 11,
           flexGrow: 1,
-          whiteSpace: "nowrap",
-          textOverflow: "ellipsis",
-          overflow: "hidden",
+          minWidth: 0,
+          lineHeight: 1.3,
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
         }}
       >
         {label}

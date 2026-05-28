@@ -14,9 +14,7 @@ export const extractDerivedImageItems = async (
   const segmentedItems = await segmentImageIntoPieces(backgroundRemoved.imageData);
 
   return {
-    imageDataItems: segmentedItems.length
-      ? segmentedItems
-      : [backgroundRemoved.imageData],
+    imageDataItems: segmentedItems.length ? segmentedItems : [backgroundRemoved.imageData],
     durationMs: backgroundRemoved.durationMs,
   };
 };

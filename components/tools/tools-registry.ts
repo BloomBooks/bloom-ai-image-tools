@@ -39,8 +39,19 @@ const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
   defaultValue,
 });
 
+const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
+  "ethnicity",
+  "apply_localized_characters",
+  "enhance_drawing",
+  "change_text",
+  "stylized_title",
+]);
+
 const shouldExposeAspectRatio = (tool: ToolDefinition) =>
-  tool.outputType !== "text" && tool.id !== "remove_background";
+  tool.outputType !== "text" &&
+  tool.id !== "remove_background" &&
+  tool.id !== "extract_cast_of_characters" &&
+  !HIDE_ASPECT_RATIO_TOOL_IDS.has(tool.id);
 
 const appendOptionalInstructions = (
   basePrompt: string,
@@ -61,6 +72,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "generate_image",
       title: "Create an Image",
       description: "",
+      group: "more",
       icon: AddPhotoAlternateOutlinedIcon,
       parameters: [
         {
@@ -105,6 +117,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "break_into_pieces",
       title: "Break into Pieces",
       description: "Turn one or more reference images into a clean sheet of separate game pieces.",
+      group: "games",
       icon: CallSplitOutlinedIcon,
       parameters: [
         {
@@ -131,10 +144,82 @@ export const TOOLS: ToolDefinition[] = (
       derivedResultMode: "split-images",
     },
     {
+      id: "extract_cast_of_characters",
+      title: "1) Extract Cast of Characters",
+      description:
+        "Turn one or more reference images into separate character cutouts for future consistency.",
+      group: "localize",
+      icon: Diversity3OutlinedIcon,
+      parameters: [
+        {
+          name: "splitIntoSeparateFiles",
+          label: "Split into separate files",
+          type: "checkbox",
+          defaultValue: "false",
+          optional: true,
+        },
+        {
+          name: "furtherInstructions",
+          label: "Further Instructions",
+          type: "textarea",
+          placeholder:
+            "Optional: identify the main characters, say which incidental figures to skip, or note any details to preserve.",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const shouldSplit = params.splitIntoSeparateFiles === "true";
+        const basePrompt =
+          shouldSplit
+            ? "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
+            : "Using the supplied reference image or images, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
+        const extraInstructions = params.furtherInstructions?.trim();
+        if (!extraInstructions) {
+          return basePrompt;
+        }
+
+        return `${basePrompt}\n\nUse these extra notes only to identify which characters to include or skip, or to call out details to preserve. Do not let these notes override the visual evidence in the supplied reference images: ${extraInstructions}`;
+      },
+      actionButtonLabel: "Extract Characters",
+      referenceImages: "1+",
+      editImage: false,
+      derivedResultMode: "split-images",
+    },
+    {
+      id: "apply_localized_characters",
+      title: "3) Apply Localized Characters",
+      description:
+        "Use localized character references to update the characters in the current scene while keeping the scene intact.",
+      group: "localize",
+      icon: Diversity3OutlinedIcon,
+      parameters: [
+        {
+          name: "furtherInstructions",
+          label: "Further Instructions",
+          type: "textarea",
+          placeholder:
+            "Optional: explain which references map to which characters, or note any details to preserve.",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const basePrompt =
+          "Using the supplied localized character reference images, update the characters in this image to match those localized character designs. Preserve the original scene composition, background, camera angle, pose, expressions, lighting, clothing intent, and overall art style unless the references clearly require a character-design change. Keep each localized character recognizable and consistent with the supplied references, and replace only the character design details needed to match the localized cast.";
+        return appendOptionalInstructions(
+          basePrompt,
+          params.furtherInstructions,
+          "Additional instructions to follow closely:",
+        );
+      },
+      actionButtonLabel: "Apply Localized Characters",
+      referenceImages: "1+",
+    },
+    {
       id: "make_gif",
       title: "Make Gif",
       description:
         "Turn one reference image into a short looping animation sheet and encode it as a GIF.",
+      group: "games",
       icon: GifBoxOutlinedIcon,
       parameters: [
         {
@@ -200,6 +285,7 @@ export const TOOLS: ToolDefinition[] = (
       title: "Change Text",
       description:
         "Replace specific text in the image. Use this to localize images that contain text.",
+      group: "text",
       icon: TextFieldsOutlinedIcon,
       parameters: [
         {
@@ -223,6 +309,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "change_style",
       title: "Change Style",
       description: "Restyle the selected image.",
+      group: "more",
       icon: BrushOutlinedIcon,
       parameters: [
         {
@@ -246,6 +333,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "stylized_title",
       title: "Add Stylized Title",
       description: "Add a stylized title overlay that fits well the illustration.",
+      group: "text",
       icon: TitleOutlinedIcon,
       parameters: [
         {
@@ -269,8 +357,9 @@ export const TOOLS: ToolDefinition[] = (
 
     {
       id: "ethnicity",
-      title: "Change Ethnicity",
+      title: "2) Change Ethnicity",
       description: "",
+      group: "localize",
       icon: Diversity3OutlinedIcon,
       parameters: [
         {
@@ -282,14 +371,14 @@ export const TOOLS: ToolDefinition[] = (
         },
         {
           name: "character",
-          label: "Target Character (optional)",
+          label: "Target Character (optional; leave blank for all)",
           type: "text",
           placeholder: "e.g. the boy, the girl",
           optional: true,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
-        const character = params.character?.trim() || "the main character";
+        const character = params.character?.trim() || "all characters in the image";
         const selectedEthnicity =
           getEthnicityByValue(params.ethnicity) ?? ETHNICITY_CATEGORIES[0] ?? null;
         const label =
@@ -305,6 +394,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "custom",
       title: "Custom Edit",
       description: "Edit the image, optionally with additional reference images.",
+      group: "more",
       icon: TuneOutlinedIcon,
       parameters: [
         {
@@ -321,6 +411,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "generate_pallet",
       title: "Generate Pallet",
       description: "Create a simple reference color pallet, optionally based on a reference image.",
+      group: "more",
       icon: ColorLensOutlinedIcon,
       parameters: [
         {
@@ -355,6 +446,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "remove_object",
       title: "Remove Object",
       description: "Remove unwanted objects or artifacts.",
+      group: "games",
       icon: ContentCutOutlinedIcon,
       parameters: [
         {
@@ -372,6 +464,7 @@ export const TOOLS: ToolDefinition[] = (
       id: "remove_background",
       title: "Remove Background",
       description: "Replace the background with transparency.",
+      group: "games",
       icon: CropFreeOutlinedIcon,
       parameters: [],
       promptTemplate: () => `Replace the background with transparency.`,

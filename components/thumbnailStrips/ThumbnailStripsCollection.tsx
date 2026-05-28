@@ -9,6 +9,7 @@ import { ThumbnailStrip } from "./ThumbnailStrip";
 import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 
 const EMPTY_MESSAGES: Partial<Record<ThumbnailStripId, string>> = {
+  characters: "Extracted characters will appear here.",
   starred: "Star images to keep them handy.",
   reference: "Save frequently used reference images here.",
   environment: "Environment images supplied by host application.",
@@ -102,9 +103,6 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
-        onItemDropped={(targetStripId, dropIndex, draggedId, event) =>
-          onDropToStrip(targetStripId, dropIndex, draggedId, event)
-        }
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
       />

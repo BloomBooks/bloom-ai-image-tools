@@ -14,14 +14,12 @@ type Bounds = {
 const ALPHA_BACKGROUND_THRESHOLD = 24;
 const WHITE_BACKGROUND_THRESHOLD = 242;
 const WHITE_SPREAD_THRESHOLD = 20;
+const SPLIT_OUTPUT_MARGIN_PX = 8;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-const isBackgroundPixel = (
-  data: Uint8ClampedArray,
-  pixelIndex: number,
-): boolean => {
+const isBackgroundPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean => {
   const alpha = data[pixelIndex + 3];
   if (alpha <= ALPHA_BACKGROUND_THRESHOLD) {
     return true;
@@ -40,11 +38,7 @@ const isBackgroundPixel = (
   );
 };
 
-const createForegroundMask = ({
-  data,
-  width,
-  height,
-}: RasterImageData): Uint8Array => {
+const createForegroundMask = ({ data, width, height }: RasterImageData): Uint8Array => {
   const mask = new Uint8Array(width * height);
   for (let index = 0; index < width * height; index += 1) {
     const pixelIndex = index * 4;
@@ -85,11 +79,7 @@ export const extractOpaqueBoundsFromRaster = (
   return { left, top, right, bottom };
 };
 
-const countForeground = (
-  mask: Uint8Array,
-  width: number,
-  bounds: Bounds,
-): number => {
+const countForeground = (mask: Uint8Array, width: number, bounds: Bounds): number => {
   let count = 0;
   for (let y = bounds.top; y <= bounds.bottom; y += 1) {
     const rowOffset = y * width;
@@ -107,7 +97,7 @@ const collectAxisCounts = (
   axis: "row" | "column",
 ): number[] => {
   if (axis === "row") {
-    const counts = new Array<number>(height).fill(0);
+    const counts = Array.from<number>({ length: height }).fill(0);
     for (let y = 0; y < height; y += 1) {
       const rowOffset = y * width;
       let count = 0;
@@ -119,7 +109,7 @@ const collectAxisCounts = (
     return counts;
   }
 
-  const counts = new Array<number>(width).fill(0);
+  const counts = Array.from<number>({ length: width }).fill(0);
   for (let x = 0; x < width; x += 1) {
     let count = 0;
     for (let y = 0; y < height; y += 1) {
@@ -167,11 +157,7 @@ const detectActiveRanges = (
   return ranges.filter((range) => range.end >= range.start);
 };
 
-const detectGridBounds = (
-  mask: Uint8Array,
-  width: number,
-  height: number,
-): Bounds[] => {
+const detectGridBounds = (mask: Uint8Array, width: number, height: number): Bounds[] => {
   const rowCounts = collectAxisCounts(mask, width, height, "row");
   const columnCounts = collectAxisCounts(mask, width, height, "column");
   const rowThreshold = Math.max(2, Math.floor(width * 0.008));
@@ -326,9 +312,7 @@ const detectConnectedComponentBounds = (
   });
 };
 
-export const extractPieceBoundsFromRaster = (
-  raster: RasterImageData,
-): Bounds[] => {
+export const extractPieceBoundsFromRaster = (raster: RasterImageData): Bounds[] => {
   const { width, height } = raster;
   if (!width || !height) {
     return [];
@@ -356,6 +340,28 @@ const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
     image.onerror = () => reject(new Error("Failed to load image for segmentation."));
     image.src = dataUrl;
   });
+
+const createMarginCanvas = (
+  sourceCanvas: HTMLCanvasElement,
+  margin: number,
+): HTMLCanvasElement => {
+  if (margin <= 0) {
+    return sourceCanvas;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = sourceCanvas.width + margin * 2;
+  canvas.height = sourceCanvas.height + margin * 2;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas context unavailable for segmentation margin.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(sourceCanvas, margin, margin);
+  return canvas;
+};
 
 const cropBoundsToDataUrl = async (
   image: HTMLImageElement,
@@ -430,7 +436,7 @@ const cropBoundsToDataUrl = async (
     trimmedHeight,
   );
 
-  return trimmedCanvas.toDataURL("image/png");
+  return createMarginCanvas(trimmedCanvas, SPLIT_OUTPUT_MARGIN_PX).toDataURL("image/png");
 };
 
 export const segmentImageIntoPieces = async (

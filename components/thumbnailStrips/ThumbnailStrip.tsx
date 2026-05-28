@@ -24,12 +24,6 @@ interface ThumbnailStripProps {
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRemoveItem?: (id: string) => void;
-  onItemDropped: (
-    stripId: ThumbnailStripId,
-    dropIndex: number,
-    draggedId: string | null,
-    event?: React.DragEvent | null,
-  ) => void;
   onVisibleItemIdsChange?: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   isAnyDndDragging?: boolean;
 }
@@ -52,6 +46,15 @@ const buildStripItemId = (stripId: ThumbnailStripId, imageId: string) =>
   `stripItem:${stripId}:${imageId}`;
 
 const buildStripContainerId = (stripId: ThumbnailStripId) => `strip:${stripId}`;
+const buildStripStackId = (stripId: ThumbnailStripId) => `stripStack:${stripId}`;
+
+const createCharacterStackSvgDataUrl = (frontImageData: string | null) => {
+  const frontImageMarkup = frontImageData
+    ? `<image href="${frontImageData}" x="32" y="18" width="48" height="66" preserveAspectRatio="xMidYMid slice" clip-path="url(#front-clip)" />`
+    : `<rect x="32" y="18" width="48" height="66" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5" />`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="112" height="112" viewBox="0 0 112 112"><rect x="20" y="20" width="48" height="66" rx="10" fill="#e2e8f0" stroke="#334155" stroke-width="2" transform="rotate(-10 44 53)" /><rect x="28" y="18" width="48" height="66" rx="10" fill="#f1f5f9" stroke="#334155" stroke-width="2" transform="rotate(-4 52 51)" /><clipPath id="front-clip"><rect x="32" y="18" width="48" height="66" rx="10" /></clipPath><rect x="32" y="18" width="48" height="66" rx="10" fill="#ffffff" stroke="#0f172a" stroke-width="2" />${frontImageMarkup}<text x="56" y="98" text-anchor="middle" font-family="Roboto, Noto Sans, sans-serif" font-size="11" font-weight="700" fill="${theme.colors.accent}">Cast</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
 
 type StripThumbBaseProps = {
   stripId: ThumbnailStripId;
@@ -257,6 +260,63 @@ const DraggableStripThumb: React.FC<{
   );
 };
 
+const CharacterStackThumb: React.FC<{
+  stripId: ThumbnailStripId;
+  imageIds: string[];
+  frontImage: ImageRecord | null;
+  onSelect: () => void;
+}> = ({ stripId, imageIds, frontImage, onSelect }) => {
+  const draggable = useDraggable({
+    id: buildStripStackId(stripId),
+    data: {
+      kind: "image-stack",
+      imageId: imageIds[0] || null,
+      imageIds,
+      source: { type: "strip", stripId },
+    },
+  });
+  const previewSrc = React.useMemo(
+    () => createCharacterStackSvgDataUrl(frontImage?.imageData || null),
+    [frontImage?.imageData],
+  );
+
+  return (
+    <button
+      ref={draggable.setNodeRef}
+      type="button"
+      onClick={onSelect}
+      style={{
+        width: THUMB_WIDTH,
+        height: 144,
+        flexShrink: 0,
+        padding: 0,
+        borderRadius: 18,
+        border: `1px solid ${theme.colors.border}`,
+        backgroundColor: theme.colors.surface,
+        boxShadow: theme.colors.panelShadow,
+        overflow: "hidden",
+        cursor: "grab",
+        opacity: draggable.isDragging ? 0 : 1,
+      }}
+      {...draggable.attributes}
+      {...draggable.listeners}
+    >
+      <img
+        src={previewSrc}
+        alt="Character stack"
+        draggable={false}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+          objectFit: "cover",
+          backgroundColor: theme.colors.surface,
+        }}
+      />
+    </button>
+  );
+};
+
 export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   stripId,
   itemIds,
@@ -273,7 +333,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   onSelect,
   onToggleStar,
   onRemoveItem,
-  onItemDropped,
   onVisibleItemIdsChange,
   isAnyDndDragging = false,
 }) => {
@@ -292,22 +351,12 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
     [droppable],
   );
 
-  const debugLog = (...args: any[]) => {
-    try {
-      if (typeof window !== "undefined" && (window as any).__E2E_VERBOSE) {
-        // eslint-disable-next-line no-console
-        console.log("[thumbnail-strip]", ...args);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
   const orderedItems = useMemo(() => {
     return itemIds.map((id) => itemsById[id]).filter((item): item is ImageRecord => Boolean(item));
   }, [itemIds, itemsById]);
 
   const orderedItemIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
+  const showCharacterStack = stripId === "characters" && orderedItemIds.length > 0;
 
   React.useEffect(() => {
     if (!onVisibleItemIdsChange) {
@@ -387,6 +436,14 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         position: "relative",
       }}
     >
+      {showCharacterStack && (
+        <CharacterStackThumb
+          stripId={stripId}
+          imageIds={orderedItemIds}
+          frontImage={orderedItems[0] || null}
+          onSelect={() => onSelect(orderedItemIds[0])}
+        />
+      )}
       {allowReorder ? (
         <SortableContext
           items={orderedItems.map((item) => buildStripItemId(stripId, item.id))}

@@ -7,6 +7,7 @@ import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
 import HistoryToggleOffIcon from "@mui/icons-material/HistoryToggleOff";
 import StarOutlineIcon from "@mui/icons-material/StarOutline";
 import CollectionsBookmarkIcon from "@mui/icons-material/CollectionsBookmark";
+import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import type { SvgIconProps } from "@mui/material/SvgIcon";
 import { ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
@@ -20,7 +21,6 @@ import {
   STRIP_BORDER,
   STRIP_ACTIVE_BORDER_COLOR,
   STRIP_TAB_RADIUS,
-  STRIP_BORDER_WIDTH,
 } from "./stripStyleConstants";
 
 const PIN_BUTTON_SX = {
@@ -37,11 +37,9 @@ const PIN_BUTTON_SX = {
   },
 } as const;
 
-const STRIP_ICONS: Record<
-  ThumbnailStripId,
-  React.ComponentType<SvgIconProps>
-> = {
+const STRIP_ICONS: Record<ThumbnailStripId, React.ComponentType<SvgIconProps>> = {
   history: HistoryToggleOffIcon,
+  characters: Diversity3OutlinedIcon,
   starred: StarOutlineIcon,
   reference: CollectionsBookmarkIcon,
   environment: AutoStoriesIcon,
@@ -71,65 +69,29 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   }
 
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
+  const pinnedStripIds = new Set(snapshot.pinnedStripIds);
 
-  const resolvedActiveId =
-    activeStripId !== undefined ? activeStripId : snapshot.activeStripId;
+  const resolvedActiveId = activeStripId !== undefined ? activeStripId : snapshot.activeStripId;
   const isCompact = stripIds.length === 1;
   const railWidth = 96;
   const railPaddingY = isCompact ? 0.25 : 0.5;
   const pinSize = isCompact ? 22 : 26;
   const tabGap = isCompact ? 0.5 : 0.75;
 
-  const handleTabClick = (stripId: ThumbnailStripId) => {
-    onActivate(stripId);
-  };
-
-  const handleDragEnter = (
-    event: React.DragEvent,
-    stripId: ThumbnailStripId
-  ) => {
+  const handleDragEnter = (event: React.DragEvent, stripId: ThumbnailStripId) => {
     event.preventDefault();
     onDragActivate(stripId);
   };
 
-  const handlePinClick = (
-    event: React.MouseEvent<HTMLElement>,
-    stripId: ThumbnailStripId
-  ) => {
+  const handlePinClick = (event: React.MouseEvent<HTMLElement>, stripId: ThumbnailStripId) => {
     event.stopPropagation();
     event.preventDefault();
     onTogglePin(stripId);
   };
 
-  const renderPinButton = (stripId: ThumbnailStripId, isPinned: boolean) => (
-    <IconButton
-      component="span"
-      size="small"
-      disableRipple
-      onClick={(event) => handlePinClick(event, stripId)}
-      title={isPinned ? "Unpin strip" : "Pin strip"}
-      aria-label={
-        isPinned
-          ? `Unpin ${resolvedStripConfigs[stripId].label}`
-          : `Pin ${resolvedStripConfigs[stripId].label}`
-      }
-      data-testid={`thumbnail-tab-pin-${stripId}`}
-      sx={{
-        ...PIN_BUTTON_SX,
-        width: pinSize,
-        height: pinSize,
-      }}
-    >
-      {isPinned ? (
-        <PushPinIcon fontSize="inherit" />
-      ) : (
-        <PushPinOutlinedIcon fontSize="inherit" />
-      )}
-    </IconButton>
-  );
   const renderTab = (stripId: ThumbnailStripId) => {
     const IconComponent = STRIP_ICONS[stripId];
-    const isPinned = snapshot.pinnedStripIds.includes(stripId);
+    const isPinned = pinnedStripIds.has(stripId);
     const isActive = resolvedActiveId === stripId;
     const tabId = `thumbnail-tab-${stripId}`;
     const label = resolvedStripConfigs[stripId].label;
@@ -166,7 +128,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
             type="button"
             id={tabId}
             data-testid={tabId}
-            onClick={() => handleTabClick(stripId)}
+            onClick={() => onActivate(stripId)}
             onDragEnter={(event) => handleDragEnter(event, stripId)}
             style={{
               width: "100%",
@@ -192,7 +154,30 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
               border: "none",
             }}
           >
-            {renderPinButton(stripId, isPinned)}
+            <IconButton
+              component="span"
+              size="small"
+              disableRipple
+              onClick={(event) => handlePinClick(event, stripId)}
+              title={isPinned ? "Unpin strip" : "Pin strip"}
+              aria-label={
+                isPinned
+                  ? `Unpin ${resolvedStripConfigs[stripId].label}`
+                  : `Pin ${resolvedStripConfigs[stripId].label}`
+              }
+              data-testid={`thumbnail-tab-pin-${stripId}`}
+              sx={{
+                ...PIN_BUTTON_SX,
+                width: pinSize,
+                height: pinSize,
+              }}
+            >
+              {isPinned ? (
+                <PushPinIcon fontSize="inherit" />
+              ) : (
+                <PushPinOutlinedIcon fontSize="inherit" />
+              )}
+            </IconButton>
           </Box>
         </Box>
       </Tooltip>

@@ -419,6 +419,7 @@ interface ImageToolsPanelBar {
   onArtStyleChange: (styleId: string) => void;
   onSetTarget: (id: string) => void;
   onSetReferenceAt: (index: number, id: string) => void;
+  onAddReferencesAt: (index: number, ids: string[]) => void;
   onSetRight: (id: string) => void;
   onUploadTarget: (file: File) => void;
   onRemoveReferenceAt: (index: number) => void;
@@ -429,6 +430,8 @@ interface ImageToolsPanelBar {
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
+  previewModifierActive?: boolean;
+  previewSelectionImageIds?: string[];
   onDismissError: () => void;
 }
 
@@ -460,6 +463,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onArtStyleChange,
   onSetTarget,
   onSetReferenceAt,
+  onAddReferencesAt,
   onSetRight,
   onUploadTarget,
   onRemoveReferenceAt,
@@ -470,6 +474,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
+  previewModifierActive = false,
+  previewSelectionImageIds = [],
   onDismissError,
 }) => {
   const majorElementGap = { xs: 1.5, md: 3.75 } as const;
@@ -558,7 +564,14 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const imageId = (event.active.data.current as any)?.imageId as string | undefined;
-    if (!imageId) return;
+    const imageIds = Array.isArray((event.active.data.current as any)?.imageIds)
+      ? ((event.active.data.current as any).imageIds as string[]).filter(
+          (id): id is string => typeof id === "string" && id.length > 0,
+        )
+      : imageId
+        ? [imageId]
+        : [];
+    if (!imageIds.length) return;
 
     const overId = event.over?.id;
     if (!overId) return;
@@ -566,15 +579,19 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
     const panel = parsePanelDrop(overId);
     if (panel) {
       if (panel.kind === "target") {
-        onSetTarget(imageId);
+        onSetTarget(imageIds[0]);
         return;
       }
       if (panel.kind === "result") {
-        onSetRight(imageId);
+        onSetRight(imageIds[0]);
         return;
       }
       if (panel.kind === "reference") {
-        onSetReferenceAt(panel.slotIndex, imageId);
+        if (imageIds.length === 1) {
+          onSetReferenceAt(panel.slotIndex, imageIds[0]);
+        } else {
+          onAddReferencesAt(panel.slotIndex, imageIds);
+        }
         return;
       }
     }
@@ -584,14 +601,18 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
       const { stripId, imageId: overImageId } = overStripItem;
       const list = thumbnailStrips.itemIdsByStrip[stripId] || [];
       const dropIndex = Math.max(0, list.indexOf(overImageId));
-      onStripItemDrop(stripId, dropIndex, imageId, null);
+      imageIds.forEach((draggedId, index) => {
+        onStripItemDrop(stripId, dropIndex + index, draggedId, null);
+      });
       return;
     }
 
     const overStrip = parseStripIdFromContainer(overId);
     if (overStrip) {
       const list = thumbnailStrips.itemIdsByStrip[overStrip] || [];
-      onStripItemDrop(overStrip, list.length, imageId, null);
+      imageIds.forEach((draggedId, index) => {
+        onStripItemDrop(overStrip, list.length + index, draggedId, null);
+      });
       return;
     }
   };
@@ -781,6 +802,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               snapshot={thumbnailStrips}
               entries={historyItems}
               selectedId={appState.rightPanelImageId}
+              previewModifierActive={previewModifierActive}
+              previewSelectionImageIds={previewSelectionImageIds}
               stripConfigs={thumbnailStripConfigs}
               hasHiddenHistory={hasHiddenHistory}
               onRequestHistoryAccess={onRequestHistoryAccess}

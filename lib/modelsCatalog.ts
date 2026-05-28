@@ -1,11 +1,12 @@
 import JSON5 from "json5";
 import modelCatalogText from "../data/models-registry.json5";
 import type { ModelInfo } from "../types";
+import { withLocalModels } from "./localModels";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
   try {
     const parsed = JSON5.parse(modelCatalogText);
-    return Array.isArray(parsed) ? (parsed as ModelInfo[]) : [];
+    return Array.isArray(parsed) ? withLocalModels(parsed as ModelInfo[]) : [];
   } catch (err) {
     console.error("Failed to parse model registry (JSON5)", err);
     return [];

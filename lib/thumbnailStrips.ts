@@ -9,10 +9,26 @@ export interface ThumbnailStripConfig {
   pinByDefault?: boolean;
 }
 
+export const STRIP_DESCRIPTIONS: Record<
+  ThumbnailStripId,
+  string | ((config: ThumbnailStripConfig) => string)
+> = {
+  history: "",
+  characters: "Use this area to keep your cast of characters.",
+  starred: "Star images to keep them handy.",
+  reference:
+    "Use this area to keep reference images that you use in more that one book. E.g. how people dress, what trees look like.",
+  environment: (config) =>
+    config.allowDrop
+      ? "Drag images here to add book pages."
+      : "Environment images supplied by host application.",
+};
+
 export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
   "history",
-  "starred",
+  "characters",
   "reference",
+  "starred",
   "environment",
 ];
 
@@ -21,7 +37,7 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     id: "history",
     label: "History",
     allowRemove: true,
-    allowReorder: false,
+    allowReorder: true,
     allowDrop: true,
     pinByDefault: true,
   },
@@ -32,9 +48,16 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     allowReorder: true,
     allowDrop: true,
   },
+  characters: {
+    id: "characters",
+    label: "Characters",
+    allowRemove: true,
+    allowReorder: true,
+    allowDrop: true,
+  },
   reference: {
     id: "reference",
-    label: "Reference",
+    label: "Reference Images",
     allowRemove: true,
     allowReorder: true,
     allowDrop: true,
@@ -84,6 +107,7 @@ export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot 
   pinnedStripIds: [],
   itemIdsByStrip: {
     history: [],
+    characters: [],
     starred: [],
     reference: [],
     environment: [],
@@ -160,6 +184,18 @@ export const removeItemsFromAllStrips = (
     ...snapshot,
     itemIdsByStrip: next,
   };
+};
+
+export const getOtherStripsContainingItem = (
+  snapshot: ThumbnailStripsSnapshot,
+  sourceStripId: ThumbnailStripId,
+  itemId: string,
+): ThumbnailStripId[] => {
+  return THUMBNAIL_STRIP_ORDER.filter(
+    (stripId) =>
+      stripId !== sourceStripId &&
+      (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
+  );
 };
 
 export const reorderItemInStrip = (
@@ -279,6 +315,9 @@ export const buildStripSnapshotFromEntries = (entries: ImageRecord[]): Thumbnail
     .map((entry) => entry.id)
     .reverse();
   base.itemIdsByStrip.history = orderedHistory;
+  base.itemIdsByStrip.characters = entries
+    .filter((entry) => entry.toolId === "extract_cast_of_characters")
+    .map((entry) => entry.id);
   base.itemIdsByStrip.starred = entries.filter((entry) => entry.isStarred).map((entry) => entry.id);
   return base;
 };
@@ -298,6 +337,15 @@ export const hydrateThumbnailStripsSnapshot = (
   starredIds.forEach((id) => {
     if (!sanitized.itemIdsByStrip.starred.includes(id)) {
       sanitized = addItemToStrip(sanitized, "starred", id);
+    }
+  });
+
+  const characterIds = entries
+    .filter((entry) => entry.toolId === "extract_cast_of_characters")
+    .map((entry) => entry.id);
+  characterIds.forEach((id) => {
+    if (!sanitized.itemIdsByStrip.characters.includes(id)) {
+      sanitized = addItemToStrip(sanitized, "characters", id);
     }
   });
 
@@ -331,6 +379,10 @@ export const mergeThumbnailStripsSnapshots = (
       history: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.history || [],
         incomingSanitized.itemIdsByStrip.history || [],
+      ),
+      characters: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.characters || [],
+        incomingSanitized.itemIdsByStrip.characters || [],
       ),
       starred: mergeUniqueIds(
         currentSanitized.itemIdsByStrip.starred || [],

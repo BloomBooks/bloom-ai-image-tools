@@ -1,4 +1,5 @@
 import { createStore, del, get, set } from "idb-keyval";
+import { getImageDimensions, getMimeTypeFromUrl } from "../../lib/imageUtils";
 import {
   IMAGE_TOOLS_FS_DB_NAME,
   IMAGE_TOOLS_FS_HANDLE_KEY,
@@ -13,8 +14,10 @@ import {
   readAppStateFile,
   scanFolder,
   writeAppStateFile,
+  writeImageAndSidecar,
   writeTombstone,
 } from "../history/folder/FolderHistoryBackend";
+import { imageFileNameForEntry } from "../history/ids";
 
 export interface FileSystemImageBinding {
   directoryHandle: FileSystemDirectoryHandle;
@@ -303,6 +306,17 @@ const readJsonFile = async <T>(
 };
 
 const blobToDataUrl = (blob: Blob) => {
+  if (typeof FileReader === "undefined") {
+    return blob.arrayBuffer().then((buffer) => {
+      const bytes = new Uint8Array(buffer);
+      const base64 =
+        typeof Buffer !== "undefined"
+          ? Buffer.from(bytes).toString("base64")
+          : btoa(String.fromCharCode(...bytes));
+      return `data:${blob.type || "application/octet-stream"};base64,${base64}`;
+    });
+  }
+
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -344,6 +358,26 @@ const getMimeTypeFromFileName = (fileName: string | null | undefined) => {
   }
   return "image/png";
 };
+
+const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): HistoryEntry => ({
+  id: record.id,
+  parentId: record.parentId ?? null,
+  toolId: record.toolId,
+  parameters: record.parameters ?? {},
+  promptUsed: record.promptUsed ?? "",
+  model: record.model ?? "",
+  reasoningLevel: record.reasoningLevel ?? null,
+  timestamp: record.timestamp,
+  durationMs: record.durationMs,
+  cost: record.cost,
+  resolution: record.resolution,
+  origin: record.origin,
+  isStarred: record.isStarred ?? false,
+  sourceStyleId: record.sourceStyleId ?? null,
+  sourceSummary: record.sourceSummary ?? null,
+  imageMime: mime,
+  metaUpdatedAt: Date.now(),
+});
 
 const imageRecordFromHistoryEntry = (
   entry: HistoryEntry,
@@ -405,6 +439,32 @@ const buildPersistedAppStateFromAppStateFile = (
     history,
   };
 };
+
+const buildRecoveredHistoryEntry = (
+  image: { id: string; fileName: string; lastModified: number },
+  options?: {
+    isStarred?: boolean;
+    isCharacter?: boolean;
+  },
+): ImageRecord => ({
+  id: image.id,
+  parentId: null,
+  imageData: "",
+  imageFileName: image.fileName,
+  toolId: options?.isCharacter ? "extract_cast_of_characters" : "unknown",
+  parameters: {},
+  sourceStyleId: null,
+  durationMs: 0,
+  cost: 0,
+  model: "",
+  reasoningLevel: null,
+  timestamp: image.lastModified || 0,
+  promptUsed: "Recovered image",
+  sourceSummary: "Recovered from folder",
+  resolution: undefined,
+  isStarred: options?.isStarred ?? false,
+  origin: "generated",
+});
 
 export const supportsFileSystemAccess = (): boolean => !!getDirectoryPicker();
 
@@ -480,6 +540,23 @@ export const writeImageFile = async (
     }
     await attemptWrite();
   }
+};
+
+export const writeHistoryImageRecord = async (
+  binding: FileSystemImageBinding,
+  item: ImageRecord,
+): Promise<ImageRecord> => {
+  if (!item.imageData) {
+    return item;
+  }
+
+  const mime = getMimeTypeFromUrl(item.imageData) ?? getMimeTypeFromFileName(item.imageFileName);
+  const entry = imageRecordToHistoryEntry(item, mime);
+  await writeImageAndSidecar(binding, entry, item.imageData);
+  return {
+    ...item,
+    imageFileName: imageFileNameForEntry(entry),
+  };
 };
 
 export const readImageFile = async (
@@ -693,10 +770,64 @@ export const readFolderPersistedState = async (
       },
     });
   }
+  const persistedAppState = buildPersistedAppStateFromAppStateFile(
+    appState,
+    scan.sidecars,
+    imageFilesById,
+  );
+  const knownIds = new Set(persistedAppState.history.map((item) => item.id));
+  const stripItemIds = appState.thumbnailStrips?.itemIdsByStrip;
+  const starredIds = new Set(stripItemIds?.starred ?? []);
+  const characterIds = new Set(stripItemIds?.characters ?? []);
+  const recoveredHistory = scan.images
+    .filter((image) => !knownIds.has(image.id))
+    .sort((a, b) => a.lastModified - b.lastModified)
+    .map((image) =>
+      buildRecoveredHistoryEntry(image, {
+        isStarred: starredIds.has(image.id),
+        isCharacter: characterIds.has(image.id),
+      }),
+    );
+
+  const thumbnailStrips = appState.thumbnailStrips
+    ? {
+        ...appState.thumbnailStrips,
+        itemIdsByStrip: {
+          ...appState.thumbnailStrips.itemIdsByStrip,
+          reference: Array.from(
+            new Set([
+              ...(appState.thumbnailStrips.itemIdsByStrip.reference ?? []),
+              ...(appState.referenceImageIds ?? []),
+            ]),
+          ),
+        },
+      }
+    : appState.thumbnailStrips;
+
+  const history = await Promise.all(
+    [...persistedAppState.history, ...recoveredHistory].map(async (item) => {
+      if (item.resolution || !item.imageFileName) {
+        return item;
+      }
+
+      const imageData = await readImageFile(binding, item.imageFileName);
+      if (!imageData) {
+        return item;
+      }
+
+      return {
+        ...item,
+        resolution: await getImageDimensions(imageData),
+      };
+    }),
+  );
 
   return {
-    appState: buildPersistedAppStateFromAppStateFile(appState, scan.sidecars, imageFilesById),
-    thumbnailStrips: appState.thumbnailStrips,
+    appState: {
+      ...persistedAppState,
+      history,
+    },
+    thumbnailStrips,
   };
 };
 

@@ -3,7 +3,7 @@ import type { ElementType, ReactNode } from "react";
 export interface ToolParameter {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea" | "art-style" | "aspect-ratio" | "size";
+  type: "text" | "select" | "textarea" | "art-style" | "aspect-ratio" | "size" | "checkbox";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
@@ -82,6 +82,7 @@ export interface ToolDefinition {
   id: string;
   title: string;
   description: string;
+  group?: "default" | "localize" | "text" | "games" | "more";
   icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
@@ -156,6 +157,7 @@ export interface GenerationTimingState {
 
 export type ThumbnailStripId =
   | "history"
+  | "characters"
   | "starred"
   | "reference"
   | "environment";
@@ -165,6 +167,8 @@ export interface ThumbnailStripsSnapshot {
   pinnedStripIds: ThumbnailStripId[];
   itemIdsByStrip: Record<ThumbnailStripId, string[]>;
 }
+
+export type ImageSlotActionKey = "upload" | "paste" | "copy" | "download" | "remove";
 
 export interface AuthState {
   apiKey: string | null;

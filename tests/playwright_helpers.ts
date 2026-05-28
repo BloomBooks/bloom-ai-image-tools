@@ -2,7 +2,7 @@ import { expect, Page } from "@playwright/test";
 import path from "path";
 import { fileURLToPath } from "url";
 import { IMAGE_TOOLS_DB_NAME } from "../services/persistence/constants";
-import { ENV_KEY_SKIP_FLAG } from "../lib/authFlags";
+import { ENV_KEY_SKIP_FLAG, WELCOME_DIALOG_SKIP_FLAG } from "../lib/authFlags";
 import {
 	API_KEY_STORAGE_KEY,
 	AUTH_METHOD_STORAGE_KEY,
@@ -16,12 +16,14 @@ export const resetImageToolsPersistence = async (page: Page) => {
 	await page.addInitScript(
 		({
 			flag,
+			welcomeFlag,
 			apiKeyKey,
 			methodKey,
 			dbName,
 			uiKeyPrefix,
 		}: {
 			flag: string;
+			welcomeFlag: string;
 			apiKeyKey: string;
 			methodKey: string;
 			dbName: string;
@@ -29,6 +31,7 @@ export const resetImageToolsPersistence = async (page: Page) => {
 		}) => {
 			// Always set this so tests don't accidentally pick up an env key.
 			window.sessionStorage?.setItem(flag, "1");
+			window.sessionStorage?.setItem(welcomeFlag, "1");
 
 			// Only perform the destructive reset once per test session.
 			const resetMarker = "__imageToolsDidReset";
@@ -69,6 +72,7 @@ export const resetImageToolsPersistence = async (page: Page) => {
 		},
 		{
 			flag: ENV_KEY_SKIP_FLAG,
+			welcomeFlag: WELCOME_DIALOG_SKIP_FLAG,
 			apiKeyKey: API_KEY_STORAGE_KEY,
 			methodKey: AUTH_METHOD_STORAGE_KEY,
 			dbName: IMAGE_TOOLS_DB_NAME,
@@ -79,9 +83,22 @@ export const resetImageToolsPersistence = async (page: Page) => {
 	await page.goto("/");
 	await page.evaluate(() => (window as any).__imageToolsResetPromise);
 	await page.reload();
+	await dismissWelcomeDialogIfPresent(page);
+};
+
+export const dismissWelcomeDialogIfPresent = async (page: Page) => {
+	const dismissButton = page.getByRole("button", {
+		name: "I just want to look around",
+	});
+	if ((await dismissButton.count()) > 0 && (await dismissButton.isVisible())) {
+		await dismissButton.click();
+		await expect(dismissButton).toBeHidden();
+	}
 };
 
 export const openSettingsDialog = async (page: Page) => {
+	await dismissWelcomeDialogIfPresent(page);
+
 	// Prefer the CTA when present; it is the most stable entry point.
 	const connectCta = page.getByTestId("openrouter-connect-cta");
 	if ((await connectCta.count()) > 0 && (await connectCta.isVisible())) {
@@ -145,8 +162,10 @@ export const ALT_SAMPLE_IMAGE_PATH = path.resolve(
 );
 
 export const uploadImageToTarget = async (page: Page, filePath: string) => {
+	await dismissWelcomeDialogIfPresent(page);
 	const uploadInput = page.getByTestId("target-upload-input");
 	await uploadInput.setInputFiles(filePath);
+	await dismissWelcomeDialogIfPresent(page);
 	await expect(
 		page.getByRole("img", { name: "Image to Edit" })
 	).toBeVisible();

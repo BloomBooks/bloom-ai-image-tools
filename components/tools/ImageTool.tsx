@@ -4,7 +4,9 @@ import {
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   CircularProgress,
+  FormControlLabel,
   FormHelperText,
   MenuItem,
   Paper,
@@ -17,7 +19,6 @@ import { alpha, useTheme } from "@mui/material/styles";
 import type { ModelInfo, ToolDefinition, ToolParameter, ToolParamsById } from "../../types";
 import { TOOLS } from "./tools-registry";
 import { Icon, Icons } from "../Icons";
-import { CapabilityPanel } from "../CapabilityPanel";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
 import { AspectRatioPicker } from "./AspectRatioPicker";
@@ -27,27 +28,29 @@ import {
   getDefaultAspectRatioValue,
   resolveAspectRatioValue,
 } from "../../lib/aspectRatios";
+import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
 import { theme } from "../../themes";
 
-const GAMES_TOOL_IDS = new Set([
-  "break_into_pieces",
-  "make_gif",
-  "remove_object",
-  "remove_background",
-]);
-
-const ADVANCED_TOOL_IDS = new Set([
-  "generate_image",
-  "change_style",
-  "custom",
-  "generate_pallet",
-  "game_theme_generator",
-]);
-
-const TEXT_TOOL_IDS = new Set(["change_text", "stylized_title"]);
-
 const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
+
+const LOCALIZE_TOOL_ORDER = [
+  "extract_cast_of_characters",
+  "ethnicity",
+  "apply_localized_characters",
+] as const;
+
+const isGamesTool = (toolId: string | null) =>
+  TOOLS.some((tool) => tool.id === toolId && tool.group === "games");
+
+const isAdvancedTool = (toolId: string | null) =>
+  TOOLS.some((tool) => tool.id === toolId && tool.group === "more");
+
+const isLocalizedTool = (toolId: string | null) =>
+  TOOLS.some((tool) => tool.id === toolId && tool.group === "localize");
+
+const isTextTool = (toolId: string | null) =>
+  TOOLS.some((tool) => tool.id === toolId && tool.group === "text");
 
 const getOrderedSizeOptions = (
   options: string[] | undefined,
@@ -367,18 +370,22 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId;
-  const [isGamesOpen, setIsGamesOpen] = useState(() =>
-    activeToolId ? GAMES_TOOL_IDS.has(activeToolId) : false,
-  );
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(() =>
-    activeToolId ? ADVANCED_TOOL_IDS.has(activeToolId) : false,
-  );
+  const [isLocalizeOpen, setIsLocalizeOpen] = useState(() => isLocalizedTool(activeToolId));
+  const [isTextOpen, setIsTextOpen] = useState(() => isTextTool(activeToolId));
+  const [isGamesOpen, setIsGamesOpen] = useState(() => isGamesTool(activeToolId));
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(() => isAdvancedTool(activeToolId));
 
   useEffect(() => {
-    if (activeToolId && GAMES_TOOL_IDS.has(activeToolId)) {
+    if (isLocalizedTool(activeToolId)) {
+      setIsLocalizeOpen(true);
+    }
+    if (isTextTool(activeToolId)) {
+      setIsTextOpen(true);
+    }
+    if (isGamesTool(activeToolId)) {
       setIsGamesOpen(true);
     }
-    if (activeToolId && ADVANCED_TOOL_IDS.has(activeToolId)) {
+    if (isAdvancedTool(activeToolId)) {
       setIsAdvancedOpen(true);
     }
   }, [activeToolId]);
@@ -448,26 +455,33 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   );
 
   const defaultTools = useMemo(
+    () => TOOLS.filter((tool) => (tool.group ?? "default") === "default"),
+    [],
+  );
+
+  const localizedTools = useMemo(
     () =>
-      TOOLS.filter(
-        (tool) =>
-          !GAMES_TOOL_IDS.has(tool.id) &&
-          !ADVANCED_TOOL_IDS.has(tool.id) &&
-          !TEXT_TOOL_IDS.has(tool.id),
+      TOOLS.filter((tool) => tool.group === "localize").sort(
+        (left, right) =>
+          LOCALIZE_TOOL_ORDER.indexOf(left.id as (typeof LOCALIZE_TOOL_ORDER)[number]) -
+          LOCALIZE_TOOL_ORDER.indexOf(right.id as (typeof LOCALIZE_TOOL_ORDER)[number]),
       ),
     [],
   );
 
-  const gamesTools = useMemo(() => TOOLS.filter((tool) => GAMES_TOOL_IDS.has(tool.id)), []);
+  const textTools = useMemo(() => TOOLS.filter((tool) => tool.group === "text"), []);
 
-  const advancedTools = useMemo(() => TOOLS.filter((tool) => ADVANCED_TOOL_IDS.has(tool.id)), []);
+  const gamesTools = useMemo(() => TOOLS.filter((tool) => tool.group === "games"), []);
 
-  const textTools = useMemo(() => TOOLS.filter((tool) => TEXT_TOOL_IDS.has(tool.id)), []);
+  const advancedTools = useMemo(() => TOOLS.filter((tool) => tool.group === "more"), []);
 
   const hasUnfilledRequiredParams = (tool: ToolDefinition) => {
     const toolParams = paramsByTool[tool.id] || {};
     return tool.parameters.some((param) => {
       if (param.optional) {
+        return false;
+      }
+      if (param.type === "checkbox") {
         return false;
       }
       if (param.type === "art-style") {
@@ -504,6 +518,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const styleValue = payload[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
         payload[param.name] = styleValue;
       }
+    });
+
+    console.log("[ExtractCast/debug] handleSubmit payload", {
+      toolId: tool.id,
+      paramsFromState: paramsByTool[tool.id],
+      finalPayload: payload,
     });
 
     onApplyTool(tool.id, payload);
@@ -558,6 +578,30 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             persistHeightKey={persistHeightKey}
             inputTestId={inputTestId}
             onCommit={(nextValue) => handleParamChange(tool.id, param.name, nextValue)}
+          />
+        );
+      }
+
+      if (param.type === "checkbox") {
+        const checked = value === "true";
+        return (
+          <FormControlLabel
+            key={param.name}
+            className="bloom-checkbox-label"
+            control={
+              <Checkbox
+                checked={checked}
+                name={param.name}
+                value="true"
+                onChange={(event) =>
+                  handleParamChange(tool.id, param.name, String(event.target.checked))
+                }
+                disabled={isProcessing}
+                inputProps={{ "data-testid": inputTestId } as React.InputHTMLAttributes<HTMLInputElement>}
+              />
+            }
+            label={param.label}
+            sx={{ color: muiTheme.palette.text.primary, ml: 0 }}
           />
         );
       }
@@ -704,7 +748,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
-    const requiresOpenRouter = tool.id !== "remove_background";
+    const requiresOpenRouter =
+      tool.id !== "remove_background" &&
+      !canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
@@ -728,15 +774,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       needsReference ||
       requiresDescriptionOrReference ||
       missingRequired;
-
-    const effectiveCapabilities = isSelected
-      ? tool.referenceImages === "1+" && referenceImageCount > 1
-        ? {
-            ...tool.capabilities,
-            "edit-with-reference-image": true,
-          }
-        : tool.capabilities
-      : tool.capabilities;
 
     const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
     const cardBorderColor = isSelected ? "#f0d59a" : "transparent";
@@ -851,21 +888,15 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 return elements;
               })()}
 
-              {requiresOpenRouter && tool.outputType !== "text" && (
-                <CapabilityPanel
-                  capabilities={effectiveCapabilities}
-                  selectedModel={selectedModel}
-                />
-              )}
-
               <Stack spacing={1.5}>
                 <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
+                  type={isProcessing ? "button" : "submit"}
+                  variant={isProcessing ? "outlined" : "contained"}
+                  color={isProcessing ? "inherit" : "primary"}
                   fullWidth
-                  disabled={isSubmitDisabled}
-                  title={submitDisabledReason}
+                  disabled={isProcessing ? false : isSubmitDisabled}
+                  title={isProcessing ? undefined : submitDisabledReason}
+                  onClick={isProcessing ? onCancelProcessing : undefined}
                   sx={{
                     minHeight: 44,
                     fontWeight: 400,
@@ -879,7 +910,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   {isProcessing ? (
                     <>
                       <CircularProgress size={18} color="inherit" />
-                      Processing...
+                      Click to Cancel
                     </>
                   ) : (
                     <>
@@ -901,17 +932,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   >
                     {submitDisabledReason}
                   </FormHelperText>
-                )}
-                {isProcessing && (
-                  <Button
-                    type="button"
-                    variant="outlined"
-                    color="inherit"
-                    fullWidth
-                    onClick={onCancelProcessing}
-                  >
-                    Cancel Generation
-                  </Button>
                 )}
               </Stack>
             </Stack>
@@ -955,10 +975,57 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       >
         {defaultTools.map(renderToolCard)}
 
+        {localizedTools.length > 0 && (
+          <Stack spacing={1.25}>
+            <ButtonBase
+              onClick={() => setIsLocalizeOpen((current) => !current)}
+              sx={{
+                width: "100%",
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: alpha(muiTheme.palette.text.secondary, 0.9),
+              }}
+            >
+              {renderSectionHeader("Localize Images")}
+              <ExpandMoreIcon
+                sx={{
+                  transition: "transform 0.2s ease",
+                  transform: isLocalizeOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                }}
+              />
+            </ButtonBase>
+            {isLocalizeOpen && localizedTools.map(renderToolCard)}
+          </Stack>
+        )}
+
         {textTools.length > 0 && (
           <Stack spacing={1.25}>
-            {renderSectionHeader("Text")}
-            {textTools.map(renderToolCard)}
+            <ButtonBase
+              onClick={() => setIsTextOpen((current) => !current)}
+              sx={{
+                width: "100%",
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: alpha(muiTheme.palette.text.secondary, 0.9),
+              }}
+            >
+              {renderSectionHeader("Text")}
+              <ExpandMoreIcon
+                sx={{
+                  transition: "transform 0.2s ease",
+                  transform: isTextOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                }}
+              />
+            </ButtonBase>
+            {isTextOpen && textTools.map(renderToolCard)}
           </Stack>
         )}
 

@@ -35,7 +35,7 @@ describe("thumbnail strip helpers", () => {
   it("starts with no pinned strips by default", () => {
     const snapshot = createDefaultThumbnailStripsSnapshot();
 
-    expect(snapshot.activeStripId).toBe("history");
+    expect(snapshot.activeStripId).toBe("bookImages");
     expect(snapshot.pinnedStripIds).toEqual([]);
   });
 
@@ -172,5 +172,26 @@ describe("thumbnail strip helpers", () => {
     expect(merged.itemIdsByStrip.history).toEqual(["ref", "local", "folder"]);
     expect(merged.itemIdsByStrip.starred).toEqual(["local"]);
     expect(merged.itemIdsByStrip.reference).toEqual(["ref"]);
+  });
+
+  it("preserves bookImages strip membership even when entries are missing", () => {
+    // Synthetic / host-supplied book-image ids never appear in persisted
+    // history. Sanitizing the strip against the entries list would erase the
+    // user's current/replacement pairings on every folder restore.
+    const entries = [makeEntry("real-1")];
+    const persisted = {
+      ...createDefaultThumbnailStripsSnapshot(),
+      itemIdsByStrip: {
+        history: ["real-1"],
+        starred: [],
+        reference: [],
+        bookImages: ["env-0-abc", "env-1-def", "real-1"],
+        characters: [],
+      },
+    };
+
+    const hydrated = hydrateThumbnailStripsSnapshot(persisted, entries);
+
+    expect(hydrated.itemIdsByStrip.bookImages).toEqual(["env-0-abc", "env-1-def", "real-1"]);
   });
 });

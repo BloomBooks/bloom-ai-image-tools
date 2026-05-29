@@ -650,7 +650,12 @@ export function ImageToolsWorkspace({
 
     if (bookImagesStripMode === "host") {
       if (!resolvedBookImageEntries.length) {
-        setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", []));
+        // Avoid clearing the strip before hydration / before the host has
+        // delivered its init payload — that empty state would be the value
+        // saved back to disk, erasing any prior replacements.
+        if (isHydrated) {
+          setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", []));
+        }
         return;
       }
 
@@ -708,6 +713,16 @@ export function ImageToolsWorkspace({
   }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated]);
 
   useEffect(() => {
+    // If the bookImages strip is momentarily empty (e.g. during initial mount
+    // or while host-supplied images are still loading), don't garbage-collect
+    // the replacement map — its keys are book-image slot ids that will be
+    // restored on the next sync. Wiping it here is irreversible: the deleted
+    // assignments get persisted on the next save and the user loses their
+    // current/replacement pairings forever.
+    if (bookImageSlotIds.length === 0) {
+      return;
+    }
+
     const validIncomingIds = new Set(bookImageSlotIds);
     const validReplacementIds = new Set(state.history.map((item) => item.id));
 

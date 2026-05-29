@@ -256,6 +256,14 @@ export const sanitizeThumbnailStrips = (
 ): ThumbnailStripsSnapshot => {
   const next = cloneStripArrays(snapshot);
   THUMBNAIL_STRIP_ORDER.forEach((id) => {
+    // The bookImages strip is not history-backed: it can hold synthetic
+    // book-image entries (host-supplied or default) whose ids never appear
+    // in persisted history. Filtering by validIds would silently erase the
+    // strip after a folder restore. Membership for this strip is owned by
+    // the workspace effect that syncs it to bookImageUrls.
+    if (id === "bookImages") {
+      return;
+    }
     next[id] = (next[id] || []).filter((itemId) => validIds.has(itemId));
   });
   const rawPins = (snapshot as unknown as { pinnedStripIds?: unknown }).pinnedStripIds;

@@ -62,7 +62,7 @@ export function OpenRouterCreditsHeader({
   progressFillColor,
   appColors,
 }: OpenRouterCreditsHeaderProps) {
-  const [isWiggling, setIsWiggling] = useState(false);
+  const [isWiggling] = useState(false);
 
   if (shouldShowConnectToOpenRouterCTA) {
     return (
@@ -92,7 +92,7 @@ export function OpenRouterCreditsHeader({
           },
         }}
       >
-        Connect to OpenRouter
+        Connect to AI Image Generators
       </Button>
     );
   }

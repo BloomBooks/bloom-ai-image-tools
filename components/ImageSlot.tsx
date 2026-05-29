@@ -68,6 +68,7 @@ type RenderEmptyStateArgs = {
 export interface ImageSlotProps {
   label?: string;
   image: ImageRecord | null;
+  borderless?: boolean;
   disabled?: boolean;
   isDropZone?: boolean;
   onClick?: () => void;
@@ -89,6 +90,7 @@ export interface ImageSlotProps {
   renderEmptyState?: (args: RenderEmptyStateArgs) => React.ReactNode;
   dropLabel?: string;
   dataTestId?: string;
+  headerActions?: React.ReactNode;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   actionDisabledReasons?: Partial<Record<ImageSlotActionKey, string>>;
   removeIcon?: string;
@@ -110,7 +112,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       flexDirection: "column",
       height: "100%",
       position: "relative",
-      borderRadius: "24px",
+      borderRadius: 0,
       borderWidth: 1,
       borderStyle: "solid",
       padding: 16,
@@ -123,10 +125,11 @@ const VARIANT_LAYOUT_STYLES: Record<
       alignItems: "center",
       justifyContent: "center",
       minHeight: 0,
+      padding: 2,
     },
     innerWrapper: {
       position: "relative",
-      borderRadius: "18px",
+      borderRadius: 0,
       overflow: "hidden",
       width: "100%",
       height: "100%",
@@ -134,6 +137,8 @@ const VARIANT_LAYOUT_STYLES: Record<
       alignItems: "center",
       justifyContent: "center",
       minHeight: 0,
+      padding: 2,
+      boxSizing: "border-box",
     },
   },
   tile: {
@@ -141,7 +146,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       position: "relative",
       display: "flex",
       flexDirection: "column",
-      borderRadius: "18px",
+      borderRadius: 0,
       borderWidth: 1,
       borderStyle: "solid",
       minHeight: 0,
@@ -156,6 +161,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       alignItems: "center",
       justifyContent: "center",
       minHeight: 0,
+      padding: 2,
     },
     innerWrapper: {
       position: "relative",
@@ -164,9 +170,11 @@ const VARIANT_LAYOUT_STYLES: Record<
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: "18px",
+      borderRadius: 0,
       overflow: "hidden",
       minHeight: 0,
+      padding: 2,
+      boxSizing: "border-box",
     },
   },
   thumb: {
@@ -174,7 +182,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       position: "relative",
       display: "flex",
       flexDirection: "column",
-      borderRadius: 12,
+      borderRadius: 0,
       borderWidth: 2,
       borderStyle: "solid",
       overflow: "hidden",
@@ -189,6 +197,7 @@ const VARIANT_LAYOUT_STYLES: Record<
       alignItems: "stretch",
       justifyContent: "stretch",
       minHeight: 0,
+      padding: 2,
     },
     innerWrapper: {
       position: "relative",
@@ -200,6 +209,8 @@ const VARIANT_LAYOUT_STYLES: Record<
       minHeight: 0,
       borderRadius: "inherit",
       overflow: "hidden",
+      padding: 2,
+      boxSizing: "border-box",
     },
   },
 };
@@ -241,6 +252,7 @@ const getArtStyleIdForImage = (item?: ImageRecord | null): string | null => {
 export const ImageSlot: React.FC<ImageSlotProps> = ({
   label,
   image,
+  borderless = false,
   disabled = false,
   isDropZone = false,
   onClick,
@@ -262,6 +274,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   renderEmptyState,
   dropLabel = "Drop image",
   dataTestId,
+  headerActions: customHeaderActions,
   actionLabels,
   actionDisabledReasons,
   removeIcon,
@@ -638,7 +651,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     ? renderEmptyState({ openFilePicker, isDropZone, disabled })
     : defaultEmptyState;
 
-  const headerActions =
+  const builtInHeaderActions =
     variant === "panel" && isHovered ? (
       <ImageSlotActions
         placement="header"
@@ -665,6 +678,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         onOpenInfo={handleOpenInfo}
         onToggleMagnifier={handleMagnifierToggle}
       />
+    ) : undefined;
+
+  const headerActions =
+    builtInHeaderActions || customHeaderActions ? (
+      <>
+        {customHeaderActions}
+        {builtInHeaderActions}
+      </>
     ) : undefined;
 
   const shouldRenderHeader = variant === "panel" && (label || headerActions || starState);
@@ -733,6 +754,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 ? theme.colors.accent
                 : theme.colors.border
               : theme.colors.panelBorder,
+          borderWidth: borderless ? 0 : variantStyles.container.borderWidth,
+          borderStyle: !image ? "dashed" : variantStyles.container.borderStyle,
           boxShadow:
             variant === "thumb"
               ? isSelected
@@ -780,30 +803,54 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         <div style={variantStyles.contentWrapper}>
           <div style={variantStyles.innerWrapper}>
             {image ? (
-              <div
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  height: "100%",
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                }}
-              >
-                <MagnifiableImage
-                  src={image.imageData}
-                  alt={label || "Reference"}
-                  enableLens={isMagnifierPinned}
+              image.imageData ? (
+                <div
                   style={{
-                    maxHeight: "100%",
+                    display: "flex",
+                    width: "100%",
+                    height: "100%",
                     maxWidth: "100%",
-                    objectFit: variant === "thumb" ? "cover" : "contain",
-                    display: "block",
-                    ...(variant === "thumb" ? undefined : TRANSPARENCY_BACKGROUND_STYLE),
+                    maxHeight: "100%",
                   }}
-                  draggable={!!draggableImageId}
-                  onDragStart={handleImageDragStart}
-                />
-              </div>
+                >
+                  <MagnifiableImage
+                    src={image.imageData}
+                    alt={label || "Reference"}
+                    enableLens={isMagnifierPinned}
+                    style={{
+                      maxHeight: "100%",
+                      maxWidth: "100%",
+                      objectFit: variant === "thumb" ? "cover" : "contain",
+                      display: "block",
+                      ...(variant === "thumb" ? undefined : TRANSPARENCY_BACKGROUND_STYLE),
+                    }}
+                    draggable={!!draggableImageId}
+                    onDragStart={handleImageDragStart}
+                  />
+                </div>
+              ) : (
+                // Image record exists but its bytes haven't been loaded yet
+                // (e.g. waiting on history folder reconnect). Render a neutral
+                // placeholder rather than a broken-image icon.
+                <div
+                  data-testid="image-slot-unavailable"
+                  title="Image not loaded — reconnect history folder to view"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "100%",
+                    height: "100%",
+                    color: "rgba(255, 255, 255, 0.45)",
+                    fontSize: variant === "thumb" ? "1.4rem" : "2rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                    userSelect: "none",
+                  }}
+                >
+                  ??
+                </div>
+              )
             ) : isLoading ? null : (
               emptyStateContent
             )}
@@ -878,11 +925,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
             {rolePill ? <ImageSlotRolePill pill={rolePill} /> : null}
 
-            <ImageSlotDropOverlay isVisible={isDragOver} label={dropLabel} borderRadius={18} />
+            <ImageSlotDropOverlay isVisible={isDragOver} label={dropLabel} borderRadius={0} />
 
             <ImageSlotLoadingOverlay
               isVisible={isLoading}
-              borderRadius={18}
+              borderRadius={0}
               progress={loadingProgress ?? null}
             />
           </div>

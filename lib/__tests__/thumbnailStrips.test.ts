@@ -74,7 +74,7 @@ describe("thumbnail strip helpers", () => {
         history: ["keep", "drop"],
         starred: ["drop"],
         reference: ["keep", "drop"],
-        environment: ["drop", "keep"],
+        bookImages: ["drop", "keep"],
         characters: [],
       },
     };
@@ -84,7 +84,7 @@ describe("thumbnail strip helpers", () => {
     expect(stripped.itemIdsByStrip.history).toEqual(["keep"]);
     expect(stripped.itemIdsByStrip.starred).toEqual([]);
     expect(stripped.itemIdsByStrip.reference).toEqual(["keep"]);
-    expect(stripped.itemIdsByStrip.environment).toEqual(["keep"]);
+    expect(stripped.itemIdsByStrip.bookImages).toEqual(["keep"]);
   });
 
   it("finds other strips that still contain a history item", () => {
@@ -126,7 +126,7 @@ describe("thumbnail strip helpers", () => {
         history: ["base"],
         starred: [],
         reference: [],
-        environment: [],
+        bookImages: [],
         characters: [],
       },
     };
@@ -149,7 +149,7 @@ describe("thumbnail strip helpers", () => {
         history: ["local"],
         starred: ["local"],
         reference: ["ref"],
-        environment: [],
+        bookImages: [],
         characters: [],
       },
     };
@@ -160,7 +160,7 @@ describe("thumbnail strip helpers", () => {
         history: ["folder"],
         starred: [],
         reference: [],
-        environment: [],
+        bookImages: [],
         characters: [],
       },
     };

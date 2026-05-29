@@ -30,7 +30,7 @@ import {
 } from "../../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
-import { theme } from "../../themes";
+import { getHighContrastScrollbarStyles, theme } from "../../themes";
 
 const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
 
@@ -537,12 +537,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
     });
 
-    console.log("[ExtractCast/debug] handleSubmit payload", {
-      toolId: tool.id,
-      paramsFromState: paramsByTool[tool.id],
-      finalPayload: payload,
-    });
-
     onApplyTool(tool.id, payload);
   };
 
@@ -983,14 +977,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           display: "flex",
           flexDirection: "column",
           gap: 2,
-          "&::-webkit-scrollbar": { width: 8 },
-          "&::-webkit-scrollbar-thumb": {
-            backgroundColor: alpha(muiTheme.palette.text.primary, 0.2),
-            borderRadius: 999,
-          },
-          "&::-webkit-scrollbar-track": {
-            backgroundColor: alpha(muiTheme.palette.background.paper, 0.4),
-          },
+          ...getHighContrastScrollbarStyles(),
         }}
       >
         {defaultTools.map(renderToolCard)}

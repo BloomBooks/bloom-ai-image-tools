@@ -18,18 +18,15 @@ export const STRIP_DESCRIPTIONS: Record<
   starred: "Star images to keep them handy.",
   reference:
     "Use this area to keep reference images that you use in more that one book. E.g. how people dress, what trees look like.",
-  environment: (config) =>
-    config.allowDrop
-      ? "Drag images here to add book pages."
-      : "Environment images supplied by host application.",
+  bookImages: "Book images supplied by the current book.",
 };
 
 export const THUMBNAIL_STRIP_ORDER: ThumbnailStripId[] = [
+  "bookImages",
   "history",
   "characters",
   "reference",
   "starred",
-  "environment",
 ];
 
 export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripConfig> = {
@@ -62,9 +59,9 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     allowReorder: true,
     allowDrop: true,
   },
-  environment: {
-    id: "environment",
-    label: "Environment Images",
+  bookImages: {
+    id: "bookImages",
+    label: "Book Images",
     allowRemove: false,
     allowReorder: false,
     allowDrop: false,
@@ -103,14 +100,14 @@ const cloneStripArrays = (
 };
 
 export const createDefaultThumbnailStripsSnapshot = (): ThumbnailStripsSnapshot => ({
-  activeStripId: "history",
+  activeStripId: "bookImages",
   pinnedStripIds: [],
   itemIdsByStrip: {
     history: [],
     characters: [],
     starred: [],
     reference: [],
-    environment: [],
+    bookImages: [],
   },
 });
 
@@ -193,8 +190,7 @@ export const getOtherStripsContainingItem = (
 ): ThumbnailStripId[] => {
   return THUMBNAIL_STRIP_ORDER.filter(
     (stripId) =>
-      stripId !== sourceStripId &&
-      (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
+      stripId !== sourceStripId && (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
   );
 };
 
@@ -304,14 +300,14 @@ export const stripCollectionIncludes = (
   );
 };
 
-const filterNonEnvironment = (entries: ImageRecord[]) =>
-  entries.filter((entry) => entry.origin !== "environment");
+const filterNonBookImages = (entries: ImageRecord[]) =>
+  entries.filter((entry) => entry.origin !== "bookImages");
 
 export const buildStripSnapshotFromEntries = (entries: ImageRecord[]): ThumbnailStripsSnapshot => {
   const base = createDefaultThumbnailStripsSnapshot();
   // UI expectation: most recent items should appear first (leftmost).
   // App state keeps history oldest-first, so reverse for display ordering.
-  const orderedHistory = filterNonEnvironment(entries)
+  const orderedHistory = filterNonBookImages(entries)
     .map((entry) => entry.id)
     .reverse();
   base.itemIdsByStrip.history = orderedHistory;
@@ -392,9 +388,9 @@ export const mergeThumbnailStripsSnapshots = (
         currentSanitized.itemIdsByStrip.reference || [],
         incomingSanitized.itemIdsByStrip.reference || [],
       ),
-      environment: mergeUniqueIds(
-        currentSanitized.itemIdsByStrip.environment || [],
-        incomingSanitized.itemIdsByStrip.environment || [],
+      bookImages: mergeUniqueIds(
+        currentSanitized.itemIdsByStrip.bookImages || [],
+        incomingSanitized.itemIdsByStrip.bookImages || [],
       ),
     },
   };

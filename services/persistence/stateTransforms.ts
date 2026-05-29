@@ -1,5 +1,46 @@
 import { PersistedImageToolsState } from "../../types";
 
+const migrateLegacyBookImagesNaming = (
+  state: PersistedImageToolsState,
+): PersistedImageToolsState => {
+  const stripIdsByStrip = state.thumbnailStrips?.itemIdsByStrip as
+    | Record<string, string[]>
+    | undefined;
+  const legacyBookImageIds = stripIdsByStrip?.["environment"] || [];
+  const currentBookImageIds = state.thumbnailStrips?.itemIdsByStrip.bookImages || [];
+  const thumbnailStrips = state.thumbnailStrips
+    ? {
+        ...state.thumbnailStrips,
+        activeStripId:
+          (state.thumbnailStrips.activeStripId as string) === "environment"
+            ? "bookImages"
+            : state.thumbnailStrips.activeStripId,
+        pinnedStripIds: state.thumbnailStrips.pinnedStripIds.map((stripId) =>
+          (stripId as string) === "environment" ? "bookImages" : stripId,
+        ),
+        itemIdsByStrip: {
+          ...state.thumbnailStrips.itemIdsByStrip,
+          bookImages: currentBookImageIds.length > 0 ? currentBookImageIds : legacyBookImageIds,
+        },
+      }
+    : state.thumbnailStrips;
+
+  const history = state.appState.history.map((entry) => ({
+    ...entry,
+    origin: (entry.origin as string) === "environment" ? "bookImages" : entry.origin,
+    toolId: (entry.toolId as string) === "environment" ? "bookImages" : entry.toolId,
+  }));
+
+  return {
+    ...state,
+    thumbnailStrips,
+    appState: {
+      ...state.appState,
+      history,
+    },
+  };
+};
+
 const cloneHistory = (history: PersistedImageToolsState["appState"]["history"]) => {
   if (!Array.isArray(history)) {
     return [];
@@ -8,33 +49,36 @@ const cloneHistory = (history: PersistedImageToolsState["appState"]["history"]) 
 };
 
 export const prepareStateForPersistence = (
-  state: PersistedImageToolsState
+  state: PersistedImageToolsState,
 ): PersistedImageToolsState => {
-  const history = cloneHistory(state.appState.history);
+  const migrated = migrateLegacyBookImagesNaming(state);
+  const history = cloneHistory(migrated.appState.history);
 
   return {
-    ...state,
+    ...migrated,
     historyNewestFirst: true,
     appState: {
-      ...state.appState,
+      ...migrated.appState,
       history: history.reverse(),
     },
   };
 };
 
 export const restoreStateFromPersistence = (
-  state: PersistedImageToolsState
+  state: PersistedImageToolsState,
 ): PersistedImageToolsState => {
-  if (!state.historyNewestFirst) {
-    return state;
+  const migrated = migrateLegacyBookImagesNaming(state);
+
+  if (!migrated.historyNewestFirst) {
+    return migrated;
   }
 
-  const history = cloneHistory(state.appState.history);
+  const history = cloneHistory(migrated.appState.history);
 
   return {
-    ...state,
+    ...migrated,
     appState: {
-      ...state.appState,
+      ...migrated.appState,
       history: history.reverse(),
     },
   };

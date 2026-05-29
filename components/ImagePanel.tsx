@@ -30,6 +30,7 @@ export type ImagePanelSlot = {
 
 type SingleImagePanelProps = {
   label: string;
+  headerActions?: React.ReactNode;
   layout?: "single";
   panelTestId?: string;
   image: ImageRecord | null;
@@ -54,6 +55,7 @@ type SingleImagePanelProps = {
 
 type GridImagePanelProps = {
   label: string;
+  headerActions?: React.ReactNode;
   layout: "grid";
   panelTestId?: string;
   slots: ImagePanelSlot[];
@@ -74,6 +76,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
   if (isGridPanel(props)) {
     const {
       label,
+      headerActions,
       slots,
       disabled = false,
       onSlotDrop,
@@ -121,7 +124,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           ...containerStyle,
         }}
       >
-        <ImageSlotHeader label={label} />
+        <ImageSlotHeader label={label} actions={headerActions} />
         <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           <Box
             sx={{
@@ -203,6 +206,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
   const {
     image,
     label,
+    headerActions,
     onUpload,
     isDropZone = false,
     onDrop,
@@ -335,6 +339,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
       <ImageSlot
         dataTestId={panelTestId}
         label={label}
+        headerActions={headerActions}
         image={image}
         isAnyDndDragging={isAnyDndDragging}
         disabled={disabled}

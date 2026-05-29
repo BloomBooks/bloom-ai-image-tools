@@ -60,6 +60,32 @@ export const getRequestedAspectRatioValue = (
   return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO;
 };
 
+export const getRequestedImageSizeValue = (
+  tool: ToolDefinition | null,
+  params: ToolParams | null | undefined,
+  targetResolution?: { width: number; height: number } | null,
+): string | undefined => {
+  const configuredValue = params?.size?.trim();
+  if (configuredValue) {
+    return configuredValue;
+  }
+
+  if (!tool || tool.editImage === false || !targetResolution) {
+    return undefined;
+  }
+
+  const longEdge = Math.max(targetResolution.width || 0, targetResolution.height || 0);
+  if (longEdge > 2048) {
+    return "4k";
+  }
+
+  if (longEdge > 1024) {
+    return "2k";
+  }
+
+  return "1k";
+};
+
 export const toolRequiresReferenceImage = (tool: ToolDefinition | null): boolean => {
   const mode = tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
   return getReferenceConstraints(mode).min > 0;

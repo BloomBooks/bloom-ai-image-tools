@@ -135,19 +135,6 @@ const isInvalidStateError = (error: unknown) => {
   return error instanceof DOMException && error.name === "InvalidStateError";
 };
 
-const hasReadWritePermission = async (handle: FileSystemDirectoryHandle) => {
-  if (!supportsPermissionQuery(handle)) {
-    return true;
-  }
-  try {
-    const status = await handle.queryPermission(rwDescriptor);
-    return status === "granted";
-  } catch (error) {
-    console.error("Failed to query file system permissions", error);
-    return false;
-  }
-};
-
 const getPermissionStatus = async (
   handle: FileSystemDirectoryHandle,
 ): Promise<PermissionState | "unknown" | "error"> => {
@@ -264,47 +251,6 @@ const dataUrlToBlob = async (dataUrl: string) => {
   return { blob: new Blob([buffer], { type: mime }), mime };
 };
 
-const writeJsonFile = async (
-  handle: FileSystemDirectoryHandle,
-  fileName: string,
-  data: unknown,
-) => {
-  const payload = JSON.stringify(data, null, 2);
-  const attemptWrite = async () => {
-    const fileHandle = await handle.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(new Blob([payload], { type: "application/json" }));
-    await writable.close();
-  };
-
-  try {
-    await attemptWrite();
-  } catch (error) {
-    if (!isInvalidStateError(error)) {
-      throw error;
-    }
-    await attemptWrite();
-  }
-};
-
-const readJsonFile = async <T>(
-  handle: FileSystemDirectoryHandle,
-  fileName: string,
-): Promise<T | null> => {
-  try {
-    const fileHandle = await handle.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-    return JSON.parse(text) as T;
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return null;
-    }
-    console.error("Failed to read json file", error);
-    return null;
-  }
-};
-
 const blobToDataUrl = (blob: Blob) => {
   if (typeof FileReader === "undefined") {
     return blob.arrayBuffer().then((buffer) => {
@@ -362,6 +308,7 @@ const getMimeTypeFromFileName = (fileName: string | null | undefined) => {
 const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): HistoryEntry => ({
   id: record.id,
   parentId: record.parentId ?? null,
+  incomingSlotId: record.incomingSlotId,
   toolId: record.toolId,
   parameters: record.parameters ?? {},
   promptUsed: record.promptUsed ?? "",
@@ -385,6 +332,7 @@ const imageRecordFromHistoryEntry = (
 ): ImageRecord => ({
   id: entry.id,
   parentId: entry.parentId ?? null,
+  incomingSlotId: entry.incomingSlotId,
   imageData: "",
   imageFileName,
   toolId: entry.toolId,
@@ -468,21 +416,53 @@ const buildRecoveredHistoryEntry = (
 
 export const supportsFileSystemAccess = (): boolean => !!getDirectoryPicker();
 
-export const restoreFileSystemImageBinding = async (): Promise<FileSystemImageBinding | null> => {
+export type RestoredFileSystemImageBinding =
+  | { status: "granted"; binding: FileSystemImageBinding }
+  | { status: "needs-reconnect"; handle: FileSystemDirectoryHandle; directoryName: string }
+  | { status: "none" };
+
+export const restoreFileSystemImageBinding = async (): Promise<RestoredFileSystemImageBinding> => {
   if (!supportsFileSystemAccess()) {
-    return null;
+    return { status: "none" };
   }
 
   const handle = await loadPersistedDirectoryHandle();
   if (!handle) {
-    return null;
+    return { status: "none" };
   }
 
-  if (!(await hasReadWritePermission(handle))) {
+  const permission = await getPermissionStatus(handle);
+  if (permission === "granted" || permission === "unknown") {
+    return {
+      status: "granted",
+      binding: { directoryHandle: handle, directoryName: handle.name },
+    };
+  }
+
+  // "prompt" means the user previously granted access but the session-scoped
+  // permission lapsed (typical after a reload). Keep the handle so a single
+  // click can re-grant without re-picking the folder. Only "denied" means we
+  // should forget it.
+  if (permission === "denied" || permission === "error") {
     await persistDirectoryHandle(null);
-    return null;
+    return { status: "none" };
   }
 
+  return {
+    status: "needs-reconnect",
+    handle,
+    directoryName: handle.name,
+  };
+};
+
+export const reconnectFileSystemImageBinding = async (
+  handle: FileSystemDirectoryHandle,
+): Promise<FileSystemImageBinding | null> => {
+  const granted = await requestReadWritePermission(handle);
+  if (!granted) {
+    return null;
+  }
+  await persistDirectoryHandle(handle);
   return {
     directoryHandle: handle,
     directoryName: handle.name,

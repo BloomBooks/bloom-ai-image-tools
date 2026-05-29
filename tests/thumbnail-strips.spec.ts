@@ -8,7 +8,18 @@ import {
 
 const isVerbose = !!process.env.E2E_VERBOSE;
 
+const activateHistoryStrip = async (page: import("@playwright/test").Page) => {
+  await page.getByTestId("thumbnail-tab-history").click();
+  const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+  await expect(historyStrip).toHaveAttribute("data-active", "true");
+  return historyStrip;
+};
+
 test.describe("thumbnail strips", () => {
+  test.describe.configure({ mode: "serial" });
+  test.use({ navigationTimeout: 20_000, actionTimeout: 10_000 });
+  test.setTimeout(30_000);
+
   test.beforeEach(async ({ page }) => {
     if (isVerbose) {
       await page.addInitScript(() => {
@@ -96,10 +107,17 @@ test.describe("thumbnail strips", () => {
   });
 
   test("switches the active strip when selecting tabs", async ({ page }) => {
+    const bookImagesStrip = page.getByTestId("thumbnail-strip-bookImages").first();
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
     const starredStrip = page.getByTestId("thumbnail-strip-starred").first();
-    await expect(historyStrip).toHaveAttribute("data-active", "true");
+    await expect(bookImagesStrip).toHaveAttribute("data-active", "true");
+    await expect(historyStrip).toHaveAttribute("data-active", "false");
     await expect(starredStrip).toHaveAttribute("data-active", "false");
+
+    const stripTabs = page.locator(
+      'button[data-testid^="thumbnail-tab-"]:not([data-testid*="pin-"])',
+    );
+    await expect(stripTabs.first()).toHaveAttribute("data-testid", "thumbnail-tab-bookImages");
 
     await page.getByTestId("thumbnail-tab-reference").click();
 
@@ -125,7 +143,8 @@ test.describe("thumbnail strips", () => {
   });
 
   test("copies history entries when dragged between strips", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyStrip = await activateHistoryStrip(page);
+    await page.getByTestId("thumbnail-tab-pin-starred").click();
     const starredStrip = page.getByTestId("thumbnail-strip-starred").first();
     const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
 
@@ -147,7 +166,7 @@ test.describe("thumbnail strips", () => {
   });
 
   test("disables deleting history entries that also exist in another strip", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyStrip = await activateHistoryStrip(page);
     const starredTab = page.getByTestId("thumbnail-tab-starred");
     const starredStrip = page.getByTestId("thumbnail-strip-starred");
 
@@ -181,7 +200,7 @@ test.describe("thumbnail strips", () => {
   });
 
   test("shows newest history item first", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyStrip = await activateHistoryStrip(page);
 
     const initialTargetSrc = await page
       .getByRole("img", { name: "Image to Edit" })
@@ -214,7 +233,7 @@ test.describe("thumbnail strips", () => {
   });
 
   test("allows reordering history items", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyStrip = await activateHistoryStrip(page);
 
     const initialTargetSrc = await page
       .getByRole("img", { name: "Image to Edit" })
@@ -271,8 +290,10 @@ test.describe("thumbnail strips", () => {
       .toEqual([secondSrcBefore, firstSrcBefore]);
   });
 
-  test("opens the full-screen preview dialog when control is released after selecting thumbnails", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+  test("opens the full-screen preview dialog when control is released after selecting thumbnails", async ({
+    page,
+  }) => {
+    const historyStrip = await activateHistoryStrip(page);
 
     await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
@@ -304,8 +325,10 @@ test.describe("thumbnail strips", () => {
     await expect(previewDialog).toBeHidden();
   });
 
-  test("deduplicates preview selections when the same thumbnail is control-clicked multiple times", async ({ page }) => {
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+  test("deduplicates preview selections when the same thumbnail is control-clicked multiple times", async ({
+    page,
+  }) => {
+    const historyStrip = await activateHistoryStrip(page);
 
     await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
@@ -332,27 +355,96 @@ test.describe("thumbnail strips", () => {
     await expect(previewDialog).toBeHidden();
   });
 
-  test("environment strip is editable for sample app (Book pages)", async ({ page }) => {
-    // Verify the tab label via tooltip.
-    const envTab = page.getByTestId("thumbnail-tab-environment");
-    await envTab.hover();
-    await expect(page.getByRole("tooltip").last()).toContainText("Book pages");
+  test("strip expand button opens a large horizontal preview for history", async ({ page }) => {
+    const historyStrip = await activateHistoryStrip(page);
 
-    // Switch to the environment strip.
-    await envTab.click();
-    const envStrip = page.getByTestId("thumbnail-strip-environment");
-    await expect(envStrip).toHaveAttribute("data-active", "true");
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+    await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
 
-    // Environment strip starts with seeded items.
-    const initialCount = await envStrip.getByTestId("history-card").count();
+    const newestSrc = await historyStrip
+      .getByTestId("history-card")
+      .nth(0)
+      .locator("img")
+      .first()
+      .getAttribute("src");
+    const olderSrc = await historyStrip
+      .getByTestId("history-card")
+      .nth(1)
+      .locator("img")
+      .first()
+      .getAttribute("src");
+
+    await page.getByTestId("thumbnail-strip-expand-history").click();
+
+    const previewDialog = page.getByTestId("image-preview-dialog");
+    const previewItems = page.getByTestId(/image-preview-dialog-item-/);
+    await expect(previewDialog).toBeVisible();
+    await expect(previewDialog.getByText("Gallery", { exact: true })).toBeVisible();
+    await expect(previewItems).toHaveCount(2);
+    await expect(previewDialog.locator("img").nth(0)).toHaveAttribute("src", newestSrc ?? "");
+    await expect(previewDialog.locator("img").nth(1)).toHaveAttribute("src", olderSrc ?? "");
+
+    const firstPreviewBox = await previewItems.nth(0).boundingBox();
+    const secondPreviewBox = await previewItems.nth(1).boundingBox();
+    expect(firstPreviewBox).toBeTruthy();
+    expect(secondPreviewBox).toBeTruthy();
+    if (firstPreviewBox && secondPreviewBox) {
+      expect(secondPreviewBox.x - (firstPreviewBox.x + firstPreviewBox.width)).toBeLessThanOrEqual(
+        20.5,
+      );
+    }
+
+    await page.getByTestId("image-preview-dialog-close").click();
+    await expect(previewDialog).toBeHidden();
+  });
+
+  test("standalone book images allow editing current images and clear outgoing only via x button", async ({
+    page,
+  }) => {
+    const pinnedHistoryStrip = page.locator(
+      '[data-testid="thumbnail-strip-history"][data-pinned="true"]',
+    );
+    if ((await pinnedHistoryStrip.count()) === 0) {
+      await page.getByTestId("thumbnail-tab-pin-history").click();
+    }
+
+    const bookImagesTab = page.getByTestId("thumbnail-tab-bookImages");
+    await bookImagesTab.hover();
+    await expect(page.getByRole("tooltip").last()).toContainText("Book Images");
+
+    const bookImagesStrip = page.getByTestId("thumbnail-strip-bookImages");
+    await expect(bookImagesStrip).toHaveAttribute("data-active", "true");
+    await expect(bookImagesStrip.getByText("Current", { exact: true })).toHaveCount(1);
+    await expect(bookImagesStrip.getByText("Replacement", { exact: true })).toHaveCount(1);
+
+    const initialCount = await bookImagesStrip
+      .getByTestId("thumbnail-strip-item-bookImages")
+      .count();
     expect(initialCount).toBeGreaterThan(0);
 
-    // Add: drag a history item into Book pages.
-    const historyStrip = page.getByTestId("thumbnail-strip-history").first();
+    const historyStrip = page
+      .locator('[data-testid="thumbnail-strip-history"][data-pinned="true"]')
+      .first();
     const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
+    const firstIncomingCard = bookImagesStrip
+      .getByTestId("thumbnail-strip-item-bookImages")
+      .first();
+    const emptyCurrentSlot = page.getByTestId("book-image-current-slot-new");
+    const firstIncomingImage = firstIncomingCard.getByTestId("history-card").first();
+
+    await firstIncomingCard.hover();
+    await expect(
+      firstIncomingCard.getByRole("button", { name: "Remove image", exact: true }),
+    ).toBeVisible();
+
+    const firstIncomingSrcBefore = await firstIncomingImage
+      .locator("img")
+      .first()
+      .getAttribute("src");
+    expect(firstIncomingSrcBefore).toBeTruthy();
 
     const fromBox = await historyThumb.boundingBox();
-    const toBox = await envStrip.boundingBox();
+    const toBox = await emptyCurrentSlot.boundingBox();
     expect(fromBox).toBeTruthy();
     expect(toBox).toBeTruthy();
     if (!fromBox || !toBox) return;
@@ -363,56 +455,289 @@ test.describe("thumbnail strips", () => {
       steps: 12,
     });
     await page.mouse.up();
-    await expect(envStrip.getByTestId("history-card")).toHaveCount(initialCount + 1);
-
-    // Remove: remove the first book page.
-    const firstCardForRemove = envStrip.getByTestId("history-card").first();
-    await firstCardForRemove.hover();
-    await firstCardForRemove.getByRole("button", { name: "Remove image" }).click();
-    await expect(envStrip.getByTestId("history-card")).toHaveCount(initialCount);
-
-    // Reorder: move first thumbnail after the second (sortable behavior).
-    const firstImg = envStrip.getByTestId("history-card").nth(0).locator("img").first();
-    const secondImg = envStrip.getByTestId("history-card").nth(1).locator("img").first();
-
-    const firstSrcBefore = await firstImg.getAttribute("src");
-    const secondSrcBefore = await secondImg.getAttribute("src");
-    expect(firstSrcBefore).toBeTruthy();
-    expect(secondSrcBefore).toBeTruthy();
-
-    const firstSortableCard = envStrip.getByTestId("thumbnail-strip-item-environment").nth(0);
-    const secondSortableCard = envStrip.getByTestId("thumbnail-strip-item-environment").nth(1);
-
-    const fromReorderBox = await firstSortableCard.boundingBox();
-    const toReorderBox = await secondSortableCard.boundingBox();
-    expect(fromReorderBox).toBeTruthy();
-    expect(toReorderBox).toBeTruthy();
-    if (!fromReorderBox || !toReorderBox) return;
-
-    await page.mouse.move(
-      fromReorderBox.x + fromReorderBox.width / 2,
-      fromReorderBox.y + fromReorderBox.height / 2,
+    await expect(bookImagesStrip.getByTestId("thumbnail-strip-item-bookImages")).toHaveCount(
+      initialCount + 1,
     );
+    await expect(firstIncomingImage.locator("img").first()).toHaveAttribute(
+      "src",
+      firstIncomingSrcBefore ?? "",
+    );
+    await expect(page.getByTestId("book-image-current-slot-new")).toBeVisible();
+
+    const firstOutgoingSlot = page.getByTestId(/book-image-outgoing-slot-/).first();
+    const toOutgoingBox = await firstOutgoingSlot.boundingBox();
+    expect(toOutgoingBox).toBeTruthy();
+    if (!fromBox || !toOutgoingBox) return;
+
+    await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(
-      toReorderBox.x + toReorderBox.width / 2,
-      toReorderBox.y + toReorderBox.height / 2,
-      {
-        steps: 10,
-      },
+      toOutgoingBox.x + toOutgoingBox.width / 2,
+      toOutgoingBox.y + toOutgoingBox.height / 2,
+      { steps: 12 },
     );
     await page.mouse.up();
 
-    await expect
-      .poll(async () => {
-        const firstSrcAfter = await envStrip
-          .getByTestId("history-card")
-          .nth(0)
-          .locator("img")
-          .first()
-          .getAttribute("src");
-        return firstSrcAfter;
-      })
-      .not.toEqual(firstSrcBefore);
+    const outgoingImage = firstOutgoingSlot.locator("img").first();
+    const outgoingSrcBeforeClick = await outgoingImage.getAttribute("src");
+    expect(outgoingSrcBeforeClick).toBeTruthy();
+
+    await outgoingImage.click();
+    await firstOutgoingSlot.hover();
+    const clearButton = firstOutgoingSlot.getByRole("button", {
+      name: "Remove image",
+      exact: true,
+    });
+    await expect(clearButton).toBeVisible();
+    await expect(firstOutgoingSlot.locator("img").first()).toHaveAttribute(
+      "src",
+      outgoingSrcBeforeClick ?? "",
+    );
+
+    await clearButton.click();
+    await expect(
+      firstOutgoingSlot.getByRole("button", { name: "Remove image", exact: true }),
+    ).toHaveCount(0);
+    await expect(firstOutgoingSlot.locator("img")).toHaveCount(0);
+
+    const newestBookImagePair = bookImagesStrip
+      .getByTestId("thumbnail-strip-item-bookImages")
+      .last();
+    await newestBookImagePair.hover();
+    const removeCurrentButton = newestBookImagePair.getByRole("button", {
+      name: "Remove image",
+      exact: true,
+    });
+    await expect(removeCurrentButton).toBeVisible();
+    await removeCurrentButton.evaluate((button: HTMLButtonElement) => button.click());
+    await expect(bookImagesStrip.getByTestId("thumbnail-strip-item-bookImages")).toHaveCount(
+      initialCount,
+    );
+    await expect(page.getByTestId("book-image-current-slot-new")).toBeVisible();
+  });
+
+  test("book images strip expand preserves current-over-replacement preview order", async ({
+    page,
+  }) => {
+    const pinnedHistoryStrip = page.locator(
+      '[data-testid="thumbnail-strip-history"][data-pinned="true"]',
+    );
+    if ((await pinnedHistoryStrip.count()) === 0) {
+      await page.getByTestId("thumbnail-tab-pin-history").click();
+    }
+
+    const bookImagesStrip = page.getByTestId("thumbnail-strip-bookImages");
+    const historyStrip = page
+      .locator('[data-testid="thumbnail-strip-history"][data-pinned="true"]')
+      .first();
+    const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
+    const firstOutgoingSlot = page.getByTestId(/book-image-outgoing-slot-/).first();
+
+    const historyBox = await historyThumb.boundingBox();
+    const firstOutgoingBox = await firstOutgoingSlot.boundingBox();
+    expect(historyBox).toBeTruthy();
+    expect(firstOutgoingBox).toBeTruthy();
+    if (!historyBox || !firstOutgoingBox) return;
+
+    await page.mouse.move(
+      historyBox.x + historyBox.width / 2,
+      historyBox.y + historyBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      firstOutgoingBox.x + firstOutgoingBox.width / 2,
+      firstOutgoingBox.y + firstOutgoingBox.height / 2,
+      { steps: 12 },
+    );
+    await page.mouse.up();
+
+    const firstPair = bookImagesStrip.getByTestId("thumbnail-strip-item-bookImages").first();
+    const currentSrc = await firstPair
+      .locator('[data-testid^="book-image-current-slot-"] img')
+      .first()
+      .getAttribute("src");
+    const replacementSrc = await firstPair
+      .locator('[data-testid^="book-image-outgoing-slot-"] img')
+      .first()
+      .getAttribute("src");
+
+    await page.getByTestId("thumbnail-strip-expand-bookImages").click();
+
+    const previewDialog = page.getByTestId("image-preview-dialog");
+    const firstPreviewItem = page.getByTestId("image-preview-dialog-item-0");
+    await expect(previewDialog).toBeVisible();
+    await expect(firstPreviewItem.locator("img")).toHaveCount(2);
+    await expect(firstPreviewItem.locator("img").nth(0)).toHaveAttribute("src", currentSrc ?? "");
+    await expect(firstPreviewItem.locator("img").nth(1)).toHaveAttribute(
+      "src",
+      replacementSrc ?? "",
+    );
+
+    await page.getByTestId("image-preview-dialog-close").click();
+    await expect(previewDialog).toBeHidden();
+  });
+
+  test("clicking a replacement book image shows that replacement in the result pane", async ({
+    page,
+  }) => {
+    const pinnedHistoryStrip = page.locator(
+      '[data-testid="thumbnail-strip-history"][data-pinned="true"]',
+    );
+    if ((await pinnedHistoryStrip.count()) === 0) {
+      await page.getByTestId("thumbnail-tab-pin-history").click();
+    }
+
+    const historyStrip = page
+      .locator('[data-testid="thumbnail-strip-history"][data-pinned="true"]')
+      .first();
+    const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
+    const replacementSlot = page.getByTestId(/book-image-outgoing-slot-/).first();
+    const resultPanel = page.getByTestId("result-panel");
+
+    const historyBox = await historyThumb.boundingBox();
+    const replacementBox = await replacementSlot.boundingBox();
+    expect(historyBox).toBeTruthy();
+    expect(replacementBox).toBeTruthy();
+    if (!historyBox || !replacementBox) return;
+
+    await page.mouse.move(
+      historyBox.x + historyBox.width / 2,
+      historyBox.y + historyBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      replacementBox.x + replacementBox.width / 2,
+      replacementBox.y + replacementBox.height / 2,
+      { steps: 12 },
+    );
+    await page.mouse.up();
+
+    const replacementImage = replacementSlot.locator("img").first();
+    const replacementSrc = await replacementImage.getAttribute("src");
+    expect(replacementSrc).toBeTruthy();
+
+    await replacementImage.click();
+
+    await expect(resultPanel.locator("img").first()).toHaveAttribute("src", replacementSrc ?? "");
+  });
+
+  test("allows dragging a current book image into Image to Edit", async ({ page }) => {
+    const bookImagesStrip = page.getByTestId("thumbnail-strip-bookImages");
+    const targetPanel = page.getByTestId("target-panel");
+    const firstCurrentSlot = bookImagesStrip
+      .locator('[data-testid^="book-image-current-slot-"]')
+      .first();
+
+    const firstCurrentImage = firstCurrentSlot.locator("img").first();
+    await expect(firstCurrentImage).toBeVisible();
+    const currentSrc = await firstCurrentImage.getAttribute("src");
+    expect(currentSrc).toBeTruthy();
+
+    await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
+
+    const targetImage = targetPanel.getByRole("img", { name: "Image to Edit" });
+    await expect(targetImage).toBeVisible();
+    const targetSrcBefore = await targetImage.getAttribute("src");
+    expect(targetSrcBefore).toBeTruthy();
+    expect(targetSrcBefore).not.toEqual(currentSrc);
+
+    const fromBox = await firstCurrentSlot.boundingBox();
+    const toBox = await targetPanel.boundingBox();
+    expect(fromBox).toBeTruthy();
+    expect(toBox).toBeTruthy();
+    if (!fromBox || !toBox) return;
+
+    await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+
+    await expect(targetImage).toHaveAttribute("src", currentSrc ?? "");
+  });
+
+  test("dragging a replacement to another replacement moves it, and dragging to result copies it", async ({
+    page,
+  }) => {
+    const pinnedHistoryStrip = page.locator(
+      '[data-testid="thumbnail-strip-history"][data-pinned="true"]',
+    );
+    if ((await pinnedHistoryStrip.count()) === 0) {
+      await page.getByTestId("thumbnail-tab-pin-history").click();
+    }
+
+    const bookImagesStrip = page.getByTestId("thumbnail-strip-bookImages");
+    const historyStrip = page
+      .locator('[data-testid="thumbnail-strip-history"][data-pinned="true"]')
+      .first();
+    const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
+    const firstOutgoingSlot = page.getByTestId(/book-image-outgoing-slot-/).nth(0);
+    const secondOutgoingSlot = page.getByTestId(/book-image-outgoing-slot-/).nth(1);
+    const resultPanel = page.getByTestId("result-panel");
+
+    const historyBox = await historyThumb.boundingBox();
+    const firstOutgoingBox = await firstOutgoingSlot.boundingBox();
+    expect(historyBox).toBeTruthy();
+    expect(firstOutgoingBox).toBeTruthy();
+    if (!historyBox || !firstOutgoingBox) return;
+
+    await page.mouse.move(
+      historyBox.x + historyBox.width / 2,
+      historyBox.y + historyBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      firstOutgoingBox.x + firstOutgoingBox.width / 2,
+      firstOutgoingBox.y + firstOutgoingBox.height / 2,
+      { steps: 12 },
+    );
+    await page.mouse.up();
+
+    const replacementSrc = await firstOutgoingSlot.locator("img").first().getAttribute("src");
+    expect(replacementSrc).toBeTruthy();
+
+    const secondOutgoingBox = await secondOutgoingSlot.boundingBox();
+    expect(secondOutgoingBox).toBeTruthy();
+    if (!secondOutgoingBox) return;
+
+    await page.mouse.move(
+      firstOutgoingBox.x + firstOutgoingBox.width / 2,
+      firstOutgoingBox.y + firstOutgoingBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      secondOutgoingBox.x + secondOutgoingBox.width / 2,
+      secondOutgoingBox.y + secondOutgoingBox.height / 2,
+      { steps: 12 },
+    );
+    await page.mouse.up();
+
+    await expect(firstOutgoingSlot.locator("img")).toHaveCount(0);
+    await expect(secondOutgoingSlot.locator("img").first()).toHaveAttribute(
+      "src",
+      replacementSrc ?? "",
+    );
+
+    const resultBox = await resultPanel.boundingBox();
+    expect(resultBox).toBeTruthy();
+    if (!resultBox) return;
+
+    await page.mouse.move(
+      secondOutgoingBox.x + secondOutgoingBox.width / 2,
+      secondOutgoingBox.y + secondOutgoingBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(resultBox.x + resultBox.width / 2, resultBox.y + resultBox.height / 2, {
+      steps: 12,
+    });
+    await page.mouse.up();
+
+    await expect(secondOutgoingSlot.locator("img").first()).toHaveAttribute(
+      "src",
+      replacementSrc ?? "",
+    );
+    await expect(resultPanel.locator("img").first()).toHaveAttribute("src", replacementSrc ?? "");
+    await expect(bookImagesStrip).toBeVisible();
   });
 });

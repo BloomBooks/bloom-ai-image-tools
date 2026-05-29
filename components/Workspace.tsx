@@ -1,5 +1,5 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { getReferenceConstraints } from "../lib/toolHelpers";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
@@ -128,6 +128,7 @@ interface WorkspaceProps {
   onClearTarget: () => void;
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
+  onUseCurrentResult?: () => void;
   isProcessing: boolean;
   generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
@@ -149,6 +150,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onClearTarget,
   onClearRight,
   onUploadRight,
+  onUseCurrentResult,
   isProcessing,
   generationProgress,
   activeToolId,
@@ -160,8 +162,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
-  const derivedResultLabel =
-    tool?.id === "break_into_pieces" ? "Pieces" : "Result";
+  const derivedResultLabel = tool?.id === "break_into_pieces" ? "Pieces" : "Result";
   const targetPanelLabel =
     tool?.id === "ethnicity" ? "Character grid or scene to change" : "Image to Edit";
   const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;
@@ -216,6 +217,28 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     },
     dropLabel: "",
   }));
+
+  const currentResultItem = resultImages[0] ?? rightImage;
+  const resultHeaderActions =
+    currentResultItem?.incomingSlotId && onUseCurrentResult ? (
+      <Button
+        type="button"
+        variant="outlined"
+        size="small"
+        data-testid="result-use-this-button"
+        onClick={onUseCurrentResult}
+        sx={{
+          borderRadius: "999px",
+          textTransform: "none",
+          minWidth: 0,
+          px: 1.5,
+          py: 0.5,
+          fontSize: "0.75rem",
+        }}
+      >
+        Use this
+      </Button>
+    ) : undefined;
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
   const leftColumnRef = React.useRef<HTMLDivElement>(null);
@@ -493,6 +516,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           {resultSlots.length ? (
             <ImagePanel
               label={derivedResultLabel}
+              headerActions={resultHeaderActions}
               layout="grid"
               panelTestId="result-panel"
               slots={resultSlots}
@@ -507,6 +531,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               image={rightImage}
               isAnyDndDragging={isAnyDndDragging}
               label="Result"
+              headerActions={resultHeaderActions}
               panelTestId="result-panel"
               onUpload={onUploadRight}
               isDropZone={true}

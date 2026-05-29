@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo } from "react";
-import { ImageToolsWorkspace } from "./src";
-import { createBrowserImageToolsPersistence } from "./services/persistence/browserPersistence";
 import { ENV_KEY_SKIP_FLAG } from "./lib/authFlags";
-import retroFuturism from "./assets/art-styles/retro-futurism.png";
-import watercolorDream from "./assets/art-styles/watercolor-dream.png";
-import paperCutCollage from "./assets/art-styles/paper-cut-collage.png";
-import cleanLineArt from "./assets/art-styles/clean-line-art.png";
 import { useLastDragDelayMs } from "./components/dndDragState";
+import { BloomHostShell } from "./components/BloomHostShell";
+import { BloomHostHarness } from "./components/BloomHostHarness";
+import { createWebViewBloomHostBridge } from "./services/host/BloomHostBridge";
+import { StandaloneShell } from "./components/StandaloneShell";
 import { seedHistory } from "./dev/seedHistory";
 
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
@@ -45,9 +43,23 @@ function DragTimingOverlay() {
   );
 }
 
-export default function App() {
-  const persistence = useMemo(() => createBrowserImageToolsPersistence(), []);
+const hasBloomHostWebView = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
 
+  return Boolean(
+    (
+      window as Window & {
+        chrome?: {
+          webview?: { postMessage?: (message: unknown) => void };
+        };
+      }
+    ).chrome?.webview?.postMessage,
+  );
+};
+
+export default function App() {
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     (window as Window & { seedHistory?: typeof seedHistory }).seedHistory = seedHistory;
@@ -57,27 +69,24 @@ export default function App() {
   }, []);
 
   const envApiKey = getEnvApiKey();
-  const environmentImages = useMemo(
-    () => [retroFuturism, watercolorDream, paperCutCollage, cleanLineArt],
-    [],
+  const isBloomHarness =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("mode") === "bloom-harness";
+  const isBloomHost = hasBloomHostWebView();
+  const bloomBridge = useMemo(
+    () => (isBloomHost ? createWebViewBloomHostBridge() : null),
+    [isBloomHost],
   );
 
   return (
     <>
-      <ImageToolsWorkspace
-        persistence={persistence}
-        envApiKey={envApiKey}
-        environmentImageUrls={environmentImages}
-        environmentStripMode="editable"
-        thumbnailStripConfigOverrides={{
-          environment: {
-            label: "Book pages",
-            allowDrop: true,
-            allowRemove: true,
-            allowReorder: true,
-          },
-        }}
-      />
+      {isBloomHarness ? (
+        <BloomHostHarness />
+      ) : bloomBridge ? (
+        <BloomHostShell bridge={bloomBridge} />
+      ) : (
+        <StandaloneShell envApiKey={envApiKey} />
+      )}
       {import.meta.env.DEV && <DragTimingOverlay />}
     </>
   );

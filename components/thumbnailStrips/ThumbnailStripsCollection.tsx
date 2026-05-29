@@ -1,9 +1,5 @@
 import React, { useMemo } from "react";
-import {
-  ImageRecord,
-  ThumbnailStripId,
-  ThumbnailStripsSnapshot,
-} from "../../types";
+import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   getOtherStripsContainingItem,
   STRIP_DESCRIPTIONS,
@@ -17,46 +13,45 @@ import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
   entries: ImageRecord[];
+  replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
   selectedId: string | null;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
-  hasHiddenHistory: boolean;
-  onRequestHistoryAccess: () => void;
+  onOpenPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRemoveFromStrip: (stripId: ThumbnailStripId, id: string) => void;
+  onAssignReplacement?: (incomingId: string, replacementId: string | null) => void;
+  onAssignCurrent?: (incomingId: string | null, currentImageId: string) => void;
   onDropToStrip: (
     stripId: ThumbnailStripId,
     dropIndex: number,
     draggedId: string | null,
     event?: React.DragEvent | null,
   ) => void;
-  onVisibleItemIdsChange: (
-    stripId: ThumbnailStripId,
-    visibleItemIds: string[],
-  ) => void;
+  onVisibleItemIdsChange: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   onActivateStrip: (stripId: ThumbnailStripId) => void;
   onTogglePin: (stripId: ThumbnailStripId) => void;
   onDragActivateStrip: (stripId: ThumbnailStripId) => void;
   isAnyDndDragging?: boolean;
 }
 
-export const ThumbnailStripsCollection: React.FC<
-  ThumbnailStripsCollectionProps
-> = ({
+export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
   snapshot,
   entries,
+  replacementItemsByIncomingId = {},
   selectedId,
   previewModifierActive = false,
   previewSelectionImageIds = [],
   stripConfigs,
-  hasHiddenHistory,
-  onRequestHistoryAccess,
+  onOpenPreview,
   onSelect,
   onToggleStar,
   onRemoveFromStrip,
-  onDropToStrip,
+  onAssignReplacement,
+  onAssignCurrent,
+  onDropToStrip: _onDropToStrip,
   onVisibleItemIdsChange,
   onActivateStrip,
   onTogglePin,
@@ -76,9 +71,7 @@ export const ThumbnailStripsCollection: React.FC<
 
   const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => pinnedStripIds.has(id));
 
-  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
-    (id) => !pinnedStripIds.has(id),
-  );
+  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => !pinnedStripIds.has(id));
 
   const activeUnpinnedStripId = unpinnedStripIds.length
     ? unpinnedStripIds.includes(snapshot.activeStripId)
@@ -107,7 +100,8 @@ export const ThumbnailStripsCollection: React.FC<
         return;
       }
 
-      reasons[itemId] = `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
+      reasons[itemId] =
+        `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
     });
 
     return reasons;
@@ -117,8 +111,7 @@ export const ThumbnailStripsCollection: React.FC<
     const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
     const description = STRIP_DESCRIPTIONS[stripId];
-    const emptyStateMessage =
-      typeof description === "function" ? description(config) : description;
+    const emptyStateMessage = typeof description === "function" ? description(config) : description;
 
     return (
       <ThumbnailStrip
@@ -129,6 +122,7 @@ export const ThumbnailStripsCollection: React.FC<
         removeDisabledReasonById={
           stripId === "history" ? historyRemoveDisabledReasonById : undefined
         }
+        replacementItemsByIncomingId={replacementItemsByIncomingId}
         selectedId={selectedId}
         previewModifierActive={previewModifierActive}
         previewSelectionImageIds={previewSelectionImageIds}
@@ -137,14 +131,13 @@ export const ThumbnailStripsCollection: React.FC<
         allowReorder={config.allowReorder}
         pinned={pinnedStripIds.has(stripId)}
         isActive={activeOverride ?? snapshot.activeStripId === stripId}
-        hasHiddenHistory={stripId === "history" && hasHiddenHistory}
-        onRequestHistoryAccess={
-          stripId === "history" ? onRequestHistoryAccess : undefined
-        }
         emptyStateMessage={emptyStateMessage}
+        onOpenPreview={onOpenPreview}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
+        onAssignReplacement={onAssignReplacement}
+        onAssignCurrent={onAssignCurrent}
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
       />

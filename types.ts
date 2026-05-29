@@ -99,6 +99,7 @@ export interface EthnicityCategory {
 export interface ImageRecordData {
   id: string;
   parentId: string | null;
+  incomingSlotId?: string;
   imageData: string; // Base64
   imageFileName?: string | null;
   toolId: string;
@@ -113,7 +114,7 @@ export interface ImageRecordData {
   sourceSummary?: string | null;
   resolution?: { width: number; height: number };
   isStarred?: boolean;
-  origin?: "generated" | "uploaded" | "environment";
+  origin?: "generated" | "uploaded" | "bookImages";
 }
 
 /** @deprecated Use ImageRecordData. */
@@ -147,7 +148,7 @@ export interface GenerationTimingState {
   toolDurationsByKey: Record<string, number>;
 }
 
-export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "environment";
+export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "bookImages";
 
 export interface ThumbnailStripsSnapshot {
   activeStripId: ThumbnailStripId;
@@ -172,6 +173,7 @@ export interface PersistedAppState {
 export interface PersistedImageToolsState {
   version: number;
   appState: PersistedAppState;
+  replacementImageIdByIncomingId?: Record<string, string | null>;
   paramsByTool: ToolParamsById;
   activeToolId: string | null;
   selectedModelId: string | null;

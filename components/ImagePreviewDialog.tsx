@@ -11,39 +11,99 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ImageRecord } from "../types";
+import { getHighContrastScrollbarStyles } from "../themes";
+
+export interface ImagePreviewDialogItem {
+  id: string;
+  images: ImageRecord[];
+}
 
 export interface ImagePreviewDialogProps {
   open: boolean;
-  images: ImageRecord[];
+  items: ImagePreviewDialogItem[];
+  layout?: "row" | "book-pairs";
   onClose: () => void;
 }
 
-const getGridTemplateColumns = (imageCount: number) => {
-  if (imageCount <= 1) {
-    return "minmax(0, 1fr)";
-  }
+const previewFrameStyles = {
+  borderRadius: 3,
+  backgroundColor: "rgba(15, 23, 42, 0.68)",
+  overflow: "hidden",
+  position: "relative",
+} as const;
 
-  return "repeat(2, minmax(0, 1fr))";
-};
+const PreviewImage: React.FC<{
+  image: ImageRecord;
+  index: number;
+  maxHeight: string;
+}> = ({ image, index, maxHeight }) => {
+  const resolution = image.resolution
+    ? `${image.resolution.width} x ${image.resolution.height}`
+    : null;
 
-const getGridTemplateRows = (imageCount: number) => {
-  if (imageCount <= 2) {
-    return "minmax(0, 1fr)";
-  }
-
-  return "repeat(2, minmax(0, 1fr))";
+  return (
+    <Box
+      sx={{
+        ...previewFrameStyles,
+        flex: "0 0 auto",
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: { xs: 1.5, sm: 2 },
+          minWidth: 0,
+          minHeight: 0,
+        }}
+      >
+        <img
+          src={image.imageData}
+          alt={image.imageFileName || `Preview image ${index + 1}`}
+          draggable={false}
+          style={{
+            display: "block",
+            width: "auto",
+            height: "auto",
+            maxWidth: "min(100%, calc(100vw - 220px))",
+            maxHeight,
+            objectFit: "contain",
+          }}
+        />
+      </Box>
+      {resolution && (
+        <Typography
+          variant="caption"
+          sx={{
+            position: "absolute",
+            left: 12,
+            bottom: 12,
+            px: 1,
+            py: 0.5,
+            borderRadius: 999,
+            backgroundColor: "rgba(6, 8, 13, 0.76)",
+            color: "#e2e8f0",
+          }}
+        >
+          {resolution}
+        </Typography>
+      )}
+    </Box>
+  );
 };
 
 export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
   open,
-  images,
+  items,
+  layout = "row",
   onClose,
 }) => {
-  const visibleImages = React.useMemo(() => images.slice(-4), [images]);
+  const visibleItems = React.useMemo(() => items.filter((item) => item.images.length > 0), [items]);
 
   return (
     <Dialog
-      open={open && visibleImages.length > 0}
+      open={open && visibleItems.length > 0}
       onClose={onClose}
       fullScreen
       PaperProps={{
@@ -56,9 +116,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
     >
       <DialogTitle sx={{ px: { xs: 2, sm: 3 }, py: 2, pr: 8, position: "relative" }}>
         <Typography component="span" variant="h6" sx={{ fontWeight: 600 }}>
-          {visibleImages.length === 1
-            ? "Image preview"
-            : `${visibleImages.length} image preview`}
+          Gallery
         </Typography>
         <IconButton
           aria-label="Close image preview"
@@ -81,89 +139,47 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
           py: 0,
           display: "flex",
           minHeight: 0,
+          overflowX: "auto",
+          overflowY: "auto",
+          ...getHighContrastScrollbarStyles(),
         }}
       >
         <Box
           sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "minmax(0, 1fr)",
-              sm: getGridTemplateColumns(visibleImages.length),
-            },
-            gridTemplateRows: {
-              xs: `repeat(${visibleImages.length}, minmax(0, 1fr))`,
-              sm: getGridTemplateRows(visibleImages.length),
-            },
-            gap: { xs: 2, sm: 3 },
-            width: "100%",
-            height: "100%",
+            display: "flex",
+            gap: { xs: 1.5, sm: 2.5 },
+            width: "max-content",
+            minWidth: "100%",
             minHeight: 0,
+            alignItems: "flex-start",
+            pr: { xs: 1, sm: 2 },
           }}
         >
-          {visibleImages.map((image, index) => {
-            const resolution = image.resolution
-              ? `${image.resolution.width} x ${image.resolution.height}`
-              : null;
-
+          {visibleItems.map((item, index) => {
             return (
               <Box
-                key={image.id}
+                key={item.id}
                 data-testid={`image-preview-dialog-item-${index}`}
                 sx={{
-                  minWidth: 0,
+                  flex: "0 0 auto",
                   minHeight: 0,
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 3,
-                  backgroundColor: "rgba(15, 23, 42, 0.68)",
-                  overflow: "hidden",
-                  position: "relative",
+                  flexDirection: "column",
+                  gap: layout === "book-pairs" ? 2 : 0,
+                  width: layout === "book-pairs" ? "fit-content" : "auto",
+                  maxWidth: layout === "book-pairs" ? "calc(100vw - 120px)" : "none",
                 }}
               >
-                <Box
-                  sx={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    p: { xs: 1.5, sm: 2 },
-                    minWidth: 0,
-                    minHeight: 0,
-                  }}
-                >
-                  <img
-                    src={image.imageData}
-                    alt={image.imageFileName || `Preview image ${index + 1}`}
-                    draggable={false}
-                    style={{
-                      display: "block",
-                      width: "auto",
-                      height: "auto",
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain",
-                    }}
+                {item.images.map((image, imageIndex) => (
+                  <PreviewImage
+                    key={image.id}
+                    image={image}
+                    index={imageIndex}
+                    maxHeight={
+                      layout === "book-pairs" ? "calc((100vh - 280px) / 2)" : "calc(100vh - 220px)"
+                    }
                   />
-                </Box>
-                {resolution && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      position: "absolute",
-                      left: 12,
-                      bottom: 12,
-                      px: 1,
-                      py: 0.5,
-                      borderRadius: 999,
-                      backgroundColor: "rgba(6, 8, 13, 0.76)",
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    {resolution}
-                  </Typography>
-                )}
+                ))}
               </Box>
             );
           })}

@@ -415,6 +415,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           cacheKey,
           getArtStylesByCategories(param.artStyleCategories, {
             excludeNone: param.excludeNoneStyle,
+            excludeIds: param.excludeArtStyleIds,
           }),
         );
       });
@@ -504,6 +505,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       if (param.type === "art-style") {
         const stylesForPicker = getArtStylesByCategories(param.artStyleCategories, {
           excludeNone: param.excludeNoneStyle,
+          excludeIds: param.excludeArtStyleIds,
         });
         const candidate = toolParams[param.name] ?? param.defaultValue ?? selectedArtStyleId ?? "";
         if (!candidate.trim()) {
@@ -537,12 +539,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
     });
 
-    console.log("[ExtractCast/debug] handleSubmit payload", {
-      toolId: tool.id,
-      paramsFromState: paramsByTool[tool.id],
-      finalPayload: payload,
-    });
-
     onApplyTool(tool.id, payload);
   };
 
@@ -553,7 +549,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       if (param.type === "art-style") {
         const storedValue = value;
         const cacheKey = `${tool.id}:${param.name}`;
-        const stylesForPicker = artStyleOptionsByParam.get(cacheKey) ?? [];
+        const stylesForPicker =
+          artStyleOptionsByParam.get(cacheKey) ??
+          getArtStylesByCategories(param.artStyleCategories, {
+            excludeNone: param.excludeNoneStyle,
+            excludeIds: param.excludeArtStyleIds,
+          });
         const pickerValue = storedValue || param.defaultValue || selectedArtStyleId || "";
 
         return (

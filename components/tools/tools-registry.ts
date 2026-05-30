@@ -10,6 +10,7 @@ import GifBoxOutlinedIcon from "@mui/icons-material/GifBoxOutlined";
 import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import { ColoringBookIcon } from "../Icons";
 import { ToolDefinition, ToolParameter } from "../../types";
 import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
@@ -27,6 +28,17 @@ const SIZE_HINTS: Record<string, string> = {
 };
 
 const PALETTE_COLOR_OPTIONS = ["3", "4", "5", "6", "7"] as const;
+const COLORING_BOOK_STYLE_ID = "coloring-book-page";
+const COLORING_BOOK_DIFFICULTY_OPTIONS = ["Simple", "Moderate", "Complex"] as const;
+const DEFAULT_COLORING_BOOK_DIFFICULTY = COLORING_BOOK_DIFFICULTY_OPTIONS[1];
+const COLORING_BOOK_COMPLEXITY_HINTS: Record<string, string> = {
+  Simple:
+    "Keep the page very simple, with large open areas, minimal background detail, and only a few bold interior lines.",
+  Moderate:
+    "Keep the page balanced for a typical coloring-book page, with readable detail, medium-density line work, and clear closed shapes.",
+  Complex:
+    "Allow richer detail and denser line work while keeping the outlines clean, closed, and still practical to color.",
+};
 
 const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
   name: "aspectRatio",
@@ -302,6 +314,44 @@ export const TOOLS: ToolDefinition[] = (
       referenceImages: "0",
     },
     {
+      id: "coloring_book",
+      title: "Coloring Book",
+      description: "Turn the selected image into a black-and-white coloring-book page.",
+      group: "more",
+      icon: ColoringBookIcon,
+      parameters: [
+        {
+          name: "difficulty",
+          label: "Difficulty",
+          type: "select",
+          options: [...COLORING_BOOK_DIFFICULTY_OPTIONS],
+          defaultValue: DEFAULT_COLORING_BOOK_DIFFICULTY,
+        },
+        {
+          name: "size",
+          label: "Size",
+          type: "size",
+          options: [...SIZE_OPTIONS],
+          defaultValue: DEFAULT_SIZE,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const selectedDifficulty = params.difficulty?.trim() || DEFAULT_COLORING_BOOK_DIFFICULTY;
+        const complexityHint =
+          COLORING_BOOK_COMPLEXITY_HINTS[selectedDifficulty] ||
+          COLORING_BOOK_COMPLEXITY_HINTS[DEFAULT_COLORING_BOOK_DIFFICULTY];
+
+        return [
+          "Re-render this image as a children's coloring book page. Preserve the exact composition, characters, and major recognizable objects while converting everything to clean black outlines on a white background.",
+          `Difficulty: ${selectedDifficulty}. ${complexityHint}`,
+          "Keep interior regions open and white for coloring. Do not use large solid black filled areas; use black only for outlines and small necessary detail accents.",
+          "Art direction (Coloring Book Outline): Children's coloring book page, clean black outlines, white background, no shading, no greyscale, closed shapes for coloring, crisp vector-like lines.",
+        ].join("\n\n");
+      },
+      actionButtonLabel: "Make Coloring Page",
+      referenceImages: "0",
+    },
+    {
       id: "change_style",
       title: "Change Style",
       description: "Restyle the selected image.",
@@ -314,6 +364,7 @@ export const TOOLS: ToolDefinition[] = (
           type: "art-style",
           defaultValue: DEFAULT_ART_STYLE_ID,
           excludeNoneStyle: true,
+          excludeArtStyleIds: [COLORING_BOOK_STYLE_ID],
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
@@ -382,7 +433,7 @@ export const TOOLS: ToolDefinition[] = (
         const description = selectedEthnicity?.description?.trim();
         const ethnicityDetails = description ? `${label}. Appearance cues: ${description}` : label;
 
-        return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style.  Do not put the people traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
+        return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style. Do not put the people in traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
       },
       referenceImages: "0",
     },
@@ -419,7 +470,7 @@ export const TOOLS: ToolDefinition[] = (
         },
         {
           name: "numberOfColors",
-          label: "number of colors",
+          label: "Number of Colors",
           type: "select",
           options: [...PALETTE_COLOR_OPTIONS],
           defaultValue: "5",

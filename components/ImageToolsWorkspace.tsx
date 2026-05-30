@@ -43,6 +43,7 @@ import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { ImagePreviewDialog, ImagePreviewDialogItem } from "./ImagePreviewDialog";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
+import imagePlaceholder from "../assets/image_placeholder.svg";
 import { createToolParamDefaults, mergeParamsWithDefaults } from "./tools/toolParams";
 import { API_KEY_STORAGE_KEY, AUTH_METHOD_STORAGE_KEY } from "../lib/authStorage";
 import { WELCOME_DIALOG_SKIP_FLAG } from "../lib/authFlags";
@@ -68,7 +69,12 @@ import {
 } from "../services/persistence/fileSystemAccess";
 import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
 import { getAspectRatioPromptHint, resolveAspectRatioValue } from "../lib/aspectRatios";
-import { getImageDimensions, getMimeTypeFromUrl, prepareImageBlob } from "../lib/imageUtils";
+import {
+  ensureDataUrl,
+  getImageDimensions,
+  getMimeTypeFromUrl,
+  prepareImageBlob,
+} from "../lib/imageUtils";
 import {
   getRequestedAspectRatioValue,
   getRequestedImageSizeValue,
@@ -358,7 +364,9 @@ export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
   bookImageUrls?: string[];
-  bookImages?: Array<{ id: string; src: string }>;
+  bookImages?: Array<{ id: string; src: string; isPlaceholder?: boolean }>;
+  /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
+  selectedBookImageId?: string;
   bookImagesStripMode?: "host" | "editable";
   oauthHost?: {
     httpBase: string;
@@ -384,6 +392,7 @@ export function ImageToolsWorkspace({
   envApiKey: envApiKeyProp = "",
   bookImageUrls = [],
   bookImages = [],
+  selectedBookImageId,
   bookImagesStripMode = "host",
   oauthHost = null,
   onReplacementsChange,
@@ -452,6 +461,9 @@ export function ImageToolsWorkspace({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isWelcomeDialogOpen, setIsWelcomeDialogOpen] = useState(false);
   const hasShownWelcomeRef = useRef(false);
+  // Guards the one-time auto-selection of the host's current book image into the
+  // "Image to Edit" target (see the effect below).
+  const didAutoSelectBookImageTargetRef = useRef(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [credits, setCredits] = useState<OpenRouterKeyStatus | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -483,12 +495,16 @@ export function ImageToolsWorkspace({
         .map((image, index) => ({
           id: image.id?.trim(),
           url: image.src?.trim(),
+          isPlaceholder: image.isPlaceholder,
           index,
         }))
         .filter(({ id, url }) => Boolean(id) && Boolean(url))
-        .map(({ id, url, index }) => ({
+        .map(({ id, url, isPlaceholder, index }) => ({
           ...buildBookImageEntry(url as string, index),
           id: id as string,
+          // Empty book slots: show our own placeholder graphic rather than the
+          // book's placeHolder.png (which isn't served as a book file).
+          ...(isPlaceholder ? { imageData: imagePlaceholder } : {}),
         }));
     }
 
@@ -689,25 +705,40 @@ export function ImageToolsWorkspace({
     const resolvedIds = resolvedBookImageEntries.map((entry) => entry.id);
 
     if (bookImagesStripMode === "host") {
+      // Wait for the persistence load to finish before touching the strip/history:
+      // this effect must run *after* hydration so it overwrites any stale persisted
+      // book-image records with the fresh launch, rather than racing the load (which
+      // would then clobber the fresh records with stale ones).
+      if (!isHydrated) {
+        return;
+      }
       if (!resolvedBookImageEntries.length) {
-        // Avoid clearing the strip before hydration / before the host has
-        // delivered its init payload — that empty state would be the value
-        // saved back to disk, erasing any prior replacements.
-        if (isHydrated) {
-          setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", []));
-        }
+        setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", []));
         return;
       }
 
       setState((prev) => {
-        const existingIds = new Set(prev.history.map((item) => item.id));
-        const nextHistory = [...prev.history];
+        // The host's init is the source of truth for the book's *current* images, so
+        // refresh each book-image record from it (new src after a commit, or our
+        // placeholder graphic) rather than keeping a stale record persisted under the
+        // same slot id. Generated results (other ids) are left untouched.
+        const freshById = new Map(resolvedBookImageEntries.map((entry) => [entry.id, entry]));
         let mutated = false;
-        resolvedBookImageEntries.forEach((entry) => {
-          if (!existingIds.has(entry.id)) {
-            nextHistory.push(entry);
-            mutated = true;
+        const nextHistory = prev.history.map((item) => {
+          const fresh = freshById.get(item.id);
+          if (!fresh) {
+            return item;
           }
+          freshById.delete(item.id);
+          if (item.imageData !== fresh.imageData || item.origin !== fresh.origin) {
+            mutated = true;
+            return fresh;
+          }
+          return item;
+        });
+        freshById.forEach((fresh) => {
+          nextHistory.push(fresh);
+          mutated = true;
         });
         return mutated ? { ...prev, history: nextHistory } : prev;
       });
@@ -749,6 +780,42 @@ export function ImageToolsWorkspace({
       });
     }
   }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated]);
+
+  useEffect(() => {
+    // When the host opens the editor on a book image, drop that image straight
+    // into the "Image to Edit" target so the user can apply a tool without
+    // dragging it across first. Done once per launch.
+    if (
+      bookImagesStripMode !== "host" ||
+      !isHydrated ||
+      didAutoSelectBookImageTargetRef.current ||
+      !resolvedBookImageEntries.length
+    ) {
+      return;
+    }
+
+    didAutoSelectBookImageTargetRef.current = true;
+
+    // The specific image the user launched on, if the host told us which one.
+    const explicitId =
+      selectedBookImageId &&
+      resolvedBookImageEntries.some((entry) => entry.id === selectedBookImageId)
+        ? selectedBookImageId
+        : null;
+
+    setState((prev) => {
+      if (explicitId) {
+        // Honor the launched-on image even if a target was restored from a prior
+        // session — the user clicked that image expecting to edit it.
+        return prev.targetImageId === explicitId ? prev : { ...prev, targetImageId: explicitId };
+      }
+      // No specific image: only seed a default if nothing is already selected.
+      if (prev.targetImageId) {
+        return prev;
+      }
+      return { ...prev, targetImageId: resolvedBookImageEntries[0].id };
+    });
+  }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated, selectedBookImageId]);
 
   useEffect(() => {
     // If the bookImages strip is momentarily empty (e.g. during initial mount
@@ -1119,7 +1186,15 @@ export function ImageToolsWorkspace({
           );
           if (!cancelled) {
             setThumbnailStrips(hydratedStrips);
-            setReplacementImageIdByIncomingId(persisted.replacementImageIdByIncomingId ?? {});
+            // In host (Bloom) mode each launch starts from the book's current state:
+            // outgoing replacement slots begin empty (any prior picks were either
+            // committed into the book or discarded), rather than restoring stale
+            // assignments from a previous session.
+            setReplacementImageIdByIncomingId(
+              bookImagesStripMode === "host"
+                ? {}
+                : (persisted.replacementImageIdByIncomingId ?? {}),
+            );
           }
 
           const persistedStyleId =
@@ -1787,10 +1862,15 @@ export function ImageToolsWorkspace({
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
       const referenceImageCount = constrainedReferences.length;
       const sourceSummary = formatSourceSummary(editImageCount, referenceImageCount);
-      const sourceImages = [
-        ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
-        ...constrainedReferences.map((h) => h.imageData),
-      ];
+      // Normalize every source to a base64 data URL. Book images from the Bloom
+      // host (and anything else dragged in by URL) arrive as http(s) URLs, which
+      // the OpenRouter client and local background removal cannot consume.
+      const targetImageData =
+        requiresEditImage && targetImage ? await ensureDataUrl(targetImage.imageData) : null;
+      const referenceImageData = await Promise.all(
+        constrainedReferences.map((h) => ensureDataUrl(h.imageData)),
+      );
+      const sourceImages = [...(targetImageData ? [targetImageData] : []), ...referenceImageData];
 
       const promptWithoutAspectRatio =
         tool.id === "custom"
@@ -1821,7 +1901,7 @@ export function ImageToolsWorkspace({
       let progressStartedAt = 0;
 
       if (usesLocalBackgroundRemoval) {
-        if (!targetImage) {
+        if (!targetImage || !targetImageData) {
           throw new Error("Select an image to edit before applying this tool.");
         }
 
@@ -1835,7 +1915,7 @@ export function ImageToolsWorkspace({
           ),
         });
 
-        const result = await removeBackgroundFromImage(targetImage.imageData, {
+        const result = await removeBackgroundFromImage(targetImageData, {
           signal: abortController.signal,
         });
 

@@ -814,6 +814,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                     src={image.imageData}
                     alt={label || "Reference"}
                     enableLens={isMagnifierPinned}
+                    // For book-image strips that can hold an entire book's worth of
+                    // images, let the browser defer fetching off-screen thumbnails
+                    // instead of firing every request on mount.
+                    loading={variant === "thumb" ? "lazy" : undefined}
+                    decoding="async"
                     style={{
                       maxHeight: "100%",
                       maxWidth: "100%",

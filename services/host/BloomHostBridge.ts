@@ -4,6 +4,9 @@ export interface BloomHostBookImage {
   pageLabel?: string;
   width?: number;
   height?: number;
+  /** True when the slot is an empty placeholder; the editor shows its own
+   *  placeholder graphic instead of trying to load the book's placeHolder.png. */
+  isPlaceholder?: boolean;
 }
 
 export interface BloomHostReferenceImage {
@@ -15,6 +18,9 @@ export interface BloomHostReferenceImage {
 export interface BloomHostInitPayload {
   book: { id: string; title: string };
   bookImages: BloomHostBookImage[];
+  /** The book image the user launched the editor on (bookImages[].id), to be
+   *  pre-loaded into the "Image to Edit" slot. */
+  selectedBookImageId?: string;
   historyFolderUrl?: string;
   referenceFolderUrl?: string;
   references: BloomHostReferenceImage[];
@@ -25,8 +31,15 @@ export interface BloomHostInitPayload {
 }
 
 export interface BloomCommitReplacement {
+  /** The book image slot being replaced (the host-supplied bookImages[].id). */
   incomingId: string;
-  newImageUrl: string;
+  /** For a generated/uploaded result: the editor result id. The host reads its
+   *  bytes from `.ai-image-editor/history/<resultId>.png` (written via the file
+   *  endpoint before commit), so large image bytes never cross the bridge. */
+  resultId?: string;
+  /** For an image that already has a host-served URL (e.g. another book image
+   *  reused as a replacement): that URL, which the host resolves to a file. */
+  sourceUrl?: string;
 }
 
 export interface BloomHostBridge {

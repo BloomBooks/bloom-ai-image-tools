@@ -78,6 +78,7 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
       (initPayload?.bookImages || []).map((image) => ({
         id: image.id,
         src: image.src,
+        isPlaceholder: image.isPlaceholder,
       })),
     [initPayload?.bookImages],
   );
@@ -87,7 +88,30 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
     [initPayload?.bookImages],
   );
 
-  const buildReplacements = React.useCallback(
+  // Build the commit payload for the assigned slots. Image *bytes* never cross the
+  // postMessage bridge: a generated/uploaded result (a base64 data URL) is written
+  // to the per-book history folder over the binary HTTP file endpoint and referenced
+  // by `resultId`; an image that already has a host-served URL (e.g. another book
+  // image reused as a replacement) is referenced by that `sourceUrl`. Returns null
+  // for items that have neither (nothing to apply).
+  const buildReplacement = React.useCallback(
+    async (incomingId: string, item: ImageRecord): Promise<BloomCommitReplacement | null> => {
+      if (item.imageData?.startsWith("data:image/")) {
+        // Ensure the bytes are on disk for the host to read. The persistence layer
+        // normally writes this already; this guarantees presence (idempotent
+        // overwrite) without racing the debounced save.
+        await bridge.putFile(`history/${item.id}.png`, item.imageData);
+        return { incomingId, resultId: item.id };
+      }
+      if (item.imageData) {
+        return { incomingId, sourceUrl: item.imageData };
+      }
+      return null;
+    },
+    [bridge],
+  );
+
+  const collectAssignedEntries = React.useCallback(
     (incomingIds?: Iterable<string>) => {
       const allowedIncomingIds = incomingIds ? new Set(incomingIds) : null;
       return Object.entries(replacementMap)
@@ -95,13 +119,9 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
           if (!item?.imageData) {
             return false;
           }
-
           return !allowedIncomingIds || allowedIncomingIds.has(incomingId);
         })
-        .map(([incomingId, item]) => ({
-          incomingId,
-          newImageUrl: item?.imageData || "",
-        }));
+        .map(([incomingId, item]) => ({ incomingId, item: item as ImageRecord }));
     },
     [replacementMap],
   );
@@ -112,16 +132,15 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
         return;
       }
 
-      const replacements = buildReplacements(incomingIds);
+      const entries = collectAssignedEntries(incomingIds);
+      const replacements = (
+        await Promise.all(entries.map(({ incomingId, item }) => buildReplacement(incomingId, item)))
+      ).filter((replacement): replacement is BloomCommitReplacement => replacement !== null);
 
-      try {
-        await bridge.commit(replacements);
-        onCommitComplete?.(replacements);
-      } catch (error) {
-        throw error;
-      }
+      await bridge.commit(replacements);
+      onCommitComplete?.(replacements);
     },
-    [bridge, buildReplacements, initPayload, onCommitComplete],
+    [bridge, buildReplacement, collectAssignedEntries, initPayload, onCommitComplete],
   );
 
   const handleCommitCurrentResult = React.useCallback(
@@ -130,43 +149,36 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
         return;
       }
 
-      const replacements = [
-        {
-          incomingId: item.incomingSlotId,
-          newImageUrl: item.imageData,
-        },
-      ];
-
       try {
-        await bridge.commit(replacements);
-        onCommitComplete?.(replacements);
+        const replacement = await buildReplacement(item.incomingSlotId, item);
+        if (!replacement) {
+          return;
+        }
+        await bridge.commit([replacement]);
+        onCommitComplete?.([replacement]);
         setStatus("Committed 1 replacement.");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "Commit failed.");
       }
     },
-    [bridge, onCommitComplete],
+    [bridge, buildReplacement, onCommitComplete],
   );
 
   const handleCommitAll = React.useCallback(async () => {
-    const replacements = buildReplacements();
-    if (!replacements.length) {
+    const count = collectAssignedEntries().length;
+    if (!count) {
       setStatus("No book image replacements are assigned yet.");
       return;
     }
 
-    setStatus(
-      `Committing ${replacements.length} replacement${replacements.length === 1 ? "" : "s"}...`,
-    );
+    setStatus(`Committing ${count} replacement${count === 1 ? "" : "s"}...`);
     try {
       await handleCommit();
-      setStatus(
-        `Committed ${replacements.length} replacement${replacements.length === 1 ? "" : "s"}.`,
-      );
+      setStatus(`Committed ${count} replacement${count === 1 ? "" : "s"}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Commit failed.");
     }
-  }, [buildReplacements, handleCommit]);
+  }, [collectAssignedEntries, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
     bridge.cancel();
@@ -250,6 +262,7 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
         bookImages={hostBookImages}
         bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"
+        selectedBookImageId={initPayload.selectedBookImageId}
         oauthHost={{
           httpBase: initPayload.httpBase,
           sessionToken: initPayload.sessionToken,

@@ -64,37 +64,124 @@ const createSeededResultState = (resultSrc: string): PersistedImageToolsState =>
   },
 });
 
+// Simulates relaunching after a prior session: a stale book-image record for
+// book-image-1 (an old image) and a replacement assignment are persisted. On
+// load the host should refresh book-image-1 to the *current* init image and start
+// with empty replacement slots.
+const createStaleReopenState = (): PersistedImageToolsState => ({
+  version: 1,
+  appState: {
+    targetImageId: null,
+    referenceImageIds: [],
+    rightPanelImageId: null,
+    history: [
+      {
+        id: SEEDED_RESULT_HISTORY_ID,
+        parentId: null,
+        incomingSlotId: "book-image-1",
+        imageData: watercolorDream,
+        imageFileName: null,
+        toolId: "edit-image",
+        parameters: {},
+        sourceStyleId: null,
+        durationMs: 0,
+        cost: 0,
+        model: "manual",
+        timestamp: 1,
+        promptUsed: "",
+        sourceSummary: "",
+        resolution: undefined,
+        isStarred: false,
+        origin: "generated",
+      },
+      {
+        // Stale "current" book image persisted under book-image-1's slot id; the
+        // init supplies retroFuturism for that slot, which should win.
+        id: "book-image-1",
+        parentId: null,
+        incomingSlotId: undefined,
+        imageData: paperCutCollage,
+        imageFileName: null,
+        toolId: "bookImages",
+        parameters: {},
+        sourceStyleId: null,
+        durationMs: 0,
+        cost: 0,
+        model: "",
+        timestamp: 0,
+        promptUsed: "Book Image",
+        sourceSummary: "Book Image",
+        resolution: undefined,
+        isStarred: false,
+        origin: "bookImages",
+      },
+    ],
+  },
+  replacementImageIdByIncomingId: { "book-image-1": SEEDED_RESULT_HISTORY_ID },
+  paramsByTool: {},
+  activeToolId: null,
+  selectedModelId: null,
+  auth: { apiKey: null, authMethod: null },
+  thumbnailStrips: {
+    activeStripId: "bookImages",
+    pinnedStripIds: [],
+    itemIdsByStrip: {
+      history: [SEEDED_RESULT_HISTORY_ID],
+      characters: [],
+      starred: [],
+      reference: [],
+      bookImages: ["book-image-1", "book-image-2", "book-image-3", "book-image-4", "book-image-5"],
+    },
+  },
+});
+
 export const BloomHostHarness: React.FC = () => {
   const [commitPayload, setCommitPayload] = React.useState<BloomCommitReplacement[]>([]);
   const [wasCancelled, setWasCancelled] = React.useState(false);
   const [readyCount, setReadyCount] = React.useState(0);
   const requestCloseListenersRef = React.useRef<Array<() => void>>([]);
-  const shouldSeedCurrentResult =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("seed") === "current-result";
+  const seedMode =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("seed") : null;
+  const initialFiles = React.useMemo(() => {
+    if (seedMode === "current-result") {
+      return { "state.json": JSON.stringify(createSeededResultState(retroFuturism)) };
+    }
+    if (seedMode === "stale-reopen") {
+      return { "state.json": JSON.stringify(createStaleReopenState()) };
+    }
+    return undefined;
+  }, [seedMode]);
 
   const bridge = React.useMemo(
     () =>
       createHarnessBloomHostBridge({
         initPayload: {
           book: { id: HARNESS_BOOK_ID, title: "Harness Book" },
-          bookImages: [retroFuturism, watercolorDream, paperCutCollage, cleanLineArt].map(
-            (src, index) => ({
-              id: `book-image-${index + 1}`,
-              src,
-              pageLabel: `Page ${index + 1}`,
-            }),
-          ),
+          bookImages: [
+            ...[retroFuturism, watercolorDream, paperCutCollage, cleanLineArt].map(
+              (src, index) => ({
+                id: `book-image-${index + 1}`,
+                src,
+                pageLabel: `Page ${index + 1}`,
+              }),
+            ),
+            // An empty placeholder slot: the editor should show its own placeholder
+            // graphic rather than try to load the book's placeHolder.png.
+            {
+              id: "book-image-5",
+              src: "https://bloom-book.invalid/placeHolder.png",
+              pageLabel: "Page 5",
+              isPlaceholder: true,
+            },
+          ],
           references: [],
           apiKey: "",
           httpBase: "http://localhost:8089/bloom/api/aiImageEditor",
           sessionToken: "harness-session",
+          // Simulate launching on a specific image: it should land in "Image to Edit".
+          selectedBookImageId: "book-image-3",
         },
-        initialFiles: shouldSeedCurrentResult
-          ? {
-              "state.json": JSON.stringify(createSeededResultState(retroFuturism)),
-            }
-          : undefined,
+        initialFiles,
         onCommit(replacements) {
           setCommitPayload(replacements);
           setWasCancelled(false);
@@ -106,7 +193,7 @@ export const BloomHostHarness: React.FC = () => {
           setReadyCount((count) => count + 1);
         },
       }),
-    [shouldSeedCurrentResult],
+    [initialFiles],
   );
 
   React.useEffect(() => {

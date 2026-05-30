@@ -77,10 +77,35 @@ describe("ethnicity tool prompt", () => {
     const changeStyleTool = TOOLS.find((tool) => tool.id === "change_style");
     const removeObjectTool = TOOLS.find((tool) => tool.id === "remove_object");
     const paletteTool = TOOLS.find((tool) => tool.id === "generate_pallet");
+    const coloringBookTool = TOOLS.find((tool) => tool.id === "coloring_book");
 
     expect(changeStyleTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(removeObjectTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(paletteTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
+    expect(coloringBookTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(true);
     expect(paletteTool?.hiddenAspectRatioDefault).toBe("21:9");
+  });
+
+  it("moves coloring-book restyling into its own more tool with difficulty support", () => {
+    const changeStyleTool = TOOLS.find((tool) => tool.id === "change_style");
+    const coloringBookTool = TOOLS.find((tool) => tool.id === "coloring_book");
+
+    expect(coloringBookTool).toBeDefined();
+    expect(coloringBookTool?.group).toBe("more");
+    expect(
+      coloringBookTool?.parameters.find((param) => param.name === "difficulty")?.options,
+    ).toEqual(["Simple", "Moderate", "Complex"]);
+    expect(coloringBookTool?.parameters.find((param) => param.name === "size")?.type).toBe("size");
+
+    const prompt = coloringBookTool?.promptTemplate?.({ difficulty: "Complex" });
+
+    expect(prompt).toContain("children's coloring book page");
+    expect(prompt).toContain("Difficulty: Complex.");
+    expect(prompt).toContain("closed shapes for coloring");
+    expect(prompt).toContain("Do not use large solid black filled areas");
+    expect(prompt).toContain("Keep interior regions open and white for coloring");
+    expect(
+      changeStyleTool?.parameters.find((param) => param.name === "styleId")?.excludeArtStyleIds,
+    ).toContain("coloring-book-page");
   });
 });

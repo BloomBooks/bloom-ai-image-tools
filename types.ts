@@ -11,6 +11,8 @@ export interface ToolParameter {
   artStyleCategories?: string[];
   /** When true, the "None" art style option is excluded (for art-style type only). */
   excludeNoneStyle?: boolean;
+  /** Art style IDs to omit from the picker (for art-style type only). */
+  excludeArtStyleIds?: string[];
 }
 
 export type ToolParams = Record<string, string>;

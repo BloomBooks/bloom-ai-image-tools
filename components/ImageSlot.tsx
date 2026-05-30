@@ -3,7 +3,7 @@ import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord, ImageSlotActionKey } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { Icon, Icons } from "./Icons";
-import { kPrimary, theme } from "../themes";
+import { theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";
@@ -25,7 +25,6 @@ import {
 import { recordDragDelayMs } from "./dndDragState";
 import {
   getTypeFromFileName,
-  getTypeFromMime,
   handleCopy as copyImageToClipboard,
   handlePaste as pasteImageFromClipboard,
 } from "../lib/clipboardUtils";
@@ -91,6 +90,7 @@ export interface ImageSlotProps {
   dropLabel?: string;
   dataTestId?: string;
   headerActions?: React.ReactNode;
+  overlayContent?: React.ReactNode;
   actionLabels?: Partial<Record<keyof ImageSlotControls, string>>;
   actionDisabledReasons?: Partial<Record<ImageSlotActionKey, string>>;
   removeIcon?: string;
@@ -275,6 +275,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   dropLabel = "Drop image",
   dataTestId,
   headerActions: customHeaderActions,
+  overlayContent,
   actionLabels,
   actionDisabledReasons,
   removeIcon,
@@ -582,10 +583,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     if (!image || !hasValidArtStyle) return;
     event.preventDefault();
     setContextMenu({ x: event.clientX, y: event.clientY });
-  };
-
-  const handleCloseContextMenu = () => {
-    setContextMenu(null);
   };
 
   const handleSetThumbnail = async () => {
@@ -932,6 +929,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
               borderRadius={0}
               progress={loadingProgress ?? null}
             />
+
+            {overlayContent}
           </div>
         </div>
 

@@ -14,6 +14,12 @@ interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
   entries: ImageRecord[];
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   selectedId: string | null;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
@@ -41,6 +47,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   snapshot,
   entries,
   replacementItemsByIncomingId = {},
+  bookImagesAction,
   selectedId,
   previewModifierActive = false,
   previewSelectionImageIds = [],
@@ -123,6 +130,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
           stripId === "history" ? historyRemoveDisabledReasonById : undefined
         }
         replacementItemsByIncomingId={replacementItemsByIncomingId}
+        bookImagesAction={stripId === "bookImages" ? bookImagesAction : undefined}
         selectedId={selectedId}
         previewModifierActive={previewModifierActive}
         previewSelectionImageIds={previewSelectionImageIds}

@@ -14,12 +14,8 @@ describe("aspect ratio helpers", () => {
   });
 
   it("resolves auto to the closest supported ratio", () => {
-    expect(
-      resolveAspectRatioValue(AUTO_ASPECT_RATIO, { width: 1536, height: 1024 }),
-    ).toBe("3:2");
-    expect(
-      resolveAspectRatioValue(AUTO_ASPECT_RATIO, { width: 1080, height: 1920 }),
-    ).toBe("9:16");
+    expect(resolveAspectRatioValue(AUTO_ASPECT_RATIO, { width: 1536, height: 1024 })).toBe("3:2");
+    expect(resolveAspectRatioValue(AUTO_ASPECT_RATIO, { width: 1080, height: 1920 })).toBe("9:16");
   });
 
   it("chooses the nearest extreme panoramic ratio", () => {
@@ -28,24 +24,20 @@ describe("aspect ratio helpers", () => {
   });
 
   it("limits auto resolution to the selected model's supported ratios", () => {
-    expect(
-      getClosestAspectRatioValue(
-        { width: 3200, height: 800 },
-        ["2:3", "1:1", "3:2"],
-      ),
-    ).toBe("3:2");
+    expect(getClosestAspectRatioValue({ width: 3200, height: 800 }, ["2:3", "1:1", "3:2"])).toBe(
+      "3:2",
+    );
   });
 
   it("falls back to a supported ratio when the current selection is unavailable", () => {
-    expect(resolveAspectRatioValue("21:9", undefined, ["2:3", "1:1", "3:2"]))
-      .toBe("1:1");
-    expect(getDefaultAspectRatioValue(["2:3", "3:2"]))
-      .toBe("2:3");
+    expect(resolveAspectRatioValue("21:9", undefined, ["2:3", "1:1", "3:2"])).toBe("1:1");
+    expect(getDefaultAspectRatioValue(["2:3", "3:2"])).toBe("2:3");
   });
 
   it("keeps the prompt hint aligned with the resolved supported ratio", () => {
-    expect(getAspectRatioPromptHint("21:9", undefined, ["2:3", "1:1", "3:2"]))
-      .toContain("1:1 aspect ratio");
+    expect(getAspectRatioPromptHint("21:9", undefined, ["2:3", "1:1", "3:2"])).toContain(
+      "1:1 aspect ratio",
+    );
   });
 
   it("reduces explicit ratios to an OpenAI-compatible orientation bucket", () => {

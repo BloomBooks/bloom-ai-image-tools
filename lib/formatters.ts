@@ -4,9 +4,7 @@ import type { CapabilityName } from "../types";
  * Formats a numeric credit value for display.
  * Returns "--" for invalid/missing values.
  */
-export const formatCreditsValue = (
-  value: number | null | undefined
-): string => {
+export const formatCreditsValue = (value: number | null | undefined): string => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "--";
   }
@@ -23,7 +21,7 @@ export const formatCreditsValue = (
  */
 export const formatSourceSummary = (
   editImageCount: number,
-  referenceImageCount: number
+  referenceImageCount: number,
 ): string | null => {
   const normalizedEdit = Math.max(0, editImageCount);
   const normalizedReference = Math.max(0, referenceImageCount);
@@ -35,8 +33,7 @@ export const formatSourceSummary = (
   }
 
   if (normalizedReference > 0) {
-    const label =
-      normalizedReference === 1 ? "reference image" : "reference images";
+    const label = normalizedReference === 1 ? "reference image" : "reference images";
     parts.push(`${normalizedReference} ${label}`);
   }
 

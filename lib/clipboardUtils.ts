@@ -5,20 +5,14 @@ import {
   isPngBlob,
 } from "copy-image-clipboard";
 
-import {
-  injectPngTextMetadataIntoBlob,
-  type PngTextMetadata,
-} from "./pngMetadata";
+import { injectPngTextMetadataIntoBlob, type PngTextMetadata } from "./pngMetadata";
 
 export type ClipboardUploadHandler = (file: File) => void | Promise<void>;
 
 export class ClipboardReadError extends Error {
   code: "unavailable" | "unsupported" | "blocked";
 
-  constructor(
-    code: "unavailable" | "unsupported" | "blocked",
-    message: string,
-  ) {
+  constructor(code: "unavailable" | "unsupported" | "blocked", message: string) {
     super(message);
     this.name = "ClipboardReadError";
     this.code = code;
@@ -39,17 +33,13 @@ export const isClipboardReadFallbackError = (error: unknown): boolean => {
   return /notallowed|permission|denied|gesture/i.test(`${name} ${message}`);
 };
 
-export const getDataUrlMimeType = (
-  dataUrl: string | null | undefined
-): string | null => {
+export const getDataUrlMimeType = (dataUrl: string | null | undefined): string | null => {
   if (!dataUrl) return null;
   const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);
   return match ? match[1].toLowerCase() : null;
 };
 
-export const getTypeFromFileName = (
-  fileName: string | null | undefined
-): string | null => {
+export const getTypeFromFileName = (fileName: string | null | undefined): string | null => {
   if (!fileName) return null;
   const ext = fileName.split(".").pop()?.toLowerCase();
   if (!ext) return null;
@@ -68,8 +58,7 @@ export const getBlobFromDataUrl = async (dataUrl: string): Promise<Blob> => {
     throw new Error("Invalid data URL");
   }
 
-  const [, mime = "application/octet-stream", base64Indicator, dataPart] =
-    match;
+  const [, mime = "application/octet-stream", base64Indicator, dataPart] = match;
 
   if (base64Indicator) {
     const cleaned = dataPart.replace(/\s+/g, "");
@@ -148,9 +137,7 @@ export const clipboardSupportsMime = (mime: string): boolean => {
 export const shouldRetryWithPng = (error: unknown): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const message = String((error as { message?: string }).message || "");
-  return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(
-    message
-  );
+  return /not\s*allowed|not\s*supported|does\s+not\s+support|unsupported/i.test(message);
 };
 
 export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> => {
@@ -158,10 +145,7 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
     return blob;
   }
 
-  if (
-    typeof window !== "undefined" &&
-    typeof window.createImageBitmap === "function"
-  ) {
+  if (typeof window !== "undefined" && typeof window.createImageBitmap === "function") {
     try {
       const bitmap = await window.createImageBitmap(blob);
       try {
@@ -176,10 +160,8 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
         const pngBlob = await new Promise<Blob>((resolve, reject) => {
           canvas.toBlob(
             (result) =>
-              result
-                ? resolve(result)
-                : reject(new Error("Canvas toBlob() returned null")),
-            "image/png"
+              result ? resolve(result) : reject(new Error("Canvas toBlob() returned null")),
+            "image/png",
           );
         });
         return pngBlob;
@@ -189,10 +171,7 @@ export const convertBlobToPngWithFallback = async (blob: Blob): Promise<Blob> =>
         }
       }
     } catch (error) {
-      console.warn(
-        "Bitmap-based PNG conversion failed, retrying with default method:",
-        error
-      );
+      console.warn("Bitmap-based PNG conversion failed, retrying with default method:", error);
     }
   }
 
@@ -213,9 +192,7 @@ export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
       }
     }
   } else {
-    console.info(
-      `Clipboard does not support ${mime}, attempting PNG fallback.`
-    );
+    console.info(`Clipboard does not support ${mime}, attempting PNG fallback.`);
   }
 
   const pngBlob = await convertBlobToPngWithFallback(blob);
@@ -224,7 +201,7 @@ export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
 
 export const handleCopy = async (
   imageData: string | null | undefined,
-  pngTextMetadata?: PngTextMetadata
+  pngTextMetadata?: PngTextMetadata,
 ): Promise<boolean> => {
   if (!imageData) return false;
 
@@ -233,16 +210,11 @@ export const handleCopy = async (
 
     const hasMetadata =
       !!pngTextMetadata &&
-      Object.values(pngTextMetadata).some(
-        (v) => typeof v === "string" && v.trim().length > 0
-      );
+      Object.values(pngTextMetadata).some((v) => typeof v === "string" && v.trim().length > 0);
 
     if (hasMetadata) {
       const pngBlob = await convertBlobToPngWithFallback(normalizedBlob);
-      const pngWithMetadata = await injectPngTextMetadataIntoBlob(
-        pngBlob,
-        pngTextMetadata || {}
-      );
+      const pngWithMetadata = await injectPngTextMetadataIntoBlob(pngBlob, pngTextMetadata || {});
       await copyBlobToClipboard(pngWithMetadata);
     } else {
       await copyWithFallbackIfNeeded(normalizedBlob);
@@ -274,10 +246,7 @@ export const readClipboardImageFile = async (): Promise<File | null> => {
   }
 
   if (typeof navigator.clipboard.read !== "function") {
-    throw new ClipboardReadError(
-      "unsupported",
-      "navigator.clipboard.read is not supported",
-    );
+    throw new ClipboardReadError("unsupported", "navigator.clipboard.read is not supported");
   }
 
   let items: ClipboardItem[];
@@ -285,10 +254,7 @@ export const readClipboardImageFile = async (): Promise<File | null> => {
     items = await navigator.clipboard.read();
   } catch (error) {
     if (isClipboardReadFallbackError(error)) {
-      throw new ClipboardReadError(
-        "blocked",
-        "Direct clipboard access was blocked for this page",
-      );
+      throw new ClipboardReadError("blocked", "Direct clipboard access was blocked for this page");
     }
 
     throw error;
@@ -308,9 +274,7 @@ export const readClipboardImageFile = async (): Promise<File | null> => {
   return null;
 };
 
-export const handlePaste = async (
-  onUpload?: ClipboardUploadHandler
-): Promise<boolean> => {
+export const handlePaste = async (onUpload?: ClipboardUploadHandler): Promise<boolean> => {
   if (!onUpload) return false;
   const file = await readClipboardImageFile();
   if (!file) return false;
@@ -318,9 +282,7 @@ export const handlePaste = async (
   return true;
 };
 
-export const getImageFileFromClipboardEvent = (
-  event: ClipboardEvent
-): File | null => {
+export const getImageFileFromClipboardEvent = (event: ClipboardEvent): File | null => {
   const data = event.clipboardData;
   if (!data) return null;
 
@@ -337,7 +299,7 @@ export const getImageFileFromClipboardEvent = (
 
 export const handleClipboardPaste = async (
   event: ClipboardEvent,
-  onUpload?: ClipboardUploadHandler
+  onUpload?: ClipboardUploadHandler,
 ): Promise<boolean> => {
   if (!onUpload) return false;
   const file = getImageFileFromClipboardEvent(event);

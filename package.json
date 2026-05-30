@@ -4,6 +4,7 @@
   "private": false,
   "files": [
     "dist",
+    "dist-app",
     "assets",
     "README.md"
   ],
@@ -20,8 +21,9 @@
   },
   "scripts": {
     "dev": "vp dev",
-    "build": "vp run build:lib && vp run build:demo",
+    "build": "vp run build:lib && vp run build:demo && vp run build:app",
     "build:demo": "vp build",
+    "build:app": "vp build -- --outDir dist-app",
     "build:lib": "tsup",
     "test": "vp test",
     "release": "vp run build:lib && pnpm publish --access public",

@@ -3,7 +3,7 @@ import { Tooltip } from "@mui/material";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
-import { getHighContrastScrollbarStyles, theme } from "../../themes";
+import { theme } from "../../themes";
 import { STRIP_ACTIVE_BORDER_COLOR, STRIP_BORDER, STRIP_BORDER_COLOR } from "./stripStyleConstants";
 import { ImageRecord, ThumbnailStripId } from "../../types";
 import { Icon, Icons } from "../Icons";
@@ -14,6 +14,12 @@ interface ThumbnailStripProps {
   itemIds: string[];
   itemsById: Record<string, ImageRecord>;
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   removeDisabledReasonById?: Partial<Record<string, string>>;
   selectedId: string | null;
   previewModifierActive?: boolean;
@@ -866,6 +872,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   itemIds,
   itemsById,
   replacementItemsByIncomingId = {},
+  bookImagesAction,
   removeDisabledReasonById,
   selectedId,
   previewModifierActive = false,
@@ -881,11 +888,12 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   onToggleStar,
   onRemoveItem,
   onAssignReplacement,
-  onAssignCurrent,
   onVisibleItemIdsChange,
   isAnyDndDragging = false,
 }) => {
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
+  const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
+  const [isBookImagesActionPressed, setIsBookImagesActionPressed] = React.useState(false);
   const droppable = useDroppable({
     id: buildStripContainerId(stripId),
     data: { kind: "strip", stripId },
@@ -912,12 +920,36 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   const showCharacterStack = stripId === "characters" && orderedItemIds.length > 0;
   const canOpenPreview = orderedItemIds.length > 0 && !!onOpenPreview;
 
+  const publishVisibleItemIds = React.useCallback(
+    (visibleItemIds: string[]) => {
+      if (!onVisibleItemIdsChange) {
+        return;
+      }
+
+      const deduped = visibleItemIds.filter((id, index, ids) => ids.indexOf(id) === index);
+      const lastPublished = lastPublishedVisibleIdsRef.current;
+      const isUnchanged =
+        !!lastPublished &&
+        lastPublished.length === deduped.length &&
+        lastPublished.every((id, index) => id === deduped[index]);
+
+      if (isUnchanged) {
+        return;
+      }
+
+      lastPublishedVisibleIdsRef.current = deduped;
+      onVisibleItemIdsChange(stripId, deduped);
+    },
+    [onVisibleItemIdsChange, stripId],
+  );
+
   React.useEffect(() => {
     if (!onVisibleItemIdsChange) {
       return;
     }
 
     return () => {
+      lastPublishedVisibleIdsRef.current = null;
       onVisibleItemIdsChange(stripId, []);
     };
   }, [onVisibleItemIdsChange, stripId]);
@@ -929,13 +961,13 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
 
     const node = stripContentRef.current;
     if (!node) {
-      onVisibleItemIdsChange(stripId, orderedItemIds);
+      publishVisibleItemIds(orderedItemIds);
       return;
     }
 
     const publishVisibleIds = () => {
       if (orderedItemIds.length === 0) {
-        onVisibleItemIdsChange(stripId, []);
+        publishVisibleItemIds([]);
         return;
       }
 
@@ -951,7 +983,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         Math.ceil(visibleWidth / stride) + STRIP_VISIBILITY_OVERSCAN_ITEMS * 2,
       );
       const endIndex = Math.min(orderedItemIds.length, startIndex + visibleCount);
-      onVisibleItemIdsChange(stripId, orderedItemIds.slice(startIndex, endIndex));
+      publishVisibleItemIds(orderedItemIds.slice(startIndex, endIndex));
     };
 
     publishVisibleIds();
@@ -976,7 +1008,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       window.removeEventListener("resize", handleResize);
       resizeObserver?.disconnect();
     };
-  }, [onVisibleItemIdsChange, orderedItemIds, stripId]);
+  }, [onVisibleItemIdsChange, orderedItemIds, publishVisibleItemIds, stripId]);
 
   const content = orderedItems.length ? (
     <div
@@ -989,7 +1021,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         overflowX: "auto",
         overflowY: "hidden",
         position: "relative",
-        ...getHighContrastScrollbarStyles(),
       }}
     >
       {showCharacterStack && (
@@ -1156,7 +1187,59 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
           </button>
         </span>
       </Tooltip>
-      <div style={{ paddingTop: 30 }}>{content}</div>
+      <div
+        style={{
+          paddingTop: 30,
+          paddingBottom: stripId === "bookImages" && bookImagesAction ? 64 : 0,
+        }}
+      >
+        {content}
+      </div>
+      {stripId === "bookImages" && bookImagesAction ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 12,
+            zIndex: 3,
+            display: "flex",
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            data-testid={bookImagesAction.testId}
+            disabled={bookImagesAction.disabled}
+            onClick={bookImagesAction.onClick}
+            onMouseDown={() => {
+              if (!bookImagesAction.disabled) {
+                setIsBookImagesActionPressed(true);
+              }
+            }}
+            onMouseUp={() => setIsBookImagesActionPressed(false)}
+            onMouseLeave={() => setIsBookImagesActionPressed(false)}
+            style={{
+              border: 0,
+              borderRadius: 999,
+              padding: "10px 16px",
+              backgroundColor: bookImagesAction.disabled
+                ? "rgba(148, 163, 184, 0.35)"
+                : theme.colors.accent,
+              color: bookImagesAction.disabled ? theme.colors.textMuted : theme.colors.textOnAccent,
+              fontSize: 13,
+              fontWeight: 600,
+              lineHeight: 1.2,
+              boxShadow: theme.colors.panelShadow,
+              cursor: bookImagesAction.disabled ? "not-allowed" : "pointer",
+              transform: isBookImagesActionPressed ? "translateY(1px) scale(0.99)" : "none",
+              transition:
+                "transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, color 120ms ease",
+            }}
+          >
+            {bookImagesAction.label}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -3,9 +3,7 @@ import { blobToBase64 } from "./imageUtils";
 
 const loadImage = (dataUrl: string): Promise<HTMLImageElement> => {
   if (typeof Image === "undefined") {
-    return Promise.reject(
-      new Error("Image element not available for GIF encoding."),
-    );
+    return Promise.reject(new Error("Image element not available for GIF encoding."));
   }
 
   return new Promise((resolve, reject) => {

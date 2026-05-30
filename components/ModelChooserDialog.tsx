@@ -19,11 +19,7 @@ import {
   Typography,
 } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import type {
-  ModelInfo,
-  ModelReasoningLevel,
-  ModelReasoningLevelByModelId,
-} from "../types";
+import type { ModelInfo, ModelReasoningLevel, ModelReasoningLevelByModelId } from "../types";
 import { isMacPlatform } from "../lib/platformUtils";
 import { darkTheme } from "./materialUITheme";
 
@@ -32,10 +28,7 @@ interface ModelChooserDialogProps {
   models: ModelInfo[];
   selectedModelId: string;
   modelReasoningLevels: ModelReasoningLevelByModelId;
-  onSelect: (
-    modelId: string,
-    reasoningLevels: ModelReasoningLevelByModelId,
-  ) => void;
+  onSelect: (modelId: string, reasoningLevels: ModelReasoningLevelByModelId) => void;
   onClose: () => void;
 }
 
@@ -50,9 +43,7 @@ const REASONING_LEVEL_OPTIONS: Array<{
   { value: "high", label: "High" },
 ];
 
-const isModelReasoningLevel = (
-  value: unknown,
-): value is ModelReasoningLevel => {
+const isModelReasoningLevel = (value: unknown): value is ModelReasoningLevel => {
   return REASONING_LEVEL_OPTIONS.some((option) => option.value === value);
 };
 
@@ -103,10 +94,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
     return isModelReasoningLevel(initialLevel) ? initialLevel : "default";
   };
 
-  const handleReasoningChange = (
-    modelId: string,
-    value: ModelReasoningLevel,
-  ) => {
+  const handleReasoningChange = (modelId: string, value: ModelReasoningLevel) => {
     setPendingModelReasoningLevels((prev) => ({
       ...prev,
       [modelId]: value,
@@ -132,9 +120,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
       </Button>
     );
 
-    return isMacPlatform()
-      ? [cancelButton, confirmButton]
-      : [confirmButton, cancelButton];
+    return isMacPlatform() ? [cancelButton, confirmButton] : [confirmButton, cancelButton];
   })();
 
   if (!isOpen) return null;
@@ -192,13 +178,9 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                         borderColor: isSelected ? "primary.main" : "divider",
                         boxShadow: isSelected ? 6 : "none",
                         transition: (themeInstance) =>
-                          themeInstance.transitions.create(
-                            ["border-color", "box-shadow"],
-                            {
-                              duration:
-                                themeInstance.transitions.duration.short,
-                            },
-                          ),
+                          themeInstance.transitions.create(["border-color", "box-shadow"], {
+                            duration: themeInstance.transitions.duration.short,
+                          }),
                       }}
                     >
                       <CardActionArea
@@ -206,19 +188,8 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                         sx={{ flex: "0 0 auto" }}
                       >
                         <CardContent>
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={1}
-                            mb={2}
-                          >
-                            {isSelected && (
-                              <Chip
-                                color="primary"
-                                size="small"
-                                label="Selected"
-                              />
-                            )}
+                          <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                            {isSelected && <Chip color="primary" size="small" label="Selected" />}
                             {(model.badge || "").trim().length > 0 && (
                               <Typography
                                 variant="caption"
@@ -235,11 +206,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                           <Typography variant="h6" component="h3" gutterBottom>
                             {model.name}
                           </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mb: 3 }}
-                          >
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                             {model.description}
                           </Typography>
                           <Box
@@ -251,9 +218,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                               bgcolor: "background.default",
                             }}
                           >
-                            <Typography variant="body2">
-                              {model.pricing}
-                            </Typography>
+                            <Typography variant="body2">{model.pricing}</Typography>
                           </Box>
                         </CardContent>
                       </CardActionArea>
@@ -265,9 +230,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                             event.stopPropagation();
                           }}
                         >
-                          <InputLabel id={`reasoning-label-${model.id}`}>
-                            Reasoning
-                          </InputLabel>
+                          <InputLabel id={`reasoning-label-${model.id}`}>Reasoning</InputLabel>
                           <Select
                             labelId={`reasoning-label-${model.id}`}
                             value={getReasoningLevelForModel(model.id)}

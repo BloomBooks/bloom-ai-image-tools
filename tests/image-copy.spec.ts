@@ -1,8 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  resetImageToolsPersistence,
-  uploadSampleImageToTarget,
-} from "./playwright_helpers";
+import { resetImageToolsPersistence, uploadSampleImageToTarget } from "./playwright_helpers";
 const isVerbose = !!process.env.E2E_VERBOSE;
 
 const setupClipboardHarness = async (page: Page) => {
@@ -53,9 +50,7 @@ const setupClipboardHarness = async (page: Page) => {
 const copyResultImage = async (page: Page) => {
   // Put an image into the Result panel by dragging the newest history item.
   const historyStrip = page.getByTestId("thumbnail-strip-history").first();
-  const historyThumb = historyStrip
-    .getByTestId("thumbnail-strip-item-history")
-    .first();
+  const historyThumb = historyStrip.getByTestId("thumbnail-strip-item-history").first();
   await expect(historyThumb).toBeVisible();
 
   const resultPanel = page.getByTestId("result-panel");
@@ -86,9 +81,7 @@ const copyResultImage = async (page: Page) => {
 
 const waitForClipboardWrites = async (page: Page) => {
   await expect
-    .poll(async () =>
-      page.evaluate(() => window.__clipboardWrites?.length ?? 0)
-    )
+    .poll(async () => page.evaluate(() => window.__clipboardWrites?.length ?? 0))
     .toBeGreaterThan(0);
 
   return page.evaluate(() => window.__clipboardWrites ?? []);
@@ -97,16 +90,12 @@ const waitForClipboardWrites = async (page: Page) => {
 test.describe("Image copy clipboard behavior", () => {
   test.beforeEach(async ({ page }) => {
     if (isVerbose) {
-      page.on("console", (msg) =>
-        console.log(`[browser:${msg.type()}] ${msg.text()}`)
-      );
-      page.on("pageerror", (error) =>
-        console.log(`[pageerror] ${error?.message ?? error}`)
-      );
+      page.on("console", (msg) => console.log(`[browser:${msg.type()}] ${msg.text()}`));
+      page.on("pageerror", (error) => console.log(`[pageerror] ${error?.message ?? error}`));
       page.on("requestfailed", (request) =>
         console.log(
-          `[requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText}`
-        )
+          `[requestfailed] ${request.method()} ${request.url()} :: ${request.failure()?.errorText}`,
+        ),
       );
     }
 
@@ -126,9 +115,7 @@ test.describe("Image copy clipboard behavior", () => {
     await uploadSampleImageToTarget(page);
     if (isVerbose) {
       const dims = await page.evaluate(() => {
-        const img = document.querySelector<HTMLImageElement>(
-          'img[alt="Image to Edit"]'
-        );
+        const img = document.querySelector<HTMLImageElement>('img[alt="Image to Edit"]');
         return img
           ? {
               width: img.naturalWidth,
@@ -150,9 +137,7 @@ test.describe("Image copy clipboard behavior", () => {
     await uploadSampleImageToTarget(page);
     if (isVerbose) {
       const dims = await page.evaluate(() => {
-        const img = document.querySelector<HTMLImageElement>(
-          'img[alt="Image to Edit"]'
-        );
+        const img = document.querySelector<HTMLImageElement>('img[alt="Image to Edit"]');
         return img
           ? {
               width: img.naturalWidth,

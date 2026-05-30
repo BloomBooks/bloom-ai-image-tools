@@ -7,6 +7,7 @@ import {
   mergeThumbnailStripsSnapshots,
   removeItemsFromAllStrips,
   removeItemFromStrip,
+  replaceStripItems,
   reorderItemInStrip,
 } from "../thumbnailStrips";
 import { ImageRecord } from "../../types";
@@ -193,5 +194,13 @@ describe("thumbnail strip helpers", () => {
     const hydrated = hydrateThumbnailStripsSnapshot(persisted, entries);
 
     expect(hydrated.itemIdsByStrip.bookImages).toEqual(["env-0-abc", "env-1-def", "real-1"]);
+  });
+
+  it("returns the same snapshot when replaceStripItems receives identical ids", () => {
+    const base = createDefaultThumbnailStripsSnapshot();
+    const seeded = replaceStripItems(base, "bookImages", ["one", "two"]);
+    const unchanged = replaceStripItems(seeded, "bookImages", ["one", "two"]);
+
+    expect(unchanged).toBe(seeded);
   });
 });

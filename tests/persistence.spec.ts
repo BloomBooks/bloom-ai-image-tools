@@ -12,24 +12,18 @@ test.describe("state persistence", () => {
     await resetImageToolsPersistence(page);
   });
 
-  test("restores history, auth, tool params, and model after reload", async ({
-    page,
-  }) => {
+  test("restores history, auth, tool params, and model after reload", async ({ page }) => {
     test.setTimeout(20_000); // This test does a lot: uploads, opens dialogs, and reloads
 
     await clearOpenRouterApiKey(page);
     await setOpenRouterApiKey(page, "persist-test-key");
 
-    await page
-      .getByTestId("target-upload-input")
-      .setInputFiles(referenceFixture);
+    await page.getByTestId("target-upload-input").setInputFiles(referenceFixture);
 
     await page.getByRole("button", { name: /Custom Edit/i }).click();
 
     await expect(page.getByTestId("reference-panel")).toBeVisible();
-    await page
-      .getByTestId("reference-upload-input-0")
-      .setInputFiles(referenceFixture);
+    await page.getByTestId("reference-upload-input-0").setInputFiles(referenceFixture);
 
     const promptLocator = page.getByTestId("input-prompt");
     const promptValue = "Make the background teal and add glowing stars.";
@@ -44,14 +38,12 @@ test.describe("state persistence", () => {
     // If the user hasn't chosen a level for a model yet, use the model's
     // initialReasoningLevel from the registry.
     await expect(
-      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview")
+      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview"),
     ).toContainText(/Medium/i);
 
     await modelOption.click();
 
-    const miniReasoning = page.getByTestId(
-      "model-reasoning-openai/gpt-5-image-mini"
-    );
+    const miniReasoning = page.getByTestId("model-reasoning-openai/gpt-5-image-mini");
     await expect(miniReasoning).toBeVisible();
     await miniReasoning.click();
     await page.getByRole("option", { name: /^High$/i }).click();
@@ -73,42 +65,37 @@ test.describe("state persistence", () => {
     await page.reload();
 
     // Wait for the app to load and restore state
-    const settingsButton = page
-      .getByRole("button", { name: /^Settings\s+•/i })
-      .first();
+    const settingsButton = page.getByRole("button", { name: /^Settings\s+•/i }).first();
     await expect(settingsButton).toBeVisible();
 
     // Connection status is surfaced via the Settings button label.
     await expect(settingsButton).toHaveAttribute(
       "aria-label",
       /OpenRouter API key linked|OpenRouter connected via OAuth|OpenRouter key supplied by environment/i,
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
 
     // Restoring image blobs from IndexedDB can be a bit slow on CI.
     await expect(page.getByAltText("Image to Edit")).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')).toBeVisible({
+      timeout: 15_000,
+    });
 
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
     await expect(promptLocator).toHaveValue(promptValue);
-    await expect(page.getByRole("button", { name: /Model:/i })).toHaveText(
-      /GPT-5 Image Mini/
-    );
+    await expect(page.getByRole("button", { name: /Model:/i })).toHaveText(/GPT-5 Image Mini/);
 
     await page.getByRole("button", { name: /Model:/i }).click();
+    await expect(page.getByTestId("model-reasoning-openai/gpt-5-image-mini")).toContainText(
+      /High/i,
+    );
     await expect(
-      page.getByTestId("model-reasoning-openai/gpt-5-image-mini")
-    ).toContainText(/High/i);
-    await expect(
-      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview")
+      page.getByTestId("model-reasoning-google/gemini-3.1-flash-image-preview"),
     ).toContainText(/Medium/i);
     await page.getByRole("button", { name: /^Cancel$/i }).click();
   });
-
 
   test("persists textarea size across reload", async ({ page }) => {
     test.setTimeout(25_000);
@@ -135,7 +122,7 @@ test.describe("state persistence", () => {
 
     await page.evaluate(() => {
       const el = document.querySelector(
-        '[data-testid="input-extraInstructions"]'
+        '[data-testid="input-extraInstructions"]',
       ) as HTMLTextAreaElement | null;
       if (!el) throw new Error("Missing extraInstructions textarea");
       el.style.height = "160px";
@@ -149,7 +136,7 @@ test.describe("state persistence", () => {
     const restoredExtra = page.getByTestId("input-extraInstructions");
     await expect(restoredExtra).toBeVisible();
     const extraHeight = await restoredExtra.evaluate((el) =>
-      Math.round(el.getBoundingClientRect().height)
+      Math.round(el.getBoundingClientRect().height),
     );
     expect(extraHeight).toBeGreaterThanOrEqual(140);
 
@@ -157,7 +144,7 @@ test.describe("state persistence", () => {
     await page.getByRole("button", { name: /Create an Image/i }).click();
     const restoredPrompt = page.getByTestId("input-prompt");
     const promptHeight = await restoredPrompt.evaluate((el) =>
-      Math.round(el.getBoundingClientRect().height)
+      Math.round(el.getBoundingClientRect().height),
     );
     expect(promptHeight).toBeGreaterThanOrEqual(105);
   });

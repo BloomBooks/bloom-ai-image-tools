@@ -39,15 +39,6 @@ const LOCALIZE_TOOL_ORDER = [
   "ethnicity",
   "apply_localized_characters",
 ] as const;
-const ADVANCED_TOOL_IDS = new Set([
-  "generate_image",
-  "change_style",
-  "custom",
-  "improve_drawing",
-  "generate_pallet",
-  "game_theme_generator",
-]);
-
 const isGamesTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "games");
 
@@ -424,6 +415,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const handleToolSelect = (toolId: string) => {
     const timingLabel = `tool-panel-open:${toolId}`;
+    if (selectionTimingRef.current && selectionTimingRef.current !== timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(selectionTimingRef.current);
+      }
+      selectionTimingRef.current = null;
+    }
+
+    if (selectionTimingRef.current === timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(timingLabel);
+      }
+      selectionTimingRef.current = null;
+    }
+
     selectionTimingRef.current = timingLabel;
     if (typeof console !== "undefined" && console.time) {
       console.time(timingLabel);

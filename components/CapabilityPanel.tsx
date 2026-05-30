@@ -24,12 +24,10 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
     return Math.max(0, Math.min(5, rounded));
   };
 
-  const shownCapabilities = Object.entries(capabilities).filter(
-    ([, uses]) => !!uses
-  );
+  const shownCapabilities = Object.entries(capabilities).filter(([, uses]) => !!uses);
 
   const anyWarning = shownCapabilities.some(
-    ([capability]) => getModelCapabilityScore(capability as CapabilityName) < 3
+    ([capability]) => getModelCapabilityScore(capability as CapabilityName) < 3,
   );
 
   return (
@@ -39,9 +37,7 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
         mb: 3,
         p: 2,
         borderRadius: 2,
-        borderColor: anyWarning
-          ? muiTheme.palette.error.main
-          : muiTheme.palette.divider,
+        borderColor: anyWarning ? muiTheme.palette.error.main : muiTheme.palette.divider,
         backgroundColor: muiTheme.palette.background.default,
       }}
     >
@@ -73,15 +69,11 @@ export const CapabilityPanel: React.FC<CapabilityPanelProps> = ({
                 py: 0.5,
                 borderRadius: 999,
                 border: "1px solid",
-                borderColor: showWarning
-                  ? muiTheme.palette.error.main
-                  : muiTheme.palette.divider,
+                borderColor: showWarning ? muiTheme.palette.error.main : muiTheme.palette.divider,
                 bgcolor: muiTheme.palette.background.paper,
                 fontSize: 12,
               }}
-              title={
-                showWarning ? "This model may struggle with this tool" : undefined
-              }
+              title={showWarning ? "This model may struggle with this tool" : undefined}
             >
               {showWarning && (
                 <Icon

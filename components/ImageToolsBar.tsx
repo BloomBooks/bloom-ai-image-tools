@@ -414,6 +414,12 @@ interface ImageToolsPanelBar {
   rightImage: ImageRecord | null;
   resultImages?: ImageRecord[];
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   activeToolId: string | null;
   toolParams: ToolParamsById;
   historyItems: ImageRecord[];
@@ -450,6 +456,8 @@ interface ImageToolsPanelBar {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   onUseCurrentResult: () => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
@@ -466,6 +474,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   rightImage,
   resultImages = [],
   replacementItemsByIncomingId = {},
+  bookImagesAction,
   activeToolId,
   toolParams,
   historyItems,
@@ -497,6 +506,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onClearRight,
   onUploadRight,
   onUseCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
   generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
@@ -842,6 +853,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onClearRight={onClearRight}
               onUploadRight={onUploadRight}
               onUseCurrentResult={onUseCurrentResult}
+              currentResultActionLabel={currentResultActionLabel}
+              currentResultActionTestId={currentResultActionTestId}
               isProcessing={appState.isProcessing}
               generationProgress={generationProgress}
               activeToolId={activeToolId}
@@ -852,6 +865,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               snapshot={thumbnailStrips}
               entries={historyItems}
               replacementItemsByIncomingId={replacementItemsByIncomingId}
+              bookImagesAction={bookImagesAction}
               selectedId={appState.rightPanelImageId}
               previewModifierActive={previewModifierActive}
               previewSelectionImageIds={previewSelectionImageIds}

@@ -64,7 +64,7 @@ export const lightTheme = createTheme({
   // would be spacing{unit:23} but that gives an error saying to use a number
   //spacing: 23,
   palette: {
-    primary: { main: kPrimary },
+    primary: { main: kPrimary, contrastText: appTheme.colors.textOnAccent },
     secondary: { main: kBloomPurple },
     warning: { main: kBloomGold },
     text: { disabled: kBloomDisabledText },
@@ -146,7 +146,7 @@ export const lightTheme = createTheme({
 export const darkTheme = createTheme(lightTheme, {
   palette: {
     mode: "dark",
-    primary: { main: kPrimary },
+    primary: { main: kPrimary, contrastText: appTheme.colors.textOnAccent },
     secondary: { main: kBloomPurple },
     background: {
       default: appTheme.colors.appBackground,

@@ -24,15 +24,12 @@ const colorDistance = (a: RGB, b: RGB): number => {
 
 const loadImage = (dataUrl: string): Promise<HTMLImageElement> => {
   if (typeof Image === "undefined") {
-    return Promise.reject(
-      new Error("Image element not available in this environment.")
-    );
+    return Promise.reject(new Error("Image element not available in this environment."));
   }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () =>
-      reject(new Error("Failed to load image for post-processing."));
+    img.onerror = () => reject(new Error("Failed to load image for post-processing."));
     img.src = dataUrl;
   });
 };
@@ -74,7 +71,7 @@ const sampleEdgeColor = (imageData: ImageData): RGB | null => {
       acc.b += sample.b;
       return acc;
     },
-    { r: 0, g: 0, b: 0 }
+    { r: 0, g: 0, b: 0 },
   );
 
   return {
@@ -97,26 +94,19 @@ const runChromaKey = (imageData: ImageData, keyColor: RGB): ImageData => {
 
     const dist = colorDistance(pixel, keyColor);
     const dominance = pixel.g - Math.max(pixel.r, pixel.b);
-    const isGreenish =
-      pixel.g > MIN_GREEN_VALUE && dominance > GREEN_TINT_TOLERANCE;
+    const isGreenish = pixel.g > MIN_GREEN_VALUE && dominance > GREEN_TINT_TOLERANCE;
     const inHardBand = dist <= hardCutoff;
     const inSoftBand = dist <= HARD_DISTANCE_THRESHOLD;
 
-    if (
-      (inHardBand && isGreenish) ||
-      dominance > GREEN_DOMINANCE_THRESHOLD + 20
-    ) {
+    if ((inHardBand && isGreenish) || dominance > GREEN_DOMINANCE_THRESHOLD + 20) {
       data[i + 3] = 0;
       continue;
     }
 
     if ((isGreenish && inSoftBand) || dominance > GREEN_DOMINANCE_THRESHOLD) {
-      const distanceBlend = clamp01(
-        (dist - hardCutoff) / SOFT_DISTANCE_FALLOFF
-      );
+      const distanceBlend = clamp01((dist - hardCutoff) / SOFT_DISTANCE_FALLOFF);
       const dominanceBlend = clamp01(
-        (dominance - GREEN_DOMINANCE_THRESHOLD) /
-          Math.max(1, GREEN_DOMINANCE_THRESHOLD)
+        (dominance - GREEN_DOMINANCE_THRESHOLD) / Math.max(1, GREEN_DOMINANCE_THRESHOLD),
       );
       const fade = Math.max(distanceBlend, dominanceBlend);
       data[i + 3] = Math.round(alpha * fade);
@@ -160,7 +150,7 @@ const REGISTRY: Record<string, PostProcessingFn> = {
 
 export const applyPostProcessingPipeline = async (
   imageData: string,
-  pipeline: string[] | undefined
+  pipeline: string[] | undefined,
 ): Promise<string> => {
   if (!pipeline?.length) {
     return imageData;

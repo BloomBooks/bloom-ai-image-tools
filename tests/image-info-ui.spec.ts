@@ -1,8 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  resetImageToolsPersistence,
-  uploadSampleImageToTarget,
-} from "./playwright_helpers";
+import { resetImageToolsPersistence, uploadSampleImageToTarget } from "./playwright_helpers";
 
 test.describe("image info icon", () => {
   test.beforeEach(async ({ page }) => {
@@ -18,9 +15,7 @@ test.describe("image info icon", () => {
 
     const targetPanel = page.getByTestId("target-panel");
 
-    await expect(
-      targetPanel.getByRole("img", { name: "Image to Edit" })
-    ).toBeVisible();
+    await expect(targetPanel.getByRole("img", { name: "Image to Edit" })).toBeVisible();
 
     // The info icon should not be visible until hovering the image holder.
     await expect(targetPanel.getByTestId("image-info-button")).toHaveCount(0);

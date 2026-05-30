@@ -27,9 +27,12 @@ import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { darkTheme } from "./materialUITheme";
 import {
+  buildOAuthAuthUrl,
+  exchangeCodeForApiKey,
   getOAuthCodeFromUrl,
   handleOAuthCallback,
   initiateOAuthFlow,
+  pollOAuthCodeFromBloomHost,
 } from "../lib/openRouterOAuth";
 import { canUseLocalDummyModelWithoutApiKey } from "../lib/localModels";
 import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
@@ -355,8 +358,22 @@ export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
   bookImageUrls?: string[];
+  bookImages?: Array<{ id: string; src: string }>;
   bookImagesStripMode?: "host" | "editable";
+  oauthHost?: {
+    httpBase: string;
+    sessionToken: string;
+    /** Opens the OAuth URL in the user's default browser via the host.
+     *  When absent, the OAuth URL navigates the current window instead. */
+    openExternalUrl?: (url: string) => void;
+  } | null;
   onReplacementsChange?: (map: Record<string, ImageRecord | null>) => void;
+  onCommitCurrentResult?: (item: ImageRecord) => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
+  onCommitBookImages?: () => void;
+  bookImagesActionLabel?: string;
+  bookImagesActionTestId?: string;
   thumbnailStripConfigOverrides?: Partial<
     Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
   >;
@@ -366,8 +383,16 @@ export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
   bookImageUrls = [],
+  bookImages = [],
   bookImagesStripMode = "host",
+  oauthHost = null,
   onReplacementsChange,
+  onCommitCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
+  onCommitBookImages,
+  bookImagesActionLabel,
+  bookImagesActionTestId,
   thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
   const [state, setState] = useState<AppState>({
@@ -444,6 +469,7 @@ export function ImageToolsWorkspace({
   );
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
+  const oauthPollAbortControllerRef = useRef<AbortController | null>(null);
   const pendingPreviewImageIdsRef = useRef<string[]>([]);
   const selectedModel =
     MODEL_CATALOG.find((model) => model.id === selectedModelId) || DEFAULT_MODEL;
@@ -452,11 +478,25 @@ export function ImageToolsWorkspace({
   const canUseSelectedModelWithoutApiKey = canUseLocalDummyModelWithoutApiKey(selectedModelId);
   const usingEnvKey = !!(envApiKey && !apiKey);
   const resolvedBookImageEntries = useMemo(() => {
+    if (bookImages.length) {
+      return bookImages
+        .map((image, index) => ({
+          id: image.id?.trim(),
+          url: image.src?.trim(),
+          index,
+        }))
+        .filter(({ id, url }) => Boolean(id) && Boolean(url))
+        .map(({ id, url, index }) => ({
+          ...buildBookImageEntry(url as string, index),
+          id: id as string,
+        }));
+    }
+
     return bookImageUrls
       .map((url, index) => ({ url: url?.trim(), index }))
       .filter(({ url }) => Boolean(url))
       .map(({ url, index }) => buildBookImageEntry(url as string, index));
-  }, [bookImageUrls]);
+  }, [bookImageUrls, bookImages]);
   const isFolderPersistenceActive = !!fsBinding;
   const historyItemsById = useMemo(() => {
     const entriesById: Record<string, ImageRecord> = {};
@@ -672,9 +712,7 @@ export function ImageToolsWorkspace({
         return mutated ? { ...prev, history: nextHistory } : prev;
       });
 
-      setThumbnailStrips((prev) =>
-        setActiveStrip(replaceStripItems(prev, "bookImages", resolvedIds), "bookImages"),
-      );
+      setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", resolvedIds));
 
       return;
     }
@@ -1519,6 +1557,12 @@ export function ImageToolsWorkspace({
   ]);
 
   useEffect(() => {
+    return () => {
+      oauthPollAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
@@ -2258,14 +2302,56 @@ export function ImageToolsWorkspace({
   const handleConnect = async () => {
     try {
       setAuthLoading(true);
+      setState((prev) => ({ ...prev, error: null }));
+
+      if (oauthHost) {
+        const pollAbortController = new AbortController();
+        oauthPollAbortControllerRef.current?.abort();
+        oauthPollAbortControllerRef.current = pollAbortController;
+
+        // The callback URL must be STABLE across launches: OpenRouter keys an
+        // "app" record off it, so a per-launch query param (e.g. session) makes
+        // every attempt look like a new app and triggers a 409 "create or update
+        // app" conflict. The session is validated on the /oauth-result poll
+        // instead (only one editor session is ever active at a time).
+        const callbackUrl = `${oauthHost.httpBase}/oauth-callback`;
+        const authUrl = await buildOAuthAuthUrl({ callbackUrl });
+        if (oauthHost.openExternalUrl) {
+          // Open in the user's default browser (their normal OpenRouter
+          // identity) and keep this WebView alive to poll for the code.
+          oauthHost.openExternalUrl(authUrl);
+        } else {
+          window.location.href = authUrl;
+        }
+        const code = await pollOAuthCodeFromBloomHost(
+          oauthHost.httpBase,
+          oauthHost.sessionToken,
+          pollAbortController.signal,
+        );
+        const key = await exchangeCodeForApiKey(code);
+        setApiKey(key);
+        setAuthMethod("oauth");
+        setState((prev) => ({ ...prev, isAuthenticated: true }));
+        setAuthLoading(false);
+        oauthPollAbortControllerRef.current = null;
+        return;
+      }
+
       await initiateOAuthFlow();
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       console.error("Failed to start OpenRouter OAuth", err);
       setAuthLoading(false);
       setState((prev) => ({
         ...prev,
-        error: "Could not start OpenRouter authentication. Please try again.",
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not start OpenRouter authentication. Please try again.",
       }));
+      oauthPollAbortControllerRef.current = null;
     }
   };
 
@@ -2613,14 +2699,27 @@ export function ImageToolsWorkspace({
     [historyItemsById, replacementImageIdByIncomingId],
   );
   const currentResultItem = resultItems[0] || rightItem;
+  const hasBookImageReplacement = useMemo(
+    () => Object.values(replacementItemsByIncomingId).some((item) => Boolean(item?.imageData)),
+    [replacementItemsByIncomingId],
+  );
 
   const handleUseCurrentResult = useCallback(() => {
+    if (onCommitCurrentResult) {
+      if (!currentResultItem?.incomingSlotId || !currentResultItem.imageData) {
+        return;
+      }
+
+      onCommitCurrentResult(currentResultItem);
+      return;
+    }
+
     if (!currentResultItem?.incomingSlotId) {
       return;
     }
 
     handleAssignReplacement(currentResultItem.incomingSlotId, currentResultItem.id);
-  }, [currentResultItem, handleAssignReplacement]);
+  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult]);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -2835,7 +2934,11 @@ export function ImageToolsWorkspace({
             )}
           </Stack>
 
-          <Stack spacing={1} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+          <Stack
+            spacing={1}
+            alignItems="flex-end"
+            sx={{ flexShrink: 0, pr: bookImagesStripMode === "host" ? 8 : 0 }}
+          >
             <Stack direction="row" spacing={3} alignItems="center">
               <OpenRouterCreditsHeader
                 shouldShowConnectToOpenRouterCTA={shouldShowConnectToOpenRouterCTA}
@@ -2932,6 +3035,16 @@ export function ImageToolsWorkspace({
             rightImage={rightItem}
             resultImages={resultItems}
             replacementItemsByIncomingId={replacementItemsByIncomingId}
+            bookImagesAction={
+              onCommitBookImages
+                ? {
+                    label: bookImagesActionLabel ?? "Replace images in your book with these images",
+                    testId: bookImagesActionTestId,
+                    disabled: !hasBookImageReplacement,
+                    onClick: onCommitBookImages,
+                  }
+                : undefined
+            }
             activeToolId={activeToolId}
             toolParams={paramsByTool}
             historyItems={state.history}
@@ -2963,6 +3076,8 @@ export function ImageToolsWorkspace({
             onClearRight={handleClearRightPanel}
             onUploadRight={handleUploadRight}
             onUseCurrentResult={handleUseCurrentResult}
+            currentResultActionLabel={currentResultActionLabel}
+            currentResultActionTestId={currentResultActionTestId}
             onSelectHistoryItem={handleSelectHistoryItem}
             onToggleHistoryStar={handleToggleHistoryStar}
             generationProgress={generationProgress}

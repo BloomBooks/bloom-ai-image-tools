@@ -3,7 +3,10 @@ import { ENV_KEY_SKIP_FLAG } from "./lib/authFlags";
 import { useLastDragDelayMs } from "./components/dndDragState";
 import { BloomHostShell } from "./components/BloomHostShell";
 import { BloomHostHarness } from "./components/BloomHostHarness";
-import { createWebViewBloomHostBridge } from "./services/host/BloomHostBridge";
+import {
+  createIframeBloomHostBridge,
+  createWebViewBloomHostBridge,
+} from "./services/host/BloomHostBridge";
 import { StandaloneShell } from "./components/StandaloneShell";
 import { seedHistory } from "./dev/seedHistory";
 
@@ -60,6 +63,9 @@ const hasBloomHostWebView = () => {
 };
 
 export default function App() {
+  const searchParams =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     (window as Window & { seedHistory?: typeof seedHistory }).seedHistory = seedHistory;
@@ -69,13 +75,18 @@ export default function App() {
   }, []);
 
   const envApiKey = getEnvApiKey();
-  const isBloomHarness =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("mode") === "bloom-harness";
+  const mode = searchParams?.get("mode") ?? "";
+  const isBloomHarness = mode === "bloom-harness";
+  const isBloomIframeHost = mode === "bloom-iframe";
   const isBloomHost = hasBloomHostWebView();
   const bloomBridge = useMemo(
-    () => (isBloomHost ? createWebViewBloomHostBridge() : null),
-    [isBloomHost],
+    () =>
+      isBloomIframeHost
+        ? createIframeBloomHostBridge()
+        : isBloomHost
+          ? createWebViewBloomHostBridge()
+          : null,
+    [isBloomHost, isBloomIframeHost],
   );
 
   return (
@@ -83,7 +94,7 @@ export default function App() {
       {isBloomHarness ? (
         <BloomHostHarness />
       ) : bloomBridge ? (
-        <BloomHostShell bridge={bloomBridge} />
+        <BloomHostShell bridge={bloomBridge} onCommitComplete={() => bloomBridge.cancel()} />
       ) : (
         <StandaloneShell envApiKey={envApiKey} />
       )}

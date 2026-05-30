@@ -44,12 +44,8 @@ test("extract cast of characters with split-into-separate-files (dummy model)", 
   await page.getByText("1) Extract Cast of Characters", { exact: false }).click();
 
   // Upload a reference image.
-  await page
-    .getByTestId("reference-upload-input-0")
-    .setInputFiles(SAMPLE_IMAGE_PATH);
-  await expect(
-    page.getByTestId("reference-slot-0").locator('img[alt="Reference"]'),
-  ).toBeVisible();
+  await page.getByTestId("reference-upload-input-0").setInputFiles(SAMPLE_IMAGE_PATH);
+  await expect(page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')).toBeVisible();
 
   // Check "Split into separate files".
   const splitCheckbox = page.getByTestId("input-splitIntoSeparateFiles");
@@ -64,12 +60,10 @@ test("extract cast of characters with split-into-separate-files (dummy model)", 
 
   // Wait for processing to finish (look for non-cancel state) or until our debug logs arrive.
   await expect
-    .poll(
-      () =>
-        logs.filter((l) => l.includes("extractDerivedImageItems result"))
-          .length,
-      { timeout: 120_000, intervals: [500] },
-    )
+    .poll(() => logs.filter((l) => l.includes("extractDerivedImageItems result")).length, {
+      timeout: 120_000,
+      intervals: [500],
+    })
     .toBeGreaterThan(0);
 
   // Dump all relevant debug logs to the test stdout.

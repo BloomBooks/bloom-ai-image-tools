@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import { ImageRecord } from "../types";
 import { createBloomHostPersistence } from "../services/persistence/bloomHostPersistence";
 import {
@@ -26,11 +26,28 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
     {},
   );
   const [status, setStatus] = React.useState<string>("Waiting for host init...");
+  const lastInitSignatureRef = React.useRef<string | null>(null);
+  // Prevent bridge.ready() from firing more than once across React StrictMode
+  // double-invocations of the effect, which would cause Bloom to send multiple
+  // init messages.
+  const readySentRef = React.useRef(false);
+
+  const buildInitSignature = React.useCallback((payload: BloomHostInitPayload) => {
+    const imageSignature = payload.bookImages.map((image) => `${image.id}:${image.src}`).join("|");
+    return `${payload.sessionToken}::${payload.book.id}::${payload.httpBase}::${imageSignature}`;
+  }, []);
 
   React.useEffect(() => {
     const unsubscribeInit = bridge.onInit((payload) => {
+      const signature = buildInitSignature(payload);
+      if (signature === lastInitSignatureRef.current) {
+        return;
+      }
+
+      lastInitSignatureRef.current = signature;
       setInitPayload(payload);
-      setStatus(`Connected to ${payload.book.title}`);
+      setStatus(``);
+      //setStatus(`Connected to ${payload.book.title}`);
     });
     const unsubscribeRequestClose = bridge.onRequestClose(() => {
       bridge.cancel();
@@ -38,40 +55,118 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
       setStatus("Host requested close. Sent cancel.");
     });
 
-    bridge.ready();
+    if (!readySentRef.current) {
+      readySentRef.current = true;
+      bridge.ready();
+    }
 
     return () => {
       unsubscribeInit();
       unsubscribeRequestClose();
     };
-  }, [bridge, onCancelComplete]);
+  }, [bridge, buildInitSignature, onCancelComplete]);
 
   const persistence = React.useMemo(() => {
     if (!initPayload) {
       return null;
     }
-    return createBloomHostPersistence(
-      bridge,
-      `bloom-host:${initPayload.book.id}:${initPayload.sessionToken}`,
-    );
+    return createBloomHostPersistence(bridge);
   }, [bridge, initPayload]);
 
-  const handleCommit = React.useCallback(async () => {
-    if (!initPayload) {
+  const hostBookImages = React.useMemo(
+    () =>
+      (initPayload?.bookImages || []).map((image) => ({
+        id: image.id,
+        src: image.src,
+      })),
+    [initPayload?.bookImages],
+  );
+
+  const hostBookImageUrls = React.useMemo(
+    () => (initPayload?.bookImages || []).map((image) => image.src),
+    [initPayload?.bookImages],
+  );
+
+  const buildReplacements = React.useCallback(
+    (incomingIds?: Iterable<string>) => {
+      const allowedIncomingIds = incomingIds ? new Set(incomingIds) : null;
+      return Object.entries(replacementMap)
+        .filter(([incomingId, item]) => {
+          if (!item?.imageData) {
+            return false;
+          }
+
+          return !allowedIncomingIds || allowedIncomingIds.has(incomingId);
+        })
+        .map(([incomingId, item]) => ({
+          incomingId,
+          newImageUrl: item?.imageData || "",
+        }));
+    },
+    [replacementMap],
+  );
+
+  const handleCommit = React.useCallback(
+    async (incomingIds?: Iterable<string>) => {
+      if (!initPayload) {
+        return;
+      }
+
+      const replacements = buildReplacements(incomingIds);
+
+      try {
+        await bridge.commit(replacements);
+        onCommitComplete?.(replacements);
+      } catch (error) {
+        throw error;
+      }
+    },
+    [bridge, buildReplacements, initPayload, onCommitComplete],
+  );
+
+  const handleCommitCurrentResult = React.useCallback(
+    async (item: ImageRecord) => {
+      if (!item.incomingSlotId || !item.imageData) {
+        return;
+      }
+
+      const replacements = [
+        {
+          incomingId: item.incomingSlotId,
+          newImageUrl: item.imageData,
+        },
+      ];
+
+      try {
+        await bridge.commit(replacements);
+        onCommitComplete?.(replacements);
+        setStatus("Committed 1 replacement.");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Commit failed.");
+      }
+    },
+    [bridge, onCommitComplete],
+  );
+
+  const handleCommitAll = React.useCallback(async () => {
+    const replacements = buildReplacements();
+    if (!replacements.length) {
+      setStatus("No book image replacements are assigned yet.");
       return;
     }
 
-    const replacements = Object.entries(replacementMap)
-      .filter(([, item]) => Boolean(item?.imageData))
-      .map(([incomingId, item]) => ({
-        incomingId,
-        newImageUrl: item?.imageData || "",
-      }));
-
-    await bridge.commit(replacements);
-    onCommitComplete?.(replacements);
-    setStatus(`Committed ${replacements.length} replacement(s).`);
-  }, [bridge, initPayload, onCommitComplete, replacementMap]);
+    setStatus(
+      `Committing ${replacements.length} replacement${replacements.length === 1 ? "" : "s"}...`,
+    );
+    try {
+      await handleCommit();
+      setStatus(
+        `Committed ${replacements.length} replacement${replacements.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Commit failed.");
+    }
+  }, [buildReplacements, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
     bridge.cancel();
@@ -110,18 +205,6 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
           alignItems: "flex-end",
         }}
       >
-        <Stack direction="row" spacing={1}>
-          <Button data-testid="bloom-host-cancel" variant="outlined" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button
-            data-testid="bloom-host-commit"
-            variant="contained"
-            onClick={() => void handleCommit()}
-          >
-            Commit
-          </Button>
-        </Stack>
         <Typography
           data-testid="bloom-host-status"
           variant="caption"
@@ -136,12 +219,49 @@ export const BloomHostShell: React.FC<BloomHostShellProps> = ({
           {status}
         </Typography>
       </Box>
+      <Box
+        sx={{
+          position: "fixed",
+          right: 12,
+          bottom: 12,
+          zIndex: 1200,
+        }}
+      >
+        <Button
+          data-testid="bloom-host-cancel"
+          variant="outlined"
+          onClick={handleCancel}
+          sx={{
+            backgroundColor: "rgba(15, 23, 42, 0.76)",
+            color: "#fff",
+            borderColor: "rgba(255, 255, 255, 0.25)",
+            "&:hover": {
+              backgroundColor: "rgba(15, 23, 42, 0.9)",
+              borderColor: "rgba(255, 255, 255, 0.4)",
+            },
+          }}
+        >
+          Cancel
+        </Button>
+      </Box>
       <ImageToolsWorkspace
         persistence={persistence}
         envApiKey={initPayload.apiKey || ""}
-        bookImageUrls={initPayload.bookImages.map((image) => image.src)}
+        bookImages={hostBookImages}
+        bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"
+        oauthHost={{
+          httpBase: initPayload.httpBase,
+          sessionToken: initPayload.sessionToken,
+          openExternalUrl: (url) => bridge.openExternalUrl(url),
+        }}
         onReplacementsChange={setReplacementMap}
+        onCommitCurrentResult={(item) => void handleCommitCurrentResult(item)}
+        currentResultActionLabel="Replace the image in book with this image"
+        currentResultActionTestId="bloom-host-commit-current-result"
+        onCommitBookImages={() => void handleCommitAll()}
+        bookImagesActionLabel="Replace images in your book with these images"
+        bookImagesActionTestId="bloom-host-commit-book-images"
         thumbnailStripConfigOverrides={{
           bookImages: {
             label: "Book Images",

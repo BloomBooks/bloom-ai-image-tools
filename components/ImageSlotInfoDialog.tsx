@@ -46,9 +46,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
   }, [open, image]);
 
   const promptContent =
-    image?.promptUsed && image.promptUsed.length
-      ? image.promptUsed
-      : "Prompt unavailable.";
+    image?.promptUsed && image.promptUsed.length ? image.promptUsed : "Prompt unavailable.";
 
   const handleCopyPrompt = async () => {
     if (!image) {
@@ -106,9 +104,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers>
-        {image ? <ImageInfoPanel item={image} /> : null}
-      </DialogContent>
+      <DialogContent dividers>{image ? <ImageInfoPanel item={image} /> : null}</DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained">
           Close

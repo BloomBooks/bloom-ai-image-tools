@@ -21,9 +21,7 @@ const buildDefaults = (): ToolParamsById => {
 
 export const createToolParamDefaults = (): ToolParamsById => buildDefaults();
 
-export const mergeParamsWithDefaults = (
-  existing?: ToolParamsById
-): ToolParamsById => {
+export const mergeParamsWithDefaults = (existing?: ToolParamsById): ToolParamsById => {
   const defaults = buildDefaults();
   if (!existing) return defaults;
 
@@ -31,7 +29,7 @@ export const mergeParamsWithDefaults = (
   Object.keys(defaults).forEach((toolId) => {
     merged[toolId] = {
       ...defaults[toolId],
-      ...(existing[toolId] || {}),
+      ...existing[toolId],
     };
   });
   return merged;

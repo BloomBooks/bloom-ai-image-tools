@@ -3,10 +3,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { Box, Stack, Typography, Button } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
-import {
-  CLEAR_ART_STYLE_ID,
-  loadArtStylePreviewUrl,
-} from "../../lib/artStyles";
+import { CLEAR_ART_STYLE_ID, loadArtStylePreviewUrl } from "../../lib/artStyles";
 
 const LazyArtStyleChooserDialog = React.lazy(async () => {
   const module = await import("./ArtStyleChooserDialog");
@@ -33,21 +30,19 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hasOpenedDialog, setHasOpenedDialog] = useState(false);
   const frozenPreviewCacheRef = useRef<Map<string, string>>(new Map());
-  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(
-    null
-  );
+  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [frozenPreview, setFrozenPreview] = useState<string | null>(null);
   const [freezeState, setFreezeState] = useState<FreezeState>("idle");
   const hasNoneOption = styles.some((style) => style.id === CLEAR_ART_STYLE_ID);
   const normalizedValue = value?.length
     ? value
     : hasNoneOption
-    ? CLEAR_ART_STYLE_ID
-    : value ?? "";
+      ? CLEAR_ART_STYLE_ID
+      : (value ?? "");
 
   const selected = useMemo(
     () => styles.find((style) => style.id === normalizedValue) || null,
-    [styles, normalizedValue]
+    [styles, normalizedValue],
   );
 
   const handleOpen = () => {
@@ -162,8 +157,8 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
     ? freezeState === "ready"
       ? frozenPreview
       : freezeState === "failed"
-      ? preview
-      : null
+        ? preview
+        : null
     : preview;
 
   return (
@@ -209,9 +204,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
               <Box
                 component="img"
                 src={displayPreview}
-                alt={
-                  selected ? `${selected.name} preview` : "Art style preview"
-                }
+                alt={selected ? `${selected.name} preview` : "Art style preview"}
                 sx={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             )}
@@ -277,12 +270,10 @@ const IMAGE_PROXY_BASE = "https://images.weserv.nl/?url=";
 const getCorsSafeImageUrl = (source?: string | null): string => {
   if (!source) return "";
   try {
-    const currentOrigin =
-      typeof window !== "undefined" ? window.location.origin : "";
+    const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
     const base = currentOrigin || "http://localhost";
     const parsed = new URL(source, base);
-    const isHttpScheme =
-      parsed.protocol === "http:" || parsed.protocol === "https:";
+    const isHttpScheme = parsed.protocol === "http:" || parsed.protocol === "https:";
     if (!isHttpScheme) {
       return parsed.href;
     }

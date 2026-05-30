@@ -5,8 +5,7 @@ import artStyleCatalog from "../components/artStyle/art-styles.json5";
 export const CLEAR_ART_STYLE_ID = "none";
 export const STYLE_PARAM_KEY = "styleId";
 
-const isClearingStyleId = (id?: string | null): boolean =>
-  !id?.length || id === CLEAR_ART_STYLE_ID;
+const isClearingStyleId = (id?: string | null): boolean => !id?.length || id === CLEAR_ART_STYLE_ID;
 
 /**
  * Normalizes a style ID value. Returns null for empty or "none" values.
@@ -21,9 +20,7 @@ export const normalizeStyleIdValue = (value?: string | null): string | null => {
 /**
  * Extracts the style ID from a tool parameters object.
  */
-export const getStyleIdFromParams = (
-  params?: Record<string, string>
-): string | null => {
+export const getStyleIdFromParams = (params?: Record<string, string>): string | null => {
   if (!params) return null;
   const hasKey = Object.prototype.hasOwnProperty.call(params, STYLE_PARAM_KEY);
   if (!hasKey) {
@@ -37,14 +34,9 @@ export const getStyleIdFromParams = (
  * Extracts the effective style ID from an ImageRecord.
  * Checks sourceStyleId first, then falls back to parameters.
  */
-export const getStyleIdFromImageRecord = (
-  item?: ImageRecord | null
-): string | null => {
+export const getStyleIdFromImageRecord = (item?: ImageRecord | null): string | null => {
   if (!item) return null;
-  return (
-    normalizeStyleIdValue(item.sourceStyleId ?? null) ||
-    getStyleIdFromParams(item.parameters)
-  );
+  return normalizeStyleIdValue(item.sourceStyleId ?? null) || getStyleIdFromParams(item.parameters);
 };
 
 /** @deprecated Use getStyleIdFromImageRecord. */
@@ -79,21 +71,22 @@ const normalizeAssetPath = (value?: string | null): string | null => {
   return normalized.length ? normalized : null;
 };
 
-const previewModuleIndex = Object.keys(previewModules).reduce<
-  Map<string, string>
->((acc, rawKey) => {
-  const normalized = normalizeAssetPath(rawKey);
-  if (normalized) {
-    acc.set(normalized, rawKey);
-    acc.set(`assets/${normalized}`, rawKey);
-    const fileName = normalized.split("/").pop() || "";
-    if (fileName) {
-      const id = fileName.replace(/\.[^.]+$/, "");
-      acc.set(id, rawKey);
+const previewModuleIndex = Object.keys(previewModules).reduce<Map<string, string>>(
+  (acc, rawKey) => {
+    const normalized = normalizeAssetPath(rawKey);
+    if (normalized) {
+      acc.set(normalized, rawKey);
+      acc.set(`assets/${normalized}`, rawKey);
+      const fileName = normalized.split("/").pop() || "";
+      if (fileName) {
+        const id = fileName.replace(/\.[^.]+$/, "");
+        acc.set(id, rawKey);
+      }
     }
-  }
-  return acc;
-}, new Map<string, string>());
+    return acc;
+  },
+  new Map<string, string>(),
+);
 
 const previewUrlCache = new Map<string, string>();
 
@@ -104,14 +97,12 @@ const getModuleKeyForPath = (value?: string | null): string | null => {
   const normalized = normalizeAssetPath(value);
   if (!normalized) return null;
   return (
-    previewModuleIndex.get(normalized) ??
-    previewModuleIndex.get(`assets/${normalized}`) ??
-    null
+    previewModuleIndex.get(normalized) ?? previewModuleIndex.get(`assets/${normalized}`) ?? null
   );
 };
 
 const resolvePreviewSource = (
-  style: ArtStyleDefinition
+  style: ArtStyleDefinition,
 ): { previewUrl: string | null; previewAssetKey: string | null } => {
   const candidate = style.sampleImageUrl;
   if (candidate) {
@@ -125,9 +116,7 @@ const resolvePreviewSource = (
   }
 
   const fallbackKey =
-    previewModuleIndex.get(style.id) ??
-    getModuleKeyForPath(`art-styles/${style.id}.png`) ??
-    null;
+    previewModuleIndex.get(style.id) ?? getModuleKeyForPath(`art-styles/${style.id}.png`) ?? null;
   return { previewUrl: null, previewAssetKey: fallbackKey };
 };
 
@@ -146,9 +135,7 @@ export const ART_STYLES: ArtStyle[] = styleDefinitions.map((style) => {
   };
 });
 
-export const loadArtStylePreviewUrl = async (
-  style: ArtStyle
-): Promise<string | null> => {
+export const loadArtStylePreviewUrl = async (style: ArtStyle): Promise<string | null> => {
   if (style.previewUrl) {
     return style.previewUrl;
   }
@@ -171,21 +158,15 @@ export const loadArtStylePreviewUrl = async (
 const includeClearStyle = (styles: ArtStyle[]): ArtStyle[] => {
   const hasClear = styles.some((style) => style.id === CLEAR_ART_STYLE_ID);
   if (hasClear) return styles;
-  const clearStyle = ART_STYLES.find(
-    (style) => style.id === CLEAR_ART_STYLE_ID
-  );
+  const clearStyle = ART_STYLES.find((style) => style.id === CLEAR_ART_STYLE_ID);
   return clearStyle ? [clearStyle, ...styles] : styles;
 };
 
-const DEFAULT_CANDIDATES = ART_STYLES.filter(
-  (style) => style.id !== CLEAR_ART_STYLE_ID
-);
+const DEFAULT_CANDIDATES = ART_STYLES.filter((style) => style.id !== CLEAR_ART_STYLE_ID);
 
-export const DEFAULT_ART_STYLE_ID =
-  DEFAULT_CANDIDATES[0]?.id ?? ART_STYLES[0]?.id ?? "";
+export const DEFAULT_ART_STYLE_ID = DEFAULT_CANDIDATES[0]?.id ?? ART_STYLES[0]?.id ?? "";
 
-export const isClearArtStyleId = (id?: string | null): boolean =>
-  isClearingStyleId(id);
+export const isClearArtStyleId = (id?: string | null): boolean => isClearingStyleId(id);
 
 const normalizeCategoryFilter = (categories?: string | string[]): string[] => {
   if (!categories) return [];
@@ -202,7 +183,7 @@ export interface ArtStyleFilterOptions {
 
 export const getArtStylesByCategories = (
   categories?: string | string[],
-  options?: { excludeNone?: boolean }
+  options?: { excludeNone?: boolean },
 ): ArtStyle[] => {
   const excludeNone = options?.excludeNone ?? false;
   const normalized = normalizeCategoryFilter(categories);
@@ -214,9 +195,7 @@ export const getArtStylesByCategories = (
   } else {
     result = ART_STYLES.filter((style) => {
       const styleCategories = style.categories ?? [];
-      return styleCategories.some((category) =>
-        normalized.includes(category.toLowerCase())
-      );
+      return styleCategories.some((category) => normalized.includes(category.toLowerCase()));
     });
   }
 
@@ -229,16 +208,14 @@ export const getArtStylesByCategories = (
   return result;
 };
 
-export const getArtStyleById = (
-  id: string | undefined | null
-): ArtStyle | null => {
+export const getArtStyleById = (id: string | undefined | null): ArtStyle | null => {
   if (!id) return null;
   return ART_STYLES.find((style) => style.id === id) ?? null;
 };
 
 export const getArtStylePrompt = (
   id: string | undefined,
-  mode: "short" | "full" = "short"
+  mode: "short" | "full" = "short",
 ): string | null => {
   if (isClearingStyleId(id)) {
     return null;
@@ -256,7 +233,7 @@ export const getArtStylePrompt = (
 export const applyArtStyleToPrompt = (
   basePrompt: string,
   styleId?: string | null,
-  mode: "short" | "full" = "full"
+  mode: "short" | "full" = "full",
 ): string => {
   const trimmed = basePrompt?.trim();
   const core = trimmed?.length ? trimmed : "Create an illustration.";
@@ -266,18 +243,14 @@ export const applyArtStyleToPrompt = (
 
   const normalizedId = styleId ?? undefined;
   const style = normalizedId ? getArtStyleById(normalizedId) : null;
-  const styleSnippet = normalizedId
-    ? getArtStylePrompt(normalizedId, mode)?.trim()
-    : null;
+  const styleSnippet = normalizedId ? getArtStylePrompt(normalizedId, mode)?.trim() : null;
 
   if (!styleSnippet && !style?.name?.trim()) {
     return core;
   }
 
   const styleName = style?.name?.trim();
-  const artDirectionLabel = styleName
-    ? `Art direction (${styleName}):`
-    : "Art direction:";
+  const artDirectionLabel = styleName ? `Art direction (${styleName}):` : "Art direction:";
 
   if (!styleSnippet) {
     return `${core}\n\n${artDirectionLabel}`;

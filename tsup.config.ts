@@ -15,16 +15,10 @@ export default defineConfig({
       js: format === "esm" ? ".mjs" : ".cjs",
     };
   },
-  external: [
-    "react",
-    "react-dom",
-    "@mui/material",
-    "@emotion/react",
-    "@emotion/styled",
-  ],
+  external: ["react", "react-dom", "@mui/material", "@emotion/react", "@emotion/styled"],
   esbuildOptions(options) {
     options.loader = {
-      ...(options.loader || {}),
+      ...options.loader,
       ".json5": "text",
     };
   },

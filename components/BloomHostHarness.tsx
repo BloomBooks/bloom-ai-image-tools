@@ -8,16 +8,70 @@ import {
   BloomCommitReplacement,
   createHarnessBloomHostBridge,
 } from "../services/host/BloomHostBridge";
+import { PersistedImageToolsState } from "../types";
 import { BloomHostShell } from "./BloomHostShell";
 import { theme } from "../themes";
 
 const HARNESS_BOOK_ID = "sample-book";
+const SEEDED_RESULT_HISTORY_ID = "history-seeded-result-1";
+
+const createSeededResultState = (resultSrc: string): PersistedImageToolsState => ({
+  version: 1,
+  appState: {
+    targetImageId: null,
+    referenceImageIds: [],
+    rightPanelImageId: SEEDED_RESULT_HISTORY_ID,
+    history: [
+      {
+        id: SEEDED_RESULT_HISTORY_ID,
+        parentId: null,
+        incomingSlotId: "book-image-1",
+        imageData: resultSrc,
+        imageFileName: null,
+        toolId: "edit-image",
+        parameters: {},
+        sourceStyleId: null,
+        durationMs: 0,
+        cost: 0,
+        model: "manual",
+        timestamp: 1,
+        promptUsed: "",
+        sourceSummary: "",
+        resolution: undefined,
+        isStarred: false,
+        origin: "generated",
+      },
+    ],
+  },
+  replacementImageIdByIncomingId: {},
+  paramsByTool: {},
+  activeToolId: null,
+  selectedModelId: null,
+  auth: {
+    apiKey: null,
+    authMethod: null,
+  },
+  thumbnailStrips: {
+    activeStripId: "bookImages",
+    pinnedStripIds: [],
+    itemIdsByStrip: {
+      history: [SEEDED_RESULT_HISTORY_ID],
+      characters: [],
+      starred: [],
+      reference: [],
+      bookImages: [],
+    },
+  },
+});
 
 export const BloomHostHarness: React.FC = () => {
   const [commitPayload, setCommitPayload] = React.useState<BloomCommitReplacement[]>([]);
   const [wasCancelled, setWasCancelled] = React.useState(false);
   const [readyCount, setReadyCount] = React.useState(0);
   const requestCloseListenersRef = React.useRef<Array<() => void>>([]);
+  const shouldSeedCurrentResult =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("seed") === "current-result";
 
   const bridge = React.useMemo(
     () =>
@@ -33,8 +87,14 @@ export const BloomHostHarness: React.FC = () => {
           ),
           references: [],
           apiKey: "",
+          httpBase: "http://localhost:8089/bloom/api/aiImageEditor",
           sessionToken: "harness-session",
         },
+        initialFiles: shouldSeedCurrentResult
+          ? {
+              "state.json": JSON.stringify(createSeededResultState(retroFuturism)),
+            }
+          : undefined,
         onCommit(replacements) {
           setCommitPayload(replacements);
           setWasCancelled(false);
@@ -46,7 +106,7 @@ export const BloomHostHarness: React.FC = () => {
           setReadyCount((count) => count + 1);
         },
       }),
-    [],
+    [shouldSeedCurrentResult],
   );
 
   React.useEffect(() => {
@@ -81,7 +141,7 @@ export const BloomHostHarness: React.FC = () => {
           <Button
             data-testid="bloom-harness-reset-state"
             variant="outlined"
-            onClick={() => void bridge.clearState(`bloom-host:${HARNESS_BOOK_ID}:harness-session`)}
+            onClick={() => void bridge.clearAllFiles()}
           >
             Reset State
           </Button>

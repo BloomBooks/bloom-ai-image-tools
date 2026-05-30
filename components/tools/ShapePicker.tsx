@@ -56,20 +56,14 @@ export const ShapePicker: React.FC<ShapePickerProps> = ({
               onClick={() => onChange(option)}
               disabled={disabled}
               title={option}
-              data-testid={`shape-option-${option
-                .toLowerCase()
-                .replace(/\s+/g, "-")}`}
+              data-testid={`shape-option-${option.toLowerCase().replace(/\s+/g, "-")}`}
               sx={{
                 p: 0.5,
                 borderRadius: 1,
                 border: `2px solid ${
-                  isSelected
-                    ? muiTheme.palette.primary.main
-                    : muiTheme.palette.divider
+                  isSelected ? muiTheme.palette.primary.main : muiTheme.palette.divider
                 }`,
-                bgcolor: isSelected
-                  ? alpha(muiTheme.palette.primary.main, 0.1)
-                  : "transparent",
+                bgcolor: isSelected ? alpha(muiTheme.palette.primary.main, 0.1) : "transparent",
                 transition: "all 0.15s ease",
                 "&:hover": {
                   borderColor: isSelected

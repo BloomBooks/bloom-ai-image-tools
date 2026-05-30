@@ -50,7 +50,7 @@ const createState = (): PersistedImageToolsState => ({
 });
 
 const createBridge = () => {
-  const storage = new Map<string, PersistedImageToolsState>();
+  const fileStore = new Map<string, string>();
 
   const bridge: BloomHostBridge = {
     ready() {},
@@ -63,77 +63,137 @@ const createBridge = () => {
     async commit() {},
     cancel() {},
     log() {},
-    async loadState(namespace) {
-      return storage.get(namespace) ?? null;
+    openExternalUrl() {},
+    async getFile(name) {
+      return fileStore.get(name) ?? null;
     },
-    async saveState(namespace, state) {
-      storage.set(namespace, state);
+    async putFile(name, data) {
+      fileStore.set(name, data);
     },
-    async clearState(namespace) {
-      storage.delete(namespace);
+    async deleteFile(name) {
+      fileStore.delete(name);
+    },
+    async clearAllFiles() {
+      fileStore.clear();
     },
   };
 
-  return { bridge, storage };
+  return { bridge, fileStore };
 };
 
 describe("createBloomHostPersistence", () => {
-  it("prepares saved state and restores legacy book image naming on load", async () => {
-    const { bridge, storage } = createBridge();
-    const persistence = createBloomHostPersistence(bridge, "test-space");
+  it("splits imageData out of state.json into history/<id>.png", async () => {
+    const { bridge, fileStore } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
     const state = createState();
 
     await persistence.save(state);
 
-    const savedState = storage.get("test-space");
-    expect(savedState?.thumbnailStrips?.activeStripId).toBe("bookImages");
-    expect(savedState?.appState.history[0]?.origin).toBe("bookImages");
-    expect(savedState?.replacementImageIdByIncomingId).toEqual({
-      "history-1": "history-1",
-    });
+    const savedMeta = JSON.parse(fileStore.get("state.json")!) as PersistedImageToolsState;
+    expect(savedMeta.appState.history[0]?.imageData).toBe("");
+    expect(fileStore.get("history/history-1.png")).toBe("data:image/png;base64,abc");
+  });
 
-    storage.set("test-space", {
-      ...state,
-      thumbnailStrips: {
-        activeStripId: "environment" as never,
-        pinnedStripIds: ["environment" as never],
-        itemIdsByStrip: {
-          history: ["history-1"],
-          characters: [],
-          starred: [],
-          reference: [],
-          bookImages: [],
-          environment: ["history-1"],
-        } as never,
-      },
-      appState: {
-        ...state.appState,
-        history: [
-          {
-            ...state.appState.history[0],
-            origin: "environment" as never,
+  it("hydrates imageData from history/<id>.png on load", async () => {
+    const { bridge } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
+    const state = createState();
+
+    await persistence.save(state);
+    const restored = await persistence.load();
+
+    expect(restored?.appState.history[0]?.imageData).toBe("data:image/png;base64,abc");
+  });
+
+  it("prepares saved state and restores legacy book image naming on load", async () => {
+    const { bridge, fileStore } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
+    const state = createState();
+
+    await persistence.save(state);
+
+    const savedMeta = JSON.parse(fileStore.get("state.json")!) as PersistedImageToolsState;
+    expect(savedMeta.thumbnailStrips?.activeStripId).toBe("bookImages");
+    expect(savedMeta.appState.history[0]?.origin).toBe("bookImages");
+    expect(savedMeta.replacementImageIdByIncomingId).toEqual({ "history-1": "history-1" });
+
+    // Simulate loading legacy "environment" naming from state.json
+    fileStore.set(
+      "state.json",
+      JSON.stringify({
+        ...state,
+        thumbnailStrips: {
+          activeStripId: "environment",
+          pinnedStripIds: ["environment"],
+          itemIdsByStrip: {
+            history: ["history-1"],
+            characters: [],
+            starred: [],
+            reference: [],
+            bookImages: [],
+            environment: ["history-1"],
           },
-        ],
-      },
-    });
+        },
+        appState: {
+          ...state.appState,
+          history: [{ ...state.appState.history[0], origin: "environment", imageData: "" }],
+        },
+      }),
+    );
 
     const restored = await persistence.load();
     expect(restored?.thumbnailStrips?.activeStripId).toBe("bookImages");
     expect(restored?.thumbnailStrips?.pinnedStripIds).toEqual(["bookImages"]);
     expect(restored?.thumbnailStrips?.itemIdsByStrip.bookImages).toEqual(["history-1"]);
     expect(restored?.appState.history[0]?.origin).toBe("bookImages");
-    expect(restored?.replacementImageIdByIncomingId).toEqual({
-      "history-1": "history-1",
-    });
+    expect(restored?.replacementImageIdByIncomingId).toEqual({ "history-1": "history-1" });
   });
 
-  it("clears persisted state", async () => {
-    const { bridge, storage } = createBridge();
-    const persistence = createBloomHostPersistence(bridge, "test-space");
+  it("persists apiKey to connection.json and loads it back", async () => {
+    const { bridge, fileStore } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
+    const state = {
+      ...createState(),
+      auth: { apiKey: "sk-test-key", authMethod: "manual" as const },
+    };
 
-    storage.set("test-space", createState());
+    await persistence.save(state);
+
+    const connection = JSON.parse(fileStore.get("connection.json")!);
+    expect(connection.apiKey).toBe("sk-test-key");
+
+    const restored = await persistence.load();
+    expect(restored?.auth.apiKey).toBe("sk-test-key");
+  });
+
+  it("connection.json apiKey takes precedence over state.json auth on load", async () => {
+    const { bridge, fileStore } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
+    const state = createState();
+    await persistence.save(state);
+
+    // Manually set a different key in connection.json
+    fileStore.set(
+      "connection.json",
+      JSON.stringify({ apiKey: "from-connection", authMethod: "manual" }),
+    );
+
+    const restored = await persistence.load();
+    expect(restored?.auth.apiKey).toBe("from-connection");
+  });
+
+  it("clears state.json, connection.json, and history images", async () => {
+    const { bridge, fileStore } = createBridge();
+    const persistence = createBloomHostPersistence(bridge);
+
+    await persistence.save(createState());
+    expect(fileStore.has("state.json")).toBe(true);
+    expect(fileStore.has("history/history-1.png")).toBe(true);
+
     await persistence.clear();
 
-    expect(storage.has("test-space")).toBe(false);
+    expect(fileStore.has("state.json")).toBe(false);
+    expect(fileStore.has("history/history-1.png")).toBe(false);
+    expect(fileStore.has("connection.json")).toBe(false);
   });
 });

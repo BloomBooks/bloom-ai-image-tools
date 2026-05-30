@@ -129,6 +129,8 @@ interface WorkspaceProps {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   onUseCurrentResult?: () => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
   isProcessing: boolean;
   generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
@@ -151,6 +153,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onClearRight,
   onUploadRight,
   onUseCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
   isProcessing,
   generationProgress,
   activeToolId,
@@ -219,13 +223,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   }));
 
   const currentResultItem = resultImages[0] ?? rightImage;
-  const resultHeaderActions =
+  const resultActionButton =
     currentResultItem?.incomingSlotId && onUseCurrentResult ? (
       <Button
         type="button"
         variant="outlined"
         size="small"
-        data-testid="result-use-this-button"
+        data-testid={currentResultActionTestId ?? "result-use-this-button"}
         onClick={onUseCurrentResult}
         sx={{
           borderRadius: "999px",
@@ -234,10 +238,38 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           px: 1.5,
           py: 0.5,
           fontSize: "0.75rem",
+          backgroundColor: "rgba(15, 23, 42, 0.72)",
+          color: "#fff",
+          borderColor: "rgba(255, 255, 255, 0.22)",
+          backdropFilter: "blur(10px)",
+          "&:hover": {
+            backgroundColor: "rgba(15, 23, 42, 0.86)",
+            borderColor: "rgba(255, 255, 255, 0.3)",
+          },
         }}
       >
-        Use this
+        {currentResultActionLabel ?? "Use this"}
       </Button>
+    ) : undefined;
+  const resultHeaderActions = resultSlots.length ? resultActionButton : undefined;
+  const resultOverlayContent =
+    !resultSlots.length && resultActionButton && currentResultItem ? (
+      <Box
+        sx={{
+          position: "absolute",
+          right: 12,
+          bottom: 12,
+          zIndex: 4,
+          display: "flex",
+          justifyContent: "flex-end",
+          pointerEvents: "none",
+          "& > *": {
+            pointerEvents: "auto",
+          },
+        }}
+      >
+        {resultActionButton}
+      </Box>
     ) : undefined;
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
@@ -532,6 +564,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               isAnyDndDragging={isAnyDndDragging}
               label="Result"
               headerActions={resultHeaderActions}
+              overlayContent={resultOverlayContent}
               panelTestId="result-panel"
               onUpload={onUploadRight}
               isDropZone={true}

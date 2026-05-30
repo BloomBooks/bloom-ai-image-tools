@@ -17,19 +17,13 @@ test("multi-reference tools keep one extra empty slot", async ({ page }) => {
   // With no references, there should be exactly one empty slot.
   await expect(slotLocator).toHaveCount(1);
 
-  await page
-    .getByTestId("reference-upload-input-0")
-    .setInputFiles("tests/fixtures/ref.svg");
+  await page.getByTestId("reference-upload-input-0").setInputFiles("tests/fixtures/ref.svg");
 
   // After adding one reference, we should have the filled slot + one empty slot.
   await expect(slotLocator).toHaveCount(2);
-  await expect(
-    page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')
-  ).toBeVisible();
+  await expect(page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')).toBeVisible();
 
-  await page
-    .getByTestId("reference-upload-input-1")
-    .setInputFiles("tests/fixtures/ref.svg");
+  await page.getByTestId("reference-upload-input-1").setInputFiles("tests/fixtures/ref.svg");
 
   // After adding a second reference, we should again have one extra empty slot.
   await expect(slotLocator).toHaveCount(3);
@@ -42,18 +36,14 @@ test("multi-reference tools keep one extra empty slot", async ({ page }) => {
   await expect(slotLocator).toHaveCount(2);
 });
 
-test("custom edit separates target image from additional references", async ({
-  page,
-}) => {
+test("custom edit separates target image from additional references", async ({ page }) => {
   await page.goto("/");
 
   // Enable tools without requiring a real OpenRouter key.
   await setOpenRouterApiKey(page, "test-key");
 
   // Add the required edit target image.
-  await page
-    .getByTestId("target-upload-input")
-    .setInputFiles("tests/fixtures/ref.svg");
+  await page.getByTestId("target-upload-input").setInputFiles("tests/fixtures/ref.svg");
 
   await expect(page.getByAltText("Image to Edit")).toBeVisible();
 
@@ -63,18 +53,12 @@ test("custom edit separates target image from additional references", async ({
   await customEditButton.click();
 
   // Add a reference image; it should be treated as a "like this" reference.
-  await page
-    .getByTestId("reference-upload-input-0")
-    .setInputFiles("tests/fixtures/ref.svg");
+  await page.getByTestId("reference-upload-input-0").setInputFiles("tests/fixtures/ref.svg");
 
-  await expect(
-    page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')
-  ).toBeVisible();
+  await expect(page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')).toBeVisible();
 
   // Additional references should also be labeled "like this".
-  await page
-    .getByTestId("reference-upload-input-1")
-    .setInputFiles("tests/fixtures/ref.svg");
+  await page.getByTestId("reference-upload-input-1").setInputFiles("tests/fixtures/ref.svg");
 
   await expect(page.locator('[data-testid^="reference-slot-"]')).toHaveCount(3);
 });

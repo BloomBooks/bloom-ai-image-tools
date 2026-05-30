@@ -31,6 +31,7 @@ export type ImagePanelSlot = {
 type SingleImagePanelProps = {
   label: string;
   headerActions?: React.ReactNode;
+  overlayContent?: React.ReactNode;
   layout?: "single";
   panelTestId?: string;
   image: ImageRecord | null;
@@ -207,6 +208,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     image,
     label,
     headerActions,
+    overlayContent,
     onUpload,
     isDropZone = false,
     onDrop,
@@ -340,6 +342,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         dataTestId={panelTestId}
         label={label}
         headerActions={headerActions}
+        overlayContent={overlayContent}
         image={image}
         isAnyDndDragging={isAnyDndDragging}
         disabled={disabled}

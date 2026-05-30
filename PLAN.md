@@ -281,3 +281,257 @@ core calls the same methods; only the implementation differs.
   reference folder while the app is open, so the list is sent once in `init`
   and maintained in‑memory with optimistic updates on the app's own writes.
   No watcher, no refresh, no `references-changed` message.
+
+---
+
+# Bloom Editor (Host) Integration — Implementation Plan (v1)
+
+This section plans the **host side** work in the Bloom Editor repo (symlinked at
+[BloomEditor/](BloomEditor/), real path `d:\bloom.worktrees\AddAIImages`) plus the
+small companion changes needed in **this** repo to make the editor persist into a
+Bloom‑owned folder. It supersedes the parts of the sections above that assume
+book‑image sharing and commit — those are explicitly **out of scope for v1**.
+
+## v1 scope
+
+**In scope.** Bloom launches the AI editor in a near‑full‑screen WebView2 window
+from the image context menu, gives it a per‑book `.ai-image-editor` folder, and the
+editor persists its history images, metadata state, and OpenRouter connection info
+into that folder so a relaunch restores the previous session.
+
+**Out of scope (deferred).** Sharing the book's images into the editor, the
+incoming/outgoing pair‑slot UI, the "Commit"/`commit` RPC that sends replacements
+back, references, and any modification of the book itself. The editor opens with an
+empty Book Images strip and the user works entirely inside the editor.
+
+## Decisions locked (from review)
+
+| Topic           | Decision                                                                                                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Packaging**   | The editor is a **self‑contained app bundle** — its own `index.html` + JS with React 19 / MUI 7 bundled in. Bloom loads it into a WebView2 as a standalone page; **no React sharing** with Bloom (which is React 17).                                                                                                               |
+| **Folder I/O**  | New **BloomServer HTTP endpoints** scoped to the book's `.ai-image-editor` folder (GET/POST/DELETE files). The editor uses `fetch`. Reuses Bloom's existing API infra (`RegisterEndpointHandler`, `RawPostData`, `ReplyWithFileContent`).                                                                                           |
+| **API key**     | The **editor owns** the OpenRouter key. Bloom supplies only the folder; the editor writes connection info into `.ai-image-editor/connection.json` and reads it back on relaunch. Bloom never sees the key.                                                                                                                          |
+| **Dev linking** | Fast loop = Bloom WebView2 points at the editor's **Vite dev server** (`http://localhost:3000`), mirroring how Bloom already loads its own React from `localhost:5173`. `yarn link` is used only to exercise the production asset‑copy path before publishing. See [Dev & build workflow](#dev--build-workflow-the-linking-answer). |
+
+## Why self‑contained (the React conflict)
+
+This repo is React **19.2** + MUI **7**; `BloomBrowserUI` is pinned to React
+**17.0.2** with a single `node_modules`. A WebView2 window is its own browser
+document, so the editor page runs its **own** React 19 with zero contact with
+Bloom's React 17. We therefore do **not** add the editor to Bloom's Vite entry
+points or its `bundleToViteModulePathMap`; Bloom only needs a URL to navigate to.
+
+## The `.ai-image-editor` folder
+
+Created on demand inside the current book folder
+(`BookSelection.CurrentSelection.FolderPath`). Layout mirrors the split already used
+by `services/persistence/browserPersistence.ts` (metadata separate from image bytes):
+
+```
+<book folder>/
+  .ai-image-editor/
+    state.json            ← PersistedImageToolsState with history[].imageData = ""
+    connection.json       ← { apiKey, authMethod, openRouterUser? }  (editor-owned)
+    history/
+      <imageRecordId>.png  ← decoded PNG bytes, one per history entry
+```
+
+- `state.json` is the metadata‑only state (exactly what `browserPersistence` writes
+  to its `:meta` key today — history entries keep all fields except `imageData`,
+  which is blanked).
+- Each history image is a real PNG file (base64 decoded to bytes on write, re‑encoded
+  to base64 on read), so the folder is human‑inspectable and portable with the book.
+- `.ai-image-editor` should be excluded from Bloom's book‑bundling/upload and from the
+  "doomed images" sweep in `BookStorage` (see step H7) so Bloom never ships or prunes it.
+
+## Communication contract for v1
+
+A pared‑down version of the protocol above. The bridge already exists in
+[services/host/BloomHostBridge.ts](services/host/BloomHostBridge.ts); v1 trims the
+payload and **replaces the localStorage‑backed state methods with HTTP**.
+
+### `init` (Host → App), v1 shape
+
+```ts
+{
+  book: { id: string; title: string };
+  folderUrl?: string;        // optional convenience; reads also work via httpBase
+  httpBase: string;          // e.g. "http://localhost:8089/bloom/api/aiImageEditor"
+  sessionToken: string;      // sent as X-Bloom-Session on every file request
+  bookImages: [];            // empty in v1
+  references: [];            // empty in v1
+  apiKey: null;              // editor owns the key in v1
+}
+```
+
+The existing `BloomHostInitPayload` interface already makes the v1‑irrelevant fields
+optional/empty‑able, so no breaking type change is required — just stop populating
+them on the host side.
+
+### File endpoints (App → Host, HTTP)
+
+All scoped to `<book>/.ai-image-editor`, all require `X-Bloom-Session: <sessionToken>`.
+Filenames are validated server‑side (no traversal, allowlisted to
+`state.json`, `connection.json`, `history/<id>.png`).
+
+| Method | Path (under `httpBase`)       | Body / Result                                   |
+| ------ | ----------------------------- | ----------------------------------------------- |
+| GET    | `/file?name=state.json`       | JSON text (404 if absent → editor starts fresh) |
+| POST   | `/file?name=state.json`       | raw JSON bytes                                  |
+| GET    | `/file?name=connection.json`  | JSON text (404 if absent)                       |
+| POST   | `/file?name=connection.json`  | raw JSON bytes                                  |
+| GET    | `/file?name=history/<id>.png` | image bytes                                     |
+| POST   | `/file?name=history/<id>.png` | raw image bytes                                 |
+| DELETE | `/file?name=history/<id>.png` | —                                               |
+
+(Single generic `/file` endpoint with a `name` query keeps the C# handler small and
+the allowlist in one place; we can split later if useful.)
+
+### postMessage messages retained in v1
+
+- App → Host: `ready`, `cancel`, `log`.
+- Host → App: `init`, `request-close`.
+- **Dropped in v1:** `commit` RPC (and its `ack`). The Cancel/close path just sends
+  `cancel`; nothing is committed because nothing is shared back yet.
+
+## Component‑side changes (this repo)
+
+These are the companion changes that the "implemented" component side still needs so
+that persistence lands in the Bloom folder instead of `localStorage`.
+
+- **C1 — HTTP‑backed bridge.** In
+  [services/host/BloomHostBridge.ts](services/host/BloomHostBridge.ts), the WebView
+  bridge currently stores state in `localStorage` (`loadLocalState`/`saveLocalState`/
+  `clearLocalState`). That cannot persist across launches because WebView2 uses a
+  fresh temp user‑data folder each time. Capture `httpBase` + `sessionToken` from
+  `init` and back the file operations with `fetch`. Expose granular file ops the
+  persistence layer can call (e.g. `getFile(name)`, `putFile(name, bytes|json)`,
+  `deleteFile(name)`), keeping `loadState/saveState/clearState` as thin wrappers over
+  `state.json`.
+- **C2 — Folder‑splitting Bloom persistence.** Update
+  [services/persistence/bloomHostPersistence.ts](services/persistence/bloomHostPersistence.ts)
+  to mirror `browserPersistence`'s split: on `save`, write `state.json` with
+  `imageData` blanked and POST each changed history image to `history/<id>.png`
+  (base64 → bytes); on `load`, GET `state.json` then hydrate each entry's `imageData`
+  by GETting its PNG (bytes → base64); track last‑saved hashes to avoid re‑POSTing
+  unchanged images and to DELETE removed ones — the diff logic already exists in
+  `browserPersistence` and can be factored into a shared helper.
+- **C3 — Editor‑owned connection info.** In Bloom mode, route the editor's API‑key
+  get/set to `connection.json` via the bridge (instead of the current "no‑op in Bloom
+  mode" behavior). The editor's existing settings/API‑key dialog stays; only its
+  persistence target changes. On launch, if `connection.json` has a key, the editor
+  authenticates without prompting.
+- **C4 — A stable hosted entry/build.** Confirm the standalone build (`vp build` →
+  demo output, the `index.html` app — not the tsup library output) is what Bloom
+  loads. Detection in [App.tsx](App.tsx) already branches to `BloomHostShell` when
+  `window.chrome.webview` is present, so the **same** built app works both
+  standalone‑in‑browser and hosted‑in‑WebView2. The published npm package should
+  include this standalone app build (e.g. a `dist-app/` directory) in `files`, in
+  addition to the library `dist/`.
+- **C5 — CORS in dev.** When loaded from the Vite dev server (`:3000`) the editor's
+  `fetch` calls hit Bloom's server (`:8089`) cross‑origin. The host endpoints must
+  send `Access-Control-Allow-Origin` for the dev origin and answer the `OPTIONS`
+  preflight allowing the `X-Bloom-Session` header. (Production is same‑origin — see
+  below — so this only matters for the dev loop.)
+
+## Bloom‑side changes (host repo)
+
+References below are to files surfaced during exploration; treat line numbers as
+approximate.
+
+- **H1 — Menu item.** Add "Edit with AI…" to the image context menu in
+  `BloomEditor/src/BloomBrowserUI/bookEdit/js/CanvasElementContextControls.tsx`
+  (`addImageMenuOptions()`, alongside "Choose image from your computer…"). On click,
+  `postData("editView/launchAiImageEditor", { imageId, imageSrc })` (or a dedicated
+  `aiImageEditor/launch` endpoint — see H2). v1 ignores the specific image; the menu
+  item is just the entry point.
+- **H2 — New C# API class `AiImageEditorApi`.** A new controller under
+  `BloomEditor/src/BloomExe/web/controllers/` registered with `BloomApiHandler`
+  (follow `BookMetadataApi.cs`). Responsibilities:
+  - `aiImageEditor/launch` (POST, UI thread): ensure the folder exists, then open the
+    dialog (H4).
+  - `aiImageEditor/file` (GET/POST/DELETE): the folder file endpoints. Validate
+    `X-Bloom-Session`, allowlist `name`, resolve under
+    `CurrentBook.FolderPath/.ai-image-editor`, use `request.RawPostData` for writes
+    and `request.ReplyWithImage` / `ReplyWithFileContent` (or a JSON reply) for reads.
+  - Holds the per‑session token minted at launch.
+- **H3 — Folder creation.** On launch, create
+  `Path.Combine(CurrentBook.FolderPath, ".ai-image-editor")` and its `history/`
+  subfolder if absent (`RobustIO`/`Directory.CreateDirectory`).
+- **H4 — Near‑full‑screen WebView2 window.** Reuse the existing dialog plumbing
+  (`ReactDialog` → `ReactControl` → `WebView2Browser`, in
+  `BloomEditor/src/BloomExe/MiscUI/ReactDialog.cs` and `web/ReactControl.cs`) **but**
+  point the WebView2 at the editor's URL rather than a Bloom Vite bundle. Because the
+  editor is self‑contained, the cleanest path is a thin custom form that hosts a
+  `WebView2Browser` and navigates to the editor URL (H5), sized to ~95% of the work
+  area / maximized. The existing `bundleToViteModulePathMap` is **not** touched.
+- **H5 — Editor URL resolution (dev vs prod).**
+  - **Dev:** navigate to `http://localhost:3000/?...` (the editor's running Vite dev
+    server) when a dev flag/env is set. Gives HMR on editor edits.
+  - **Prod:** serve the editor's built app from Bloom's own server so it is
+    **same‑origin** with `/bloom/api/...` (no CORS). Copy the package's `dist-app/`
+    into `output/browser/aiImageEditor/` at build time and navigate to
+    `…/bloom/aiImageEditor/index.html`.
+- **H6 — init / messaging wiring.** After the WebView2 signals it's ready (the editor
+  posts `ready` via `chrome.webview.postMessage`), C# handles `WebMessageReceived`
+  and posts back the v1 `init` payload (book id/title, `httpBase` pointing at the
+  `aiImageEditor` API root, freshly minted `sessionToken`). Handle `cancel` and `log`.
+  On the window's close (X) button, send `request-close` and let the editor reply
+  `cancel`, then close. (`WebView2Browser` already exposes
+  `WebMessageReceived` and `RunJavascriptAsync`/post helpers.)
+- **H7 — Exclude the folder from book operations.** Ensure `.ai-image-editor` is
+  ignored by `BookStorage`'s unused‑image cleanup and by book upload/bundling so it is
+  neither pruned nor shipped. Add it to the relevant skip lists.
+
+## Dev & build workflow (the linking answer)
+
+With the self‑contained decision, the fast inner loop does **not** depend on
+`yarn link` vs Vite alias — those matter only when one project _bundles_ the other,
+which Bloom no longer does. Instead:
+
+1. **Fast loop (recommended default).** Run this repo's `vp dev` (editor on
+   `http://localhost:3000`). Run Bloom with a dev flag that makes H5 navigate the
+   WebView2 to `localhost:3000`. Editor code edits hot‑reload inside Bloom's WebView2
+   instantly; only C# changes require a Bloom rebuild. This is the analogue of
+   Bloom's own `localhost:5173` React dev mode, so it fits existing developer muscle
+   memory. **No copy step, no linking.**
+2. **Production‑path check (before publishing).** To exercise the same‑origin served
+   build: `yarn link` this package from `BloomBrowserUI` (matches how Bloom links
+   `bloom-player`), build the editor app, and have Bloom's build copy `dist-app/` into
+   `output/browser/aiImageEditor/`. Use this to validate H5‑prod and CORS‑free
+   operation. `file:` and Vite alias are viable alternatives but unnecessary given the
+   dev‑server loop above.
+3. **`BloomBrowserUI/package.json` dependency.** Add `bloom-ai-image-tools` as a
+   dependency so the production copy step has a resolvable source. During dev this can
+   be the `yarn link` symlink; post‑publish it becomes a normal version range.
+
+## Work breakdown (ordered)
+
+Component side (this repo) and host side (Bloom) can largely proceed in parallel;
+the contract in [Communication contract for v1](#communication-contract-for-v1) is the
+seam.
+
+1. **C1/C2/C3** — HTTP‑backed bridge, folder‑splitting persistence, connection.json.
+   Land behind the existing `window.chrome.webview` detection; verify against the
+   in‑repo harness with a fake HTTP layer first.
+2. **C4** — produce and package the standalone app build (`dist-app/`); confirm the
+   hosted entry works when opened in a real WebView2.
+3. **H2/H3** — `AiImageEditorApi` with folder creation + the `/file` endpoints; unit
+   test path validation and session‑token enforcement.
+4. **H4/H5/H6** — the WebView2 window, dev/prod URL resolution, and init/messaging.
+5. **H1** — the context‑menu item that calls `launch`.
+6. **C5/H5‑prod** — CORS for the dev origin; the prod same‑origin asset copy.
+7. **H7** — exclude `.ai-image-editor` from cleanup/upload.
+8. **End‑to‑end smoke:** open editor from menu → generate an image → close →
+   reopen → history, state, and API key all restored from the folder.
+
+## Open questions / deferred
+
+- **Window chrome:** borderless maximized form vs. a titled resizable dialog? (H4 —
+  default to maximized with a close button; cosmetic, decide during implementation.)
+- **Multiple books / stale sessions:** the session token is per‑launch; confirm Bloom
+  rejects file requests after the window closes (token invalidated).
+- **Concurrency:** assume a single editor window at a time (Bloom blocks reopening
+  while one is open). Revisit if not guaranteed.
+- **v2 hooks:** book‑image sharing, pair‑slot UI, and `commit` reattach at the seams
+  left above (empty `bookImages`/`references`, no `commit`).

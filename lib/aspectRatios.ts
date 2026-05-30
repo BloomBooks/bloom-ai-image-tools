@@ -54,28 +54,20 @@ export const getSupportedAspectRatioValues = (
 ): string[] => {
   const normalized = (supportedValues ?? []).filter(
     (value, index, array): value is string =>
-      typeof value === "string" &&
-      !!getAspectRatioOption(value) &&
-      array.indexOf(value) === index,
+      typeof value === "string" && !!getAspectRatioOption(value) && array.indexOf(value) === index,
   );
 
-  return normalized.length > 0
-    ? normalized
-    : [...ALL_EXPLICIT_ASPECT_RATIO_VALUES];
+  return normalized.length > 0 ? normalized : [...ALL_EXPLICIT_ASPECT_RATIO_VALUES];
 };
 
-export const getDefaultAspectRatioValue = (
-  supportedValues?: readonly string[] | null,
-): string => {
+export const getDefaultAspectRatioValue = (supportedValues?: readonly string[] | null): string => {
   const resolvedSupportedValues = getSupportedAspectRatioValues(supportedValues);
   return resolvedSupportedValues.includes(DEFAULT_CREATE_ASPECT_RATIO)
     ? DEFAULT_CREATE_ASPECT_RATIO
     : resolvedSupportedValues[0] || DEFAULT_CREATE_ASPECT_RATIO;
 };
 
-export const getAspectRatioNumber = (
-  value: string | null | undefined,
-): number | null => {
+export const getAspectRatioNumber = (value: string | null | undefined): number | null => {
   const option = getAspectRatioOption(value);
   if (!option) {
     return null;
@@ -154,11 +146,7 @@ export const getAspectRatioPromptHint = (
   autoResolution?: ImageResolutionLike | null,
   supportedValues?: readonly string[] | null,
 ): string => {
-  const resolvedValue = resolveAspectRatioValue(
-    value,
-    autoResolution,
-    supportedValues,
-  );
+  const resolvedValue = resolveAspectRatioValue(value, autoResolution, supportedValues);
 
   switch (resolvedValue) {
     case "1:8":

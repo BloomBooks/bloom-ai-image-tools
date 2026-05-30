@@ -242,8 +242,17 @@ export const replaceStripItems = (
   stripId: ThumbnailStripId,
   itemIds: string[],
 ): ThumbnailStripsSnapshot => {
+  const nextIds = Array.from(new Set(itemIds));
+  const currentIds = snapshot.itemIdsByStrip[stripId] || [];
+  if (
+    currentIds.length === nextIds.length &&
+    currentIds.every((id, index) => id === nextIds[index])
+  ) {
+    return snapshot;
+  }
+
   const next = cloneStripArrays(snapshot);
-  next[stripId] = Array.from(new Set(itemIds));
+  next[stripId] = nextIds;
   return {
     ...snapshot,
     itemIdsByStrip: next,

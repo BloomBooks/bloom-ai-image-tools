@@ -40,9 +40,7 @@ export function OpenRouterConnect({
   onProvideKey,
 }: OpenRouterConnectProps) {
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
-  const [testState, setTestState] = useState<
-    "idle" | "testing" | "success" | "error"
-  >("idle");
+  const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
 
   useEffect(() => {
@@ -98,9 +96,7 @@ export function OpenRouterConnect({
       setTestMessage(`Key verified${balancePart}`);
     } catch (err) {
       setTestState("error");
-      setTestMessage(
-        err instanceof Error ? err.message : "Key verification failed",
-      );
+      setTestMessage(err instanceof Error ? err.message : "Key verification failed");
     }
   };
 
@@ -149,10 +145,7 @@ export function OpenRouterConnect({
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        backgroundColor:
-          connectionMode === value
-            ? theme.colors.surfaceAlt
-            : theme.colors.surface,
+        backgroundColor: connectionMode === value ? theme.colors.surfaceAlt : theme.colors.surface,
         ...containerStyle,
       }}
     >
@@ -186,26 +179,18 @@ export function OpenRouterConnect({
               mt: 0.5,
             }}
           >
-            {connectionMode === value
-              ? description.active
-              : description.inactive}
+            {connectionMode === value ? description.active : description.inactive}
           </Typography>
         </Box>
       </Stack>
-      <Box sx={{ pl: 4, fontSize: "0.9rem", color: theme.colors.textPrimary }}>
-        {content}
-      </Box>
+      <Box sx={{ pl: 4, fontSize: "0.9rem", color: theme.colors.textPrimary }}>{content}</Box>
     </Box>
   );
 
-  const oauthButtonLabel =
-    connectionMode === "oauth" ? "Disconnect" : "Connect";
-  const oauthButtonAction =
-    connectionMode === "oauth" ? handleDisconnect : onConnect;
+  const oauthButtonLabel = connectionMode === "oauth" ? "Disconnect" : "Connect";
+  const oauthButtonAction = connectionMode === "oauth" ? handleDisconnect : onConnect;
   const oauthButtonTestId =
-    connectionMode === "oauth"
-      ? "openrouter-oauth-disconnect"
-      : "openrouter-oauth-connect";
+    connectionMode === "oauth" ? "openrouter-oauth-disconnect" : "openrouter-oauth-connect";
 
   const apiKeyDescriptions: OptionText = usingEnvKey
     ? {
@@ -230,9 +215,9 @@ export function OpenRouterConnect({
       sx={{ border: "none", p: 0, m: 0, minInlineSize: 0 }}
     >
       <Typography variant="body2">
-        OpenRouter credits are how you pre-pay for use of the AI Image Tools
-        from Google and others. Once you have an OpenRouter account, you can
-        either connect to it via login or paste in an API key.
+        OpenRouter credits are how you pre-pay for use of the AI Image Tools from Google and others.
+        Once you have an OpenRouter account, you can either connect to it via login or paste in an
+        API key.
       </Typography>
 
       {renderOptionCard(
@@ -303,49 +288,48 @@ export function OpenRouterConnect({
               bgcolor: theme.colors.surface,
             }}
             InputProps={{
-              endAdornment: !usingEnvKey &&
-                connectionMode !== "oauth" &&
-                !keyValue && (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={handlePaste}
-                      aria-label="Paste API key"
-                      edge="end"
-                      sx={{
-                        color: theme.colors.textSecondary,
-                        "&:hover": { color: theme.colors.textPrimary },
-                      }}
-                    >
-                      <ContentPasteIcon fontSize="small" />
-                    </IconButton>
-                  </InputAdornment>
-                ),
+              endAdornment: !usingEnvKey && connectionMode !== "oauth" && !keyValue && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={handlePaste}
+                    aria-label="Paste API key"
+                    edge="end"
+                    sx={{
+                      color: theme.colors.textSecondary,
+                      "&:hover": { color: theme.colors.textPrimary },
+                    }}
+                  >
+                    <ContentPasteIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
             }}
           />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            {(hasManualKey || hasEnvKey) && connectionMode !== "oauth" && (
-              <Button
-                type="button"
-                data-testid="openrouter-test-key"
-                onClick={handleTestKey}
-                disabled={testState === "testing"}
-                variant="contained"
-                size="small"
-                startIcon={testState === "testing" ? <CircularProgress size={14} /> : undefined}
-                sx={{
-                  borderRadius: 2,
-                  fontWeight: 600,
-                  px: 3,
-                  backgroundColor: theme.colors.accent,
-                  color: theme.colors.textOnAccent,
-                  opacity: testState === "testing" ? 0.6 : 1,
-                  "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
-                }}
-              >
-                {testState === "testing" ? "Testing…" : "Test Key"}
-              </Button>
-            )}
+            {(hasManualKey || hasEnvKey || Boolean(keyValue.trim())) &&
+              connectionMode !== "oauth" && (
+                <Button
+                  type="button"
+                  data-testid="openrouter-test-key"
+                  onClick={handleTestKey}
+                  disabled={testState === "testing"}
+                  variant="contained"
+                  size="small"
+                  startIcon={testState === "testing" ? <CircularProgress size={14} /> : undefined}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    px: 3,
+                    backgroundColor: theme.colors.accent,
+                    color: theme.colors.textOnAccent,
+                    opacity: testState === "testing" ? 0.6 : 1,
+                    "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
+                  }}
+                >
+                  {testState === "testing" ? "Testing…" : "Test Key"}
+                </Button>
+              )}
             {hasManualKey && !usingEnvKey && (
               <Button
                 type="button"
@@ -366,28 +350,21 @@ export function OpenRouterConnect({
               variant="caption"
               sx={{
                 color:
-                  testState === "success"
-                    ? (theme.colors.success ?? "success.main")
-                    : "error.main",
+                  testState === "success" ? (theme.colors.success ?? "success.main") : "error.main",
               }}
             >
-              {testState === "success"
-                ? `✔ ${testMessage}`
-                : `✘ ${testMessage}`}
+              {testState === "success" ? `✔ ${testMessage}` : `✘ ${testMessage}`}
             </Typography>
           )}
 
           {usingEnvKey && (
             <Typography variant="caption" color="text.secondary">
-              This key is provided by the environment and cannot be changed in
-              this interface.
+              This key is provided by the environment and cannot be changed in this interface.
             </Typography>
           )}
         </Stack>,
         "openrouter-option-api-key",
-        connectionMode === "oauth"
-          ? { opacity: 0.3, pointerEvents: "none" }
-          : {},
+        connectionMode === "oauth" ? { opacity: 0.3, pointerEvents: "none" } : {},
       )}
     </Stack>
   );

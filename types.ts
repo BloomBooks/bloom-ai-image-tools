@@ -162,6 +162,12 @@ export type ImageSlotActionKey = "upload" | "paste" | "copy" | "download" | "rem
 export interface AuthState {
   apiKey: string | null;
   authMethod: "oauth" | "manual" | null;
+  /**
+   * Google AI Studio API key (manual entry only). The active provider is derived:
+   * OpenRouter wins when an OpenRouter key/connection exists, otherwise Google is used
+   * when this key is present.
+   */
+  googleApiKey?: string | null;
 }
 
 export interface PersistedAppState {

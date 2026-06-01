@@ -17,6 +17,7 @@ import { IMAGE_TOOLS_FS_IMAGES_DIR } from "../services/persistence/constants";
 import openRouterIcon from "../assets/openrouter.svg";
 import { Icon, Icons } from "./Icons";
 import { OpenRouterConnect } from "./OpenRouterConnect";
+import { GoogleAiStudioConnect } from "./GoogleAiStudioConnect";
 import { darkTheme } from "./materialUITheme";
 import { theme as appTheme } from "../themes";
 
@@ -29,6 +30,12 @@ interface OpenRouterSectionProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
+}
+
+interface GoogleSectionProps {
+  apiKeyPreview: string | null;
+  onProvideKey: (key: string) => void;
+  onDisconnect: () => void;
 }
 
 interface HistorySectionProps {
@@ -45,6 +52,7 @@ interface AIImageToolsSettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   openRouter: OpenRouterSectionProps;
+  google: GoogleSectionProps;
   history: HistorySectionProps;
 }
 
@@ -87,10 +95,22 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
   isOpen,
   onClose,
   openRouter,
+  google,
   history,
 }) => {
   const folderPath = folderPathFromName(history.directoryName);
   const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
+  // Active provider is derived: OpenRouter wins when it has a key/connection,
+  // otherwise Google is used when its key is present.
+  const openRouterHasKey = Boolean(openRouter.apiKeyPreview);
+  const googleHasKey = Boolean(google.apiKeyPreview);
+  const isOpenRouterActive = openRouterHasKey;
+  const isGoogleActive = !openRouterHasKey && googleHasKey;
+  const providerStatusLabel = isOpenRouterActive
+    ? "Currently using OpenRouter."
+    : isGoogleActive
+      ? "Currently using Google AI Studio (no OpenRouter key set)."
+      : "No AI provider connected yet — add a key below.";
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -153,23 +173,49 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
               elevation={0}
               square
               sx={sectionCardStyles}
-              aria-labelledby="openrouter-section-title"
+              aria-labelledby="provider-section-title"
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Box
-                    component="img"
-                    src={openRouterIcon}
-                    alt="OpenRouter"
-                    sx={{ width: 24, height: 24 }}
-                  />
-                  <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
-                    OpenRouter connection
+                <Box>
+                  <Typography id="provider-section-title" variant="subtitle1" fontWeight={600}>
+                    AI provider
                   </Typography>
-                </Stack>
+                  <Typography variant="body2" color="text.secondary">
+                    Connect OpenRouter or add a Google AI Studio key. If both are set, OpenRouter is
+                    used.
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    data-testid="provider-status"
+                    sx={{ mt: 1, fontWeight: 600, color: appTheme.colors.accent }}
+                  >
+                    {providerStatusLabel}
+                  </Typography>
+                </Box>
 
-                <Box sx={nestedCardStyles}>
+                <Box
+                  sx={{
+                    ...nestedCardStyles,
+                    opacity: isOpenRouterActive ? 1 : 0.5,
+                  }}
+                  aria-labelledby="openrouter-section-title"
+                >
                   <Stack spacing={2}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Box
+                        component="img"
+                        src={openRouterIcon}
+                        alt="OpenRouter"
+                        sx={{ width: 24, height: 24 }}
+                      />
+                      <Typography
+                        id="openrouter-section-title"
+                        variant="subtitle1"
+                        fontWeight={600}
+                      >
+                        OpenRouter connection
+                      </Typography>
+                    </Stack>
                     <OpenRouterConnect
                       isAuthenticated={openRouter.isAuthenticated}
                       isLoading={openRouter.isLoading}
@@ -186,6 +232,25 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                         switch accounts.
                       </Typography>
                     )}
+                  </Stack>
+                </Box>
+
+                <Box
+                  sx={{
+                    ...nestedCardStyles,
+                    opacity: isGoogleActive ? 1 : 0.5,
+                  }}
+                  aria-labelledby="google-section-title"
+                >
+                  <Stack spacing={2}>
+                    <Typography id="google-section-title" variant="subtitle1" fontWeight={600}>
+                      Google AI Studio connection
+                    </Typography>
+                    <GoogleAiStudioConnect
+                      apiKeyPreview={google.apiKeyPreview}
+                      onProvideKey={google.onProvideKey}
+                      onDisconnect={google.onDisconnect}
+                    />
                   </Stack>
                 </Box>
               </Stack>

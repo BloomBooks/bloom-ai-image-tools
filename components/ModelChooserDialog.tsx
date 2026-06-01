@@ -19,11 +19,7 @@ import {
   Typography,
 } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import type {
-  ModelInfo,
-  ModelReasoningLevel,
-  ModelReasoningLevelByModelId,
-} from "../types";
+import type { ModelInfo, ModelReasoningLevel, ModelReasoningLevelByModelId } from "../types";
 import { isMacPlatform } from "../lib/platformUtils";
 import { darkTheme } from "./materialUITheme";
 
@@ -32,10 +28,9 @@ interface ModelChooserDialogProps {
   models: ModelInfo[];
   selectedModelId: string;
   modelReasoningLevels: ModelReasoningLevelByModelId;
-  onSelect: (
-    modelId: string,
-    reasoningLevels: ModelReasoningLevelByModelId,
-  ) => void;
+  /** Model ids that cannot be selected (e.g. non-Google models when Google is active). */
+  disabledModelIds?: string[];
+  onSelect: (modelId: string, reasoningLevels: ModelReasoningLevelByModelId) => void;
   onClose: () => void;
 }
 
@@ -50,9 +45,7 @@ const REASONING_LEVEL_OPTIONS: Array<{
   { value: "high", label: "High" },
 ];
 
-const isModelReasoningLevel = (
-  value: unknown,
-): value is ModelReasoningLevel => {
+const isModelReasoningLevel = (value: unknown): value is ModelReasoningLevel => {
   return REASONING_LEVEL_OPTIONS.some((option) => option.value === value);
 };
 
@@ -61,9 +54,11 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   models,
   selectedModelId,
   modelReasoningLevels,
+  disabledModelIds = [],
   onSelect,
   onClose,
 }) => {
+  const disabledModelIdSet = new Set(disabledModelIds);
   const [pendingModelId, setPendingModelId] = useState(selectedModelId);
   const [pendingModelReasoningLevels, setPendingModelReasoningLevels] =
     useState<ModelReasoningLevelByModelId>({ ...modelReasoningLevels });
@@ -87,7 +82,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
   }, [isOpen, selectedModelId, modelReasoningLevels]);
 
   const handleConfirm = () => {
-    if (!pendingModelId) return;
+    if (!pendingModelId || disabledModelIdSet.has(pendingModelId)) return;
     onSelect(pendingModelId, pendingModelReasoningLevels);
     onClose();
   };
@@ -103,10 +98,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
     return isModelReasoningLevel(initialLevel) ? initialLevel : "default";
   };
 
-  const handleReasoningChange = (
-    modelId: string,
-    value: ModelReasoningLevel,
-  ) => {
+  const handleReasoningChange = (modelId: string, value: ModelReasoningLevel) => {
     setPendingModelReasoningLevels((prev) => ({
       ...prev,
       [modelId]: value,
@@ -118,7 +110,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
       <Button
         key="ok"
         onClick={handleConfirm}
-        disabled={!pendingModelId}
+        disabled={!pendingModelId || disabledModelIdSet.has(pendingModelId)}
         variant="contained"
         color="primary"
       >
@@ -132,9 +124,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
       </Button>
     );
 
-    return isMacPlatform()
-      ? [cancelButton, confirmButton]
-      : [confirmButton, cancelButton];
+    return isMacPlatform() ? [cancelButton, confirmButton] : [confirmButton, cancelButton];
   })();
 
   if (!isOpen) return null;
@@ -181,6 +171,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
             <Grid container spacing={2}>
               {models.map((model) => {
                 const isSelected = model.id === pendingModelId;
+                const isDisabled = disabledModelIdSet.has(model.id);
                 return (
                   <Grid size={{ xs: 12, sm: 6 }} key={model.id}>
                     <Card
@@ -191,34 +182,25 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                         flexDirection: "column",
                         borderColor: isSelected ? "primary.main" : "divider",
                         boxShadow: isSelected ? 6 : "none",
+                        opacity: isDisabled ? 0.5 : 1,
                         transition: (themeInstance) =>
-                          themeInstance.transitions.create(
-                            ["border-color", "box-shadow"],
-                            {
-                              duration:
-                                themeInstance.transitions.duration.short,
-                            },
-                          ),
+                          themeInstance.transitions.create(["border-color", "box-shadow"], {
+                            duration: themeInstance.transitions.duration.short,
+                          }),
                       }}
                     >
                       <CardActionArea
-                        onClick={() => setPendingModelId(model.id)}
+                        onClick={() => {
+                          if (!isDisabled) {
+                            setPendingModelId(model.id);
+                          }
+                        }}
+                        disabled={isDisabled}
                         sx={{ flex: "0 0 auto" }}
                       >
                         <CardContent>
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={1}
-                            mb={2}
-                          >
-                            {isSelected && (
-                              <Chip
-                                color="primary"
-                                size="small"
-                                label="Selected"
-                              />
-                            )}
+                          <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                            {isSelected && <Chip color="primary" size="small" label="Selected" />}
                             {(model.badge || "").trim().length > 0 && (
                               <Typography
                                 variant="caption"
@@ -231,15 +213,14 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                                 {model.badge}
                               </Typography>
                             )}
+                            {isDisabled && (
+                              <Chip size="small" variant="outlined" label="Requires OpenRouter" />
+                            )}
                           </Stack>
                           <Typography variant="h6" component="h3" gutterBottom>
                             {model.name}
                           </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ mb: 3 }}
-                          >
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                             {model.description}
                           </Typography>
                           <Box
@@ -251,9 +232,7 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                               bgcolor: "background.default",
                             }}
                           >
-                            <Typography variant="body2">
-                              {model.pricing}
-                            </Typography>
+                            <Typography variant="body2">{model.pricing}</Typography>
                           </Box>
                         </CardContent>
                       </CardActionArea>
@@ -265,13 +244,12 @@ export const ModelChooserDialog: React.FC<ModelChooserDialogProps> = ({
                             event.stopPropagation();
                           }}
                         >
-                          <InputLabel id={`reasoning-label-${model.id}`}>
-                            Reasoning
-                          </InputLabel>
+                          <InputLabel id={`reasoning-label-${model.id}`}>Reasoning</InputLabel>
                           <Select
                             labelId={`reasoning-label-${model.id}`}
                             value={getReasoningLevelForModel(model.id)}
                             label="Reasoning"
+                            disabled={isDisabled}
                             data-testid={`model-reasoning-${model.id}`}
                             onChange={(event) =>
                               handleReasoningChange(

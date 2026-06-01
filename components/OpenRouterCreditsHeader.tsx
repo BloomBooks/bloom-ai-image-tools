@@ -24,7 +24,12 @@ const wiggle = keyframes`
 
 export type OpenRouterCreditsHeaderProps = {
   shouldShowConnectToOpenRouterCTA: boolean;
+  connectCtaLabel: string;
   onOpenSettingsDialog: () => void;
+  // When true (and not showing the connect CTA), render the Google AI Studio badge
+  // instead of the OpenRouter credits bar (Google exposes no credits endpoint).
+  isGoogleProvider: boolean;
+  googleStudioUrl: string;
   // Credits UI state (only used when shouldShowConnectToOpenRouterCTA=false)
   creditsTooltipLabel: string;
   creditsTooltipLines: string[];
@@ -51,7 +56,10 @@ export type OpenRouterCreditsHeaderProps = {
 
 export function OpenRouterCreditsHeader({
   shouldShowConnectToOpenRouterCTA,
+  connectCtaLabel,
   onOpenSettingsDialog,
+  isGoogleProvider,
+  googleStudioUrl,
   creditsTooltipLabel,
   creditsTooltipLines,
   creditsProgressFraction,
@@ -92,8 +100,54 @@ export function OpenRouterCreditsHeader({
           },
         }}
       >
-        Connect to OpenRouter
+        {connectCtaLabel}
       </Button>
+    );
+  }
+
+  if (isGoogleProvider) {
+    return (
+      <Box
+        component="a"
+        href={googleStudioUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="google-studio-badge"
+        aria-label="Google AI Studio"
+        sx={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 0.75,
+          px: 2,
+          py: 1,
+          borderRadius: "999px",
+          textDecoration: "none",
+          border: `1px solid ${appColors.border}`,
+          backgroundColor: appColors.surfaceAlt,
+          boxShadow: appColors.panelShadow,
+          color: appColors.textPrimary,
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          letterSpacing: "0.04em",
+          transition: "opacity 150ms ease",
+          "&:hover": { opacity: 0.85 },
+        }}
+      >
+        <Box
+          component="span"
+          aria-hidden
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            backgroundColor: appColors.accent,
+          }}
+        />
+        Google AI Studio
+        <Box component="span" aria-hidden sx={{ fontSize: "0.9rem" }}>
+          ↗
+        </Box>
+      </Box>
     );
   }
 

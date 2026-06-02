@@ -56,9 +56,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
     >
       <DialogTitle sx={{ px: { xs: 2, sm: 3 }, py: 2, pr: 8, position: "relative" }}>
         <Typography component="span" variant="h6" sx={{ fontWeight: 600 }}>
-          {visibleImages.length === 1
-            ? "Image preview"
-            : `${visibleImages.length} image preview`}
+          {visibleImages.length === 1 ? "Image preview" : `${visibleImages.length} image preview`}
         </Typography>
         <IconButton
           aria-label="Close image preview"

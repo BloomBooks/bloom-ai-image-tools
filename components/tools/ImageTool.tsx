@@ -32,7 +32,7 @@ import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
 import { theme } from "../../themes";
 
-const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
+const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image";
 
 const LOCALIZE_TOOL_ORDER = [
   "extract_cast_of_characters",

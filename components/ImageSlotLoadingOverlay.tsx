@@ -9,12 +9,13 @@ export interface ImageSlotLoadingOverlayProps {
   progress: GenerationProgressState | null;
 }
 
-const getNowMs = () =>
-  typeof performance !== "undefined" ? performance.now() : Date.now();
+const getNowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
-export const ImageSlotLoadingOverlay: React.FC<
-  ImageSlotLoadingOverlayProps
-> = ({ isVisible, borderRadius, progress }) => {
+export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = ({
+  isVisible,
+  borderRadius,
+  progress,
+}) => {
   const [now, setNow] = React.useState(getNowMs);
 
   React.useEffect(() => {

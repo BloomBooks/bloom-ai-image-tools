@@ -17,11 +17,7 @@ import {
   ThumbnailStripConfig,
 } from "../../lib/thumbnailStrips";
 import { theme } from "../../themes";
-import {
-  STRIP_BORDER,
-  STRIP_ACTIVE_BORDER_COLOR,
-  STRIP_TAB_RADIUS,
-} from "./stripStyleConstants";
+import { STRIP_BORDER, STRIP_ACTIVE_BORDER_COLOR, STRIP_TAB_RADIUS } from "./stripStyleConstants";
 
 const PIN_BUTTON_SX = {
   borderRadius: "50%",

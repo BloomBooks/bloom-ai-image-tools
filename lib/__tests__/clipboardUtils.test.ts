@@ -21,13 +21,11 @@ describe("clipboardUtils", () => {
       configurable: true,
       value: {
         clipboard: {
-          read: vi
-            .fn()
-            .mockRejectedValue(
-              Object.assign(new Error("Read permission denied."), {
-                name: "NotAllowedError",
-              }),
-            ),
+          read: vi.fn().mockRejectedValue(
+            Object.assign(new Error("Read permission denied."), {
+              name: "NotAllowedError",
+            }),
+          ),
         },
       },
     });

@@ -7,10 +7,7 @@ interface PanelToolbarProps {
   actions?: React.ReactNode;
 }
 
-export const PanelToolbar: React.FC<PanelToolbarProps> = ({
-  label,
-  actions,
-}) => {
+export const PanelToolbar: React.FC<PanelToolbarProps> = ({ label, actions }) => {
   const muiTheme = useTheme();
   const background = alpha(muiTheme.palette.background.paper, 0.9);
 

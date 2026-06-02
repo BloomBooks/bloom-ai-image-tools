@@ -25,3 +25,16 @@ export const getModelInfoById = (modelId: string | null | undefined) => {
 export const getModelNameById = (modelId: string | null | undefined) => {
   return getModelInfoById(modelId)?.name || null;
 };
+
+/**
+ * Resolves the ordered list of OpenRouter model keys to send for a request.
+ * Returns `[id, fallbackId]` when the catalog entry declares a fallback, so
+ * OpenRouter can route to the successor key once a `...-preview` key is retired.
+ * Falls back to just the requested id for unknown models (e.g. env overrides).
+ */
+export const getRequestModelIds = (modelId: string | null | undefined): string[] => {
+  const id = (modelId || "").trim();
+  if (!id) return [];
+  const fallbackId = getModelInfoById(id)?.fallbackId?.trim();
+  return fallbackId && fallbackId !== id ? [id, fallbackId] : [id];
+};

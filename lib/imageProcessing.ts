@@ -144,7 +144,7 @@ export const cropWhitespace = (imageData: string): Promise<string> => {
         0,
         0,
         croppedWidth,
-        croppedHeight
+        croppedHeight,
       );
 
       resolve(croppedCanvas.toDataURL("image/png"));
@@ -159,10 +159,7 @@ export const cropWhitespace = (imageData: string): Promise<string> => {
  * Resizes an image to fit within maxSize (preserving aspect ratio).
  * The larger dimension will be scaled to maxSize.
  */
-export const resizeImage = (
-  imageData: string,
-  maxSize: number
-): Promise<string> => {
+export const resizeImage = (imageData: string, maxSize: number): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -212,9 +209,7 @@ export const resizeImage = (
  * 1. Crop whitespace
  * 2. Resize to 200px (max dimension)
  */
-export const processImageForThumbnail = async (
-  imageData: string
-): Promise<string> => {
+export const processImageForThumbnail = async (imageData: string): Promise<string> => {
   const cropped = await cropWhitespace(imageData);
   const resized = await resizeImage(cropped, 400);
   return resized;
@@ -225,7 +220,7 @@ export const processImageForThumbnail = async (
  */
 export const saveArtStyleThumbnail = async (
   artStyleId: string,
-  imageData: string
+  imageData: string,
 ): Promise<void> => {
   const response = await fetch("/__api/save-art-style-thumbnail", {
     method: "POST",

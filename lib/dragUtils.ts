@@ -1,9 +1,7 @@
 /**
  * Checks if a DataTransfer contains at least one image file.
  */
-export const hasImageFilePayload = (
-  dataTransfer: DataTransfer | null
-): boolean => {
+export const hasImageFilePayload = (dataTransfer: DataTransfer | null): boolean => {
   if (!dataTransfer) return false;
 
   if (dataTransfer.items && dataTransfer.items.length > 0) {
@@ -32,9 +30,7 @@ export const hasImageFilePayload = (
 /**
  * Extracts the first image File from a DataTransfer, or null if none found.
  */
-export const getImageFileFromDataTransfer = (
-  dataTransfer: DataTransfer | null
-): File | null => {
+export const getImageFileFromDataTransfer = (dataTransfer: DataTransfer | null): File | null => {
   if (!dataTransfer) return null;
 
   if (dataTransfer.items && dataTransfer.items.length > 0) {

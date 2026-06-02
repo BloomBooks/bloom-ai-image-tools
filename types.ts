@@ -44,6 +44,15 @@ export type ModelReasoningLevelByModelId = Record<string, ModelReasoningLevel>;
 
 export interface ModelInfo {
   id: string;
+  /**
+   * Optional fallback OpenRouter model key. We send both `id` and `fallbackId`
+   * to OpenRouter as a `models` array, and OpenRouter uses the first one that
+   * works. This mainly handles the "preview" lifecycle: a model is first
+   * published under a `...-preview` key and later republished without it. By
+   * listing the successor key here, the app keeps working when the preview key
+   * is retired — no code change needed.
+   */
+  fallbackId?: string;
   name: string;
   description: string;
   pricing: string;

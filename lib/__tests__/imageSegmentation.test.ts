@@ -206,8 +206,18 @@ describe("extractPieceBoundsFromRaster", () => {
 
     fillRect(data, width, { left: 14, top: 12, right: 34, bottom: 62 }, { r: 220, g: 80, b: 80 });
     fillRect(data, width, { left: 56, top: 18, right: 80, bottom: 67 }, { r: 80, g: 120, b: 220 });
-    fillRect(data, width, { left: 100, top: 14, right: 122, bottom: 64 }, { r: 80, g: 180, b: 120 });
-    fillRect(data, width, { left: 10, top: 74, right: 126, bottom: 89 }, { r: 110, g: 110, b: 110 });
+    fillRect(
+      data,
+      width,
+      { left: 100, top: 14, right: 122, bottom: 64 },
+      { r: 80, g: 180, b: 120 },
+    );
+    fillRect(
+      data,
+      width,
+      { left: 10, top: 74, right: 126, bottom: 89 },
+      { r: 110, g: 110, b: 110 },
+    );
 
     const bounds = extractPieceBoundsFromRaster(
       { data, width, height },

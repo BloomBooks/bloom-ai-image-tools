@@ -24,11 +24,12 @@ const crc32 = (bytes: Uint8Array): number => {
 
 const readUint32BE = (bytes: Uint8Array, offset: number): number => {
   return (
-    (bytes[offset] << 24) |
-    (bytes[offset + 1] << 16) |
-    (bytes[offset + 2] << 8) |
-    bytes[offset + 3]
-  ) >>> 0;
+    ((bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3]) >>>
+    0
+  );
 };
 
 const writeUint32BE = (value: number, out: Uint8Array, offset: number) => {
@@ -53,9 +54,7 @@ const sanitizeKeyword = (keyword: string): string => {
   // We keep it ASCII-ish; remove NULs and clamp length.
   const withoutNull = trimmed.replace(/\u0000/g, "");
   const maxLen = 79;
-  return withoutNull.length > maxLen
-    ? withoutNull.slice(0, maxLen)
-    : withoutNull;
+  return withoutNull.length > maxLen ? withoutNull.slice(0, maxLen) : withoutNull;
 };
 
 const buildTextChunk = (keyword: string, text: string): Uint8Array => {
@@ -86,7 +85,7 @@ export type PngTextMetadata = Record<string, string | null | undefined>;
 
 export const injectPngTextMetadata = (
   pngBytes: Uint8Array,
-  fields: PngTextMetadata
+  fields: PngTextMetadata,
 ): Uint8Array => {
   if (!isValidPng(pngBytes)) {
     throw new Error("injectPngTextMetadata: invalid PNG signature");
@@ -111,7 +110,7 @@ export const injectPngTextMetadata = (
     pngBytes[signatureLen + 4],
     pngBytes[signatureLen + 5],
     pngBytes[signatureLen + 6],
-    pngBytes[signatureLen + 7]
+    pngBytes[signatureLen + 7],
   );
   if (ihdrType !== "IHDR") {
     throw new Error("injectPngTextMetadata: missing IHDR chunk");
@@ -141,7 +140,7 @@ export const injectPngTextMetadata = (
 
 export const injectPngTextMetadataIntoBlob = async (
   blob: Blob,
-  fields: PngTextMetadata
+  fields: PngTextMetadata,
 ): Promise<Blob> => {
   const entries = Object.entries(fields).filter(([, value]) => {
     const v = (value ?? "").trim();
@@ -152,9 +151,6 @@ export const injectPngTextMetadataIntoBlob = async (
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const updated = injectPngTextMetadata(bytes, fields);
   const buffer = updated.buffer as ArrayBuffer;
-  const arrayBuffer = buffer.slice(
-    updated.byteOffset,
-    updated.byteOffset + updated.byteLength
-  );
+  const arrayBuffer = buffer.slice(updated.byteOffset, updated.byteOffset + updated.byteLength);
   return new Blob([arrayBuffer], { type: "image/png" });
 };

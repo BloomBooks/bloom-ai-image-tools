@@ -26,9 +26,7 @@ interface ImageInfoPanelProps {
   item: ImageRecord;
 }
 
-const formatReasoningLevel = (
-  value: ImageRecord["reasoningLevel"]
-): string | null => {
+const formatReasoningLevel = (value: ImageRecord["reasoningLevel"]): string | null => {
   switch (value) {
     case "default":
       return "Default";
@@ -49,7 +47,7 @@ const resolveStyleSummary = (item: ImageRecord): string | null => {
   const paramStyleId = item.parameters?.styleId;
   const candidates = [item.sourceStyleId, paramStyleId];
   const styleId = candidates.find(
-    (value): value is string => Boolean(value) && !isClearArtStyleId(value)
+    (value): value is string => Boolean(value) && !isClearArtStyleId(value),
   );
   if (!styleId) {
     return null;
@@ -64,9 +62,7 @@ const resolveStyleSummary = (item: ImageRecord): string | null => {
 export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   const tool = TOOLS.find((t) => t.id === item.toolId);
   const promptContent =
-    item.promptUsed && item.promptUsed.length
-      ? item.promptUsed
-      : "Prompt unavailable.";
+    item.promptUsed && item.promptUsed.length ? item.promptUsed : "Prompt unavailable.";
 
   const [promptCopied, setPromptCopied] = React.useState(false);
   const copyResetTimeoutRef = React.useRef<number | null>(null);
@@ -98,20 +94,18 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   // Only show parameters that are recognized by the current tool definition.
   // This filters out legacy/stale parameters from older versions.
   const toolParamNames = new Set(
-    tool?.parameters.map((p) => p.name) ?? Object.keys(item.parameters)
+    tool?.parameters.map((p) => p.name) ?? Object.keys(item.parameters),
   );
   const redundantParameterKeys = new Set(["prompt"]);
-  const displayedParameters = Object.entries(item.parameters).filter(
-    ([key, value]) => {
-      if (!toolParamNames.has(key)) {
-        return false; // Filter out unknown/legacy parameters
-      }
-      if (redundantParameterKeys.has(key)) {
-        return false;
-      }
-      return typeof value === "string" && value.trim().length > 0;
+  const displayedParameters = Object.entries(item.parameters).filter(([key, value]) => {
+    if (!toolParamNames.has(key)) {
+      return false; // Filter out unknown/legacy parameters
     }
-  );
+    if (redundantParameterKeys.has(key)) {
+      return false;
+    }
+    return typeof value === "string" && value.trim().length > 0;
+  });
 
   const rows: Array<{
     label: string;
@@ -136,8 +130,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     },
     {
       label: "Duration",
-      value:
-        item.durationMs > 0 ? (item.durationMs / 1000).toFixed(2) + "s" : null,
+      value: item.durationMs > 0 ? (item.durationMs / 1000).toFixed(2) + "s" : null,
     },
     {
       label: "Cost",
@@ -150,9 +143,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     },
     {
       label: "Resolution",
-      value: item.resolution
-        ? `${item.resolution.width} x ${item.resolution.height}`
-        : null,
+      value: item.resolution ? `${item.resolution.width} x ${item.resolution.height}` : null,
     },
   ];
 
@@ -180,10 +171,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
         .map((row) => (
           <div style={rowStyle} key={row.label}>
             <span style={{ color: theme.colors.textMuted }}>{row.label}:</span>
-            <span
-              style={{ ...valueStyle, ...row.style }}
-              data-testid={row.testId}
-            >
+            <span style={{ ...valueStyle, ...row.style }} data-testid={row.testId}>
               {row.value}
             </span>
           </div>

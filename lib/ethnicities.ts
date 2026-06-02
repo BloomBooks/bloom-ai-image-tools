@@ -25,8 +25,7 @@ const FALLBACK_CATEGORIES: EthnicityCategory[] = [
   {
     id: "middle_eastern",
     label: "Middle Eastern",
-    description:
-      "Light olive to medium brown skin, dark hair, and strong brow lines.",
+    description: "Light olive to medium brown skin, dark hair, and strong brow lines.",
   },
   {
     id: "south_asian",
@@ -52,9 +51,7 @@ const normalizeCategory = (
     return null;
   }
   const idSource = isNonEmptyString(entry.id) ? entry.id : label;
-  const description = isNonEmptyString(entry.description)
-    ? entry.description.trim()
-    : label;
+  const description = isNonEmptyString(entry.description) ? entry.description.trim() : label;
   const normalizedId = idSource.trim();
   return {
     id: normalizedId,
@@ -66,9 +63,7 @@ const normalizeCategory = (
 const parseCatalog = (): EthnicityCategory[] => {
   try {
     const parsed = JSON5.parse(ethnicityCatalog) as EthnicityCatalogFile;
-    const categories = Array.isArray(parsed?.categories)
-      ? parsed.categories
-      : [];
+    const categories = Array.isArray(parsed?.categories) ? parsed.categories : [];
     const normalized = categories
       .map((category) => normalizeCategory(category))
       .filter((category): category is EthnicityCategory => Boolean(category));
@@ -88,31 +83,22 @@ const normalizeValue = (value?: string | null): string | null => {
   return value.trim().toLowerCase();
 };
 
-export const getEthnicityById = (
-  id?: string | null,
-): EthnicityCategory | null => {
+export const getEthnicityById = (id?: string | null): EthnicityCategory | null => {
   const normalized = normalizeValue(id);
   if (!normalized) return null;
   return (
-    ETHNICITY_CATEGORIES.find(
-      (category) => category.id.trim().toLowerCase() === normalized,
-    ) ?? null
+    ETHNICITY_CATEGORIES.find((category) => category.id.trim().toLowerCase() === normalized) ?? null
   );
 };
 
-export const getEthnicityByLabel = (
-  label?: string | null,
-): EthnicityCategory | null => {
+export const getEthnicityByLabel = (label?: string | null): EthnicityCategory | null => {
   const normalized = normalizeValue(label);
   if (!normalized) return null;
   return (
-    ETHNICITY_CATEGORIES.find(
-      (category) => category.label.trim().toLowerCase() === normalized,
-    ) ?? null
+    ETHNICITY_CATEGORIES.find((category) => category.label.trim().toLowerCase() === normalized) ??
+    null
   );
 };
 
-export const getEthnicityByValue = (
-  value?: string | null,
-): EthnicityCategory | null =>
+export const getEthnicityByValue = (value?: string | null): EthnicityCategory | null =>
   getEthnicityById(value) ?? getEthnicityByLabel(value);

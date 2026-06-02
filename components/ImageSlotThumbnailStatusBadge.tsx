@@ -14,9 +14,9 @@ export interface ImageSlotThumbnailStatusBadgeProps {
   status: ThumbnailStatus;
 }
 
-export const ImageSlotThumbnailStatusBadge: React.FC<
-  ImageSlotThumbnailStatusBadgeProps
-> = ({ status }) => {
+export const ImageSlotThumbnailStatusBadge: React.FC<ImageSlotThumbnailStatusBadgeProps> = ({
+  status,
+}) => {
   if (status === "idle") return null;
 
   return (

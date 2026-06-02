@@ -136,9 +136,7 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
       onRemove={allowRemove ? onRemove : undefined}
       removeIcon={isHistoryStrip ? Icons.Trash : undefined}
       actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
-      actionDisabledReasons={
-        removeDisabledReason ? { remove: removeDisabledReason } : undefined
-      }
+      actionDisabledReasons={removeDisabledReason ? { remove: removeDisabledReason } : undefined}
       starState={{
         isStarred: Boolean(item.isStarred) || stripId === "starred",
         onToggle: onToggleStar,

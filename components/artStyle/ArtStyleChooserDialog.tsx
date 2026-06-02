@@ -3,10 +3,7 @@ import { createPortal } from "react-dom";
 import { Box, Button, Stack, Typography } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
-import {
-  CLEAR_ART_STYLE_ID,
-  loadArtStylePreviewUrl,
-} from "../../lib/artStyles";
+import { CLEAR_ART_STYLE_ID, loadArtStylePreviewUrl } from "../../lib/artStyles";
 
 const DIALOG_MAX_WIDTH = "min(1000px, 92vw)";
 const DIALOG_MAX_HEIGHT = "min(900px, 90vh)";
@@ -36,14 +33,12 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     return [noneStyle, ...rest];
   }, [styles]);
 
-  const hasNoneOption = displayStyles.some(
-    (style) => style.id === CLEAR_ART_STYLE_ID
-  );
+  const hasNoneOption = displayStyles.some((style) => style.id === CLEAR_ART_STYLE_ID);
   const normalizedSelectedId = selectedId?.length
     ? selectedId
     : hasNoneOption
-    ? CLEAR_ART_STYLE_ID
-    : undefined;
+      ? CLEAR_ART_STYLE_ID
+      : undefined;
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const previewCacheRef = useRef<Map<string, string>>(new Map());
@@ -94,8 +89,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
     if (!isOpen || !normalizedSelectedId) return;
     const container = scrollAreaRef.current;
     if (!container) return;
-    const buttons =
-      container.querySelectorAll<HTMLButtonElement>("[data-style-id]");
+    const buttons = container.querySelectorAll<HTMLButtonElement>("[data-style-id]");
     for (const button of buttons) {
       if (button.dataset.styleId === normalizedSelectedId) {
         button.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -167,12 +161,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
               borderBottom: `1px solid ${theme.colors.border}`,
             }}
           >
-            <Stack
-              direction="row"
-              spacing={2}
-              alignItems="center"
-              justifyContent="space-between"
-            >
+            <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
               <Typography
                 id="art-style-dialog-title"
                 variant="h5"
@@ -190,10 +179,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
               </Button>
             </Stack>
           </Box>
-          <Box
-            sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 4 }}
-            ref={scrollAreaRef}
-          >
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 4 }} ref={scrollAreaRef}>
             <Box
               sx={{
                 display: "grid",
@@ -206,13 +192,9 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
               }}
             >
               {displayStyles.map((style) => {
-                const isSelected = normalizedSelectedId
-                  ? style.id === normalizedSelectedId
-                  : false;
+                const isSelected = normalizedSelectedId ? style.id === normalizedSelectedId : false;
                 const previewSrc = previewCacheRef.current.get(style.id);
-                const hasPreviewSource = Boolean(
-                  style.previewUrl || style.previewAssetKey
-                );
+                const hasPreviewSource = Boolean(style.previewUrl || style.previewAssetKey);
                 return (
                   <Box
                     key={style.id}
@@ -224,9 +206,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                       flexDirection: "column",
                       textAlign: "left",
                       borderRadius: 3,
-                      border: `3px solid ${
-                        isSelected ? theme.colors.accent : theme.colors.border
-                      }`,
+                      border: `3px solid ${isSelected ? theme.colors.accent : theme.colors.border}`,
                       overflow: "hidden",
                       backgroundColor: isSelected
                         ? SELECTED_CARD_BACKGROUND
@@ -289,11 +269,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                       }}
                     >
                       <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography
-                          variant="subtitle1"
-                          fontWeight={600}
-                          flex={1}
-                        >
+                        <Typography variant="subtitle1" fontWeight={600} flex={1}>
                           {style.name}
                         </Typography>
                       </Stack>

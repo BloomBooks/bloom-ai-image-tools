@@ -68,7 +68,7 @@ export const installMockFsForHistoryStore = async (page: Page) => {
     const toBlob = async (data: unknown): Promise<Blob> => {
       if (data instanceof Blob) return data;
       if (data instanceof ArrayBuffer) return new Blob([data]);
-      if (ArrayBuffer.isView(data)) return new Blob([data.buffer]);
+      if (ArrayBuffer.isView(data)) return new Blob([data.buffer as ArrayBuffer]);
       if (typeof data === "string") return new Blob([data]);
       return new Blob([String(data)]);
     };
@@ -188,11 +188,7 @@ export const resetAllStorage = async (page: Page) => {
     window.sessionStorage?.setItem(marker, "1");
 
     (window as unknown as Record<string, unknown>).__resetReady = (async () => {
-      const dbs = [
-        "bloom-image-tools-state",
-        "bloom-image-tools-fs",
-        "bloom-image-tools-history",
-      ];
+      const dbs = ["bloom-image-tools-state", "bloom-image-tools-fs", "bloom-image-tools-history"];
       await Promise.all(
         dbs.map(
           (name) =>

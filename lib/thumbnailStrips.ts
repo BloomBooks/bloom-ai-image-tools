@@ -193,8 +193,7 @@ export const getOtherStripsContainingItem = (
 ): ThumbnailStripId[] => {
   return THUMBNAIL_STRIP_ORDER.filter(
     (stripId) =>
-      stripId !== sourceStripId &&
-      (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
+      stripId !== sourceStripId && (snapshot.itemIdsByStrip[stripId] || []).includes(itemId),
   );
 };
 

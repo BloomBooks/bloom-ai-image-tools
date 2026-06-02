@@ -1,9 +1,5 @@
 import React, { useMemo } from "react";
-import {
-  ImageRecord,
-  ThumbnailStripId,
-  ThumbnailStripsSnapshot,
-} from "../../types";
+import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   getOtherStripsContainingItem,
   STRIP_DESCRIPTIONS,
@@ -32,19 +28,14 @@ interface ThumbnailStripsCollectionProps {
     draggedId: string | null,
     event?: React.DragEvent | null,
   ) => void;
-  onVisibleItemIdsChange: (
-    stripId: ThumbnailStripId,
-    visibleItemIds: string[],
-  ) => void;
+  onVisibleItemIdsChange: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   onActivateStrip: (stripId: ThumbnailStripId) => void;
   onTogglePin: (stripId: ThumbnailStripId) => void;
   onDragActivateStrip: (stripId: ThumbnailStripId) => void;
   isAnyDndDragging?: boolean;
 }
 
-export const ThumbnailStripsCollection: React.FC<
-  ThumbnailStripsCollectionProps
-> = ({
+export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
   snapshot,
   entries,
   selectedId,
@@ -76,9 +67,7 @@ export const ThumbnailStripsCollection: React.FC<
 
   const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => pinnedStripIds.has(id));
 
-  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
-    (id) => !pinnedStripIds.has(id),
-  );
+  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => !pinnedStripIds.has(id));
 
   const activeUnpinnedStripId = unpinnedStripIds.length
     ? unpinnedStripIds.includes(snapshot.activeStripId)
@@ -107,7 +96,8 @@ export const ThumbnailStripsCollection: React.FC<
         return;
       }
 
-      reasons[itemId] = `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
+      reasons[itemId] =
+        `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
     });
 
     return reasons;
@@ -117,8 +107,7 @@ export const ThumbnailStripsCollection: React.FC<
     const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
     const description = STRIP_DESCRIPTIONS[stripId];
-    const emptyStateMessage =
-      typeof description === "function" ? description(config) : description;
+    const emptyStateMessage = typeof description === "function" ? description(config) : description;
 
     return (
       <ThumbnailStrip
@@ -138,9 +127,7 @@ export const ThumbnailStripsCollection: React.FC<
         pinned={pinnedStripIds.has(stripId)}
         isActive={activeOverride ?? snapshot.activeStripId === stripId}
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
-        onRequestHistoryAccess={
-          stripId === "history" ? onRequestHistoryAccess : undefined
-        }
+        onRequestHistoryAccess={stripId === "history" ? onRequestHistoryAccess : undefined}
         emptyStateMessage={emptyStateMessage}
         onSelect={onSelect}
         onToggleStar={onToggleStar}

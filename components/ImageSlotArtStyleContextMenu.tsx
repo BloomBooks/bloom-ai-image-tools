@@ -6,9 +6,10 @@ export interface ImageSlotArtStyleContextMenuProps {
   onSetThumbnail: () => void;
 }
 
-export const ImageSlotArtStyleContextMenu: React.FC<
-  ImageSlotArtStyleContextMenuProps
-> = ({ contextMenu, onSetThumbnail }) => {
+export const ImageSlotArtStyleContextMenu: React.FC<ImageSlotArtStyleContextMenuProps> = ({
+  contextMenu,
+  onSetThumbnail,
+}) => {
   if (!contextMenu) return null;
 
   return (

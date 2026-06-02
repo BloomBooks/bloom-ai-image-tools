@@ -20,8 +20,7 @@ const WHITE_BACKGROUND_THRESHOLD = 242;
 const WHITE_SPREAD_THRESHOLD = 20;
 const SPLIT_OUTPUT_MARGIN_PX = 8;
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const isBackgroundPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean => {
   const alpha = data[pixelIndex + 3];
@@ -195,15 +194,8 @@ const detectGridBounds = (mask: Uint8Array, width: number, height: number): Boun
   const rowCounts = collectAxisCounts(mask, width, height, "row");
   const columnCounts = collectAxisCounts(mask, width, height, "column");
   const rowThreshold = Math.max(2, Math.floor(width * 0.008));
-  const maxColumnCount = columnCounts.reduce(
-    (highest, count) => Math.max(highest, count),
-    0,
-  );
-  const columnThreshold = Math.max(
-    2,
-    Math.floor(height * 0.008),
-    Math.ceil(maxColumnCount * 0.08),
-  );
+  const maxColumnCount = columnCounts.reduce((highest, count) => Math.max(highest, count), 0);
+  const columnThreshold = Math.max(2, Math.floor(height * 0.008), Math.ceil(maxColumnCount * 0.08));
   const rowGap = Math.max(2, Math.floor(height * 0.008));
   const columnGap = Math.max(2, Math.floor(width * 0.008));
   const rows = detectActiveRanges(rowCounts, rowThreshold, rowGap);
@@ -356,9 +348,8 @@ const findBestGapRange = (counts: number[]): { start: number; end: number } | nu
     const gapWidth = gapEnd - gapStart + 1;
     const touchesEdge = gapStart === 0 || gapEnd === counts.length - 1;
     if (!touchesEdge && gapWidth >= minimumGap) {
-      const averageCount = counts
-        .slice(gapStart, gapEnd + 1)
-        .reduce((total, count) => total + count, 0) / gapWidth;
+      const averageCount =
+        counts.slice(gapStart, gapEnd + 1).reduce((total, count) => total + count, 0) / gapWidth;
       const score = gapWidth * (lowCountThreshold + 1) - averageCount;
       if (!best || score > best.score) {
         best = { start: gapStart, end: gapEnd, score };
@@ -432,10 +423,8 @@ const trySplitBoundsByWhitespace = (
       : Math.max(8, Math.floor((bounds.bottom - bounds.top + 1) * 0.18));
 
   if (
-    (axis === "column" &&
-      (firstWidth < minimumChildSpan || secondWidth < minimumChildSpan)) ||
-    (axis === "row" &&
-      (firstHeight < minimumChildSpan || secondHeight < minimumChildSpan))
+    (axis === "column" && (firstWidth < minimumChildSpan || secondWidth < minimumChildSpan)) ||
+    (axis === "row" && (firstHeight < minimumChildSpan || secondHeight < minimumChildSpan))
   ) {
     return null;
   }
@@ -590,8 +579,7 @@ const filterThinArtifactBounds = (bounds: Bounds[]): Bounds[] => {
       0,
     );
     const averageOtherHeight =
-      others.reduce((total, other) => total + (other.bottom - other.top + 1), 0) /
-      others.length;
+      others.reduce((total, other) => total + (other.bottom - other.top + 1), 0) / others.length;
     const overlapCount = others.filter((other) =>
       rangesOverlap(bound.left, bound.right, other.left, other.right, 0),
     ).length;
@@ -664,10 +652,7 @@ const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
     image.src = dataUrl;
   });
 
-const createMarginCanvas = (
-  sourceCanvas: HTMLCanvasElement,
-  margin: number,
-): HTMLCanvasElement => {
+const createMarginCanvas = (sourceCanvas: HTMLCanvasElement, margin: number): HTMLCanvasElement => {
   if (margin <= 0) {
     return sourceCanvas;
   }
@@ -686,10 +671,7 @@ const createMarginCanvas = (
   return canvas;
 };
 
-const cropBoundsToDataUrl = async (
-  image: HTMLImageElement,
-  bounds: Bounds,
-): Promise<string> => {
+const cropBoundsToDataUrl = async (image: HTMLImageElement, bounds: Bounds): Promise<string> => {
   const paddingX = Math.max(8, Math.floor((bounds.right - bounds.left + 1) * 0.04));
   const paddingY = Math.max(8, Math.floor((bounds.bottom - bounds.top + 1) * 0.04));
   const sourceLeft = clamp(bounds.left - paddingX, 0, image.naturalWidth - 1);
@@ -781,11 +763,14 @@ export const segmentImageIntoPieces = async (
 
   context.drawImage(image, 0, 0);
   const raster = context.getImageData(0, 0, canvas.width, canvas.height);
-  const bounds = extractPieceBoundsFromRaster({
-    data: raster.data,
-    width: raster.width,
-    height: raster.height,
-  }, options);
+  const bounds = extractPieceBoundsFromRaster(
+    {
+      data: raster.data,
+      width: raster.width,
+      height: raster.height,
+    },
+    options,
+  );
 
   if (!bounds.length) {
     return [];

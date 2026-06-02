@@ -4,18 +4,10 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
-    "typeRoots": [
-      "./node_modules/@types"
-    ],
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -23,15 +15,9 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ],
-      "@playwright/test": [
-        "./node_modules/@playwright/test/types/test"
-      ],
-      "json5": [
-        "./node_modules/json5/lib/index.d.ts"
-      ]
+      "@/*": ["./*"],
+      "@playwright/test": ["./node_modules/@playwright/test/types/test"],
+      "json5": ["./node_modules/json5/lib/index.d.ts"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true

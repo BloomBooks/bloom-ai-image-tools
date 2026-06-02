@@ -12,11 +12,26 @@
       "edit-with-reference-image": 3,
     },
     // Google Gemini docs list these ratios for Gemini 3 Pro Image Preview.
-    supportedAspectRatios: ["2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9", "21:9"],
+    supportedAspectRatios: [
+      "2:3",
+      "3:4",
+      "4:5",
+      "9:16",
+      "1:1",
+      "5:4",
+      "4:3",
+      "3:2",
+      "16:9",
+      "21:9",
+    ],
     default: false,
   },
   {
+    // OpenRouter currently only exposes the "-preview" key. Once it retires the
+    // preview and republishes as "google/gemini-3.1-flash-image", OpenRouter
+    // will route to that fallback automatically — no change needed here.
     id: "google/gemini-3.1-flash-image-preview",
+    fallbackId: "google/gemini-3.1-flash-image",
     name: "Gemini 3.1 Flash",
     badge: "Great",
     description: "'Nano Banana 2'. Good for editing, as it preserves the original image. Not quite as good at instruction understanding as Gemini 3 Pro.",
@@ -26,7 +41,22 @@
       "edit-with-reference-image": 3,
     },
     // Google Gemini docs note that 3.1 Flash adds the four extreme ratios.
-    supportedAspectRatios: ["1:8", "1:4", "2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9", "21:9", "4:1", "8:1"],
+    supportedAspectRatios: [
+      "1:8",
+      "1:4",
+      "2:3",
+      "3:4",
+      "4:5",
+      "9:16",
+      "1:1",
+      "5:4",
+      "4:3",
+      "3:2",
+      "16:9",
+      "21:9",
+      "4:1",
+      "8:1",
+    ],
     initialReasoningLevel: "medium",
     default: true,
   },

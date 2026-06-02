@@ -287,15 +287,13 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
     const renderActionButton = (action: SlotActionButton, sxOverride?: SxProps<MuiTheme>) => {
       const isActive = action.isActive ?? false;
       const usesInfoTooltip = action.key === "info" && !!image;
-      const tooltipTitle = usesInfoTooltip
-        ? (
-            <div data-testid="image-info-tooltip">
-              <ImageInfoPanel item={image} />
-            </div>
-          )
-        : action.disabled
-          ? action.title
-          : null;
+      const tooltipTitle = usesInfoTooltip ? (
+        <div data-testid="image-info-tooltip">
+          <ImageInfoPanel item={image} />
+        </div>
+      ) : action.disabled ? (
+        action.title
+      ) : null;
 
       const baseSx: SxProps<MuiTheme> = {
         p: `${buttonPadding}px`,

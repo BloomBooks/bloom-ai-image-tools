@@ -1,7 +1,4 @@
-import {
-  OPENROUTER_KEYS_URL,
-  OpenRouterApiError,
-} from "../services/openRouterService";
+import { OPENROUTER_KEYS_URL, OpenRouterApiError } from "../services/openRouterService";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -41,9 +38,7 @@ export async function fetchOpenRouterKeyStatus(
 ): Promise<OpenRouterKeyStatus> {
   const key = apiKey?.trim();
   if (!key) {
-    throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
-    );
+    throw new Error("OpenRouter API key is missing. Connect to OpenRouter to continue.");
   }
 
   const response = await fetch(`${OPENROUTER_BASE_URL}/key`, {
@@ -67,8 +62,7 @@ export async function fetchOpenRouterKeyStatus(
   if (!response.ok) {
     const detailMessage = getOpenRouterErrorDetail(data);
     const message = detailMessage || rawText || response.statusText || "";
-    const preview =
-      message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
     throw new OpenRouterApiError(
       `Failed to fetch OpenRouter key status: ${response.status} ${preview}`,
       {
@@ -93,10 +87,7 @@ export async function fetchOpenRouterKeyStatus(
     return Number.isFinite(num) ? num : null;
   };
 
-  const entry: Record<string, unknown> = (data?.data ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const entry: Record<string, unknown> = (data?.data ?? {}) as Record<string, unknown>;
 
   return {
     label: normalizeErrorString(entry.label) ?? null,

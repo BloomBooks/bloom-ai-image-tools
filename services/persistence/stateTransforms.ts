@@ -8,7 +8,7 @@ const cloneHistory = (history: PersistedImageToolsState["appState"]["history"]) 
 };
 
 export const prepareStateForPersistence = (
-  state: PersistedImageToolsState
+  state: PersistedImageToolsState,
 ): PersistedImageToolsState => {
   const history = cloneHistory(state.appState.history);
 
@@ -23,7 +23,7 @@ export const prepareStateForPersistence = (
 };
 
 export const restoreStateFromPersistence = (
-  state: PersistedImageToolsState
+  state: PersistedImageToolsState,
 ): PersistedImageToolsState => {
   if (!state.historyNewestFirst) {
     return state;

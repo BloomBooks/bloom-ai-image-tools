@@ -160,8 +160,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
-  const derivedResultLabel =
-    tool?.id === "break_into_pieces" ? "Pieces" : "Result";
+  const derivedResultLabel = tool?.id === "break_into_pieces" ? "Pieces" : "Result";
   const targetPanelLabel =
     tool?.id === "ethnicity" ? "Character grid or scene to change" : "Image to Edit";
   const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;

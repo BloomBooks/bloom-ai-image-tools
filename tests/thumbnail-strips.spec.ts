@@ -271,7 +271,9 @@ test.describe("thumbnail strips", () => {
       .toEqual([secondSrcBefore, firstSrcBefore]);
   });
 
-  test("opens the full-screen preview dialog when control is released after selecting thumbnails", async ({ page }) => {
+  test("opens the full-screen preview dialog when control is released after selecting thumbnails", async ({
+    page,
+  }) => {
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
 
     await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);
@@ -304,7 +306,9 @@ test.describe("thumbnail strips", () => {
     await expect(previewDialog).toBeHidden();
   });
 
-  test("deduplicates preview selections when the same thumbnail is control-clicked multiple times", async ({ page }) => {
+  test("deduplicates preview selections when the same thumbnail is control-clicked multiple times", async ({
+    page,
+  }) => {
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
 
     await uploadImageToTarget(page, ALT_SAMPLE_IMAGE_PATH);

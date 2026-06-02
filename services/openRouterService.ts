@@ -1,9 +1,17 @@
 import type { ModelReasoningLevel } from "../types";
 import { getOpenAIOrientation } from "../lib/aspectRatios";
-import {
-  canUseLocalDummyModelWithoutApiKey,
-  LOCAL_DUMMY_MODEL_ID,
-} from "../lib/localModels";
+import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
+import { getRequestModelIds } from "../lib/modelsCatalog";
+
+/**
+ * Builds the OpenRouter model selector for a request body. When a model
+ * declares a fallback key we send a `models` array so OpenRouter routes to the
+ * first key that works; otherwise we send the single `model` field.
+ */
+function buildModelSelector(modelId: string): Record<string, unknown> {
+  const ids = getRequestModelIds(modelId);
+  return ids.length > 1 ? { models: ids } : { model: modelId };
+}
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
@@ -38,10 +46,8 @@ export class OpenRouterApiError extends Error {
 // Note: google/gemini-3.1-flash-lite-preview (aka "Nano Banana") supports image output,
 // whereas google/gemini-2.5-flash only supports text output.
 const DEFAULT_IMAGE_MODEL = (
-  (typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.OPENROUTER_IMAGE_MODEL) ||
-  (typeof import.meta !== "undefined" &&
-    (import.meta as any).env?.VITE_OPENROUTER_IMAGE_MODEL) ||
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.OPENROUTER_IMAGE_MODEL) ||
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_OPENROUTER_IMAGE_MODEL) ||
   process.env.OPENROUTER_IMAGE_MODEL ||
   process.env.VITE_OPENROUTER_IMAGE_MODEL ||
   "google/gemini-3.1-flash-lite-preview"
@@ -177,8 +183,7 @@ function mapAspectRatioToOpenAISize(aspectRatio?: string): string {
   }
 }
 
-const getNow = () =>
-  typeof performance !== "undefined" ? performance.now() : Date.now();
+const getNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 const resolveLocalDummyDimensions = (aspectRatio?: string) => {
   const match = aspectRatio?.trim().match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
@@ -447,9 +452,7 @@ export const editImage = async (
 
   const key = apiKey?.trim();
   if (!key) {
-    throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
-    );
+    throw new Error("OpenRouter API key is missing. Connect to OpenRouter to continue.");
   }
 
   const { signal, imageConfig } = options ?? {};
@@ -471,15 +474,13 @@ export const editImage = async (
 
   // Build image generation parameters for different providers
   // Gemini-style: aspect_ratio and image_size in image_config
-  const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(
-    imageConfig?.aspectRatio,
-  );
+  const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
   const geminiImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
   // OpenAI-style: size as a direct parameter
   const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
 
   const body: Record<string, any> = {
-    model: modelToUse,
+    ...buildModelSelector(modelToUse),
     messages: [
       {
         role: "user",
@@ -538,15 +539,11 @@ export const editImage = async (
     }
 
     const message = detailMessage || rawText || response.statusText || "";
-    const preview =
-      message.length > 500 ? `${message.slice(0, 500)}…` : message;
-    throw new OpenRouterApiError(
-      `OpenRouter request failed: ${response.status} ${preview}`,
-      {
-        status: response.status,
-        detailMessage,
-      },
-    );
+    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
+      status: response.status,
+      detailMessage,
+    });
   }
 
   // Try to extract an image URL/base64 from chat-style response
@@ -604,15 +601,12 @@ export const generateText = async (
 ): Promise<GenerateTextResult> => {
   const key = apiKey?.trim();
   if (!key) {
-    throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
-    );
+    throw new Error("OpenRouter API key is missing. Connect to OpenRouter to continue.");
   }
 
   const startTime = performance.now();
   const images = (base64Images || []).filter((x) => !!x);
-  const modelToUse =
-    (options?.modelId && options.modelId.trim()) || DEFAULT_TEXT_MODEL;
+  const modelToUse = (options?.modelId && options.modelId.trim()) || DEFAULT_TEXT_MODEL;
   const content: any[] = [{ type: "text", text: prompt }];
 
   for (const dataUrl of images) {
@@ -632,7 +626,7 @@ export const generateText = async (
       "X-Title": "Bloom AI Image Tools",
     },
     body: JSON.stringify({
-      model: modelToUse,
+      ...buildModelSelector(modelToUse),
       messages: [
         {
           role: "user",
@@ -665,15 +659,11 @@ export const generateText = async (
     }
 
     const message = detailMessage || rawText || response.statusText || "";
-    const preview =
-      message.length > 500 ? `${message.slice(0, 500)}…` : message;
-    throw new OpenRouterApiError(
-      `OpenRouter request failed: ${response.status} ${preview}`,
-      {
-        status: response.status,
-        detailMessage,
-      },
-    );
+    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
+      status: response.status,
+      detailMessage,
+    });
   }
 
   const text =
@@ -701,9 +691,7 @@ export const fetchOpenRouterCredits = async (
 ): Promise<OpenRouterCredits> => {
   const key = apiKey?.trim();
   if (!key) {
-    throw new Error(
-      "OpenRouter API key is missing. Connect to OpenRouter to continue.",
-    );
+    throw new Error("OpenRouter API key is missing. Connect to OpenRouter to continue.");
   }
 
   const response = await fetch(`${OPENROUTER_BASE_URL}/credits`, {
@@ -727,8 +715,7 @@ export const fetchOpenRouterCredits = async (
   if (!response.ok) {
     const detailMessage = getOpenRouterErrorDetail(data);
     const message = detailMessage || rawText || response.statusText || "";
-    const preview =
-      message.length > 500 ? `${message.slice(0, 500)}…` : message;
+    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
     throw new OpenRouterApiError(
       `Failed to fetch OpenRouter credits: ${response.status} ${preview}`,
       {

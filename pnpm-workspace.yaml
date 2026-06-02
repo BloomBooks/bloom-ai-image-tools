@@ -1,6 +1,14 @@
 packages:
   - .
 
+# Supply-chain cooldown: refuse to install any package version published less
+# than this many minutes ago (applies to transitive deps too). pnpm v11
+# defaults to 1440 (24h); set explicitly here so the policy is documented and
+# easy to tune. Use minimumReleaseAgeExclude for an urgent hotfix exception.
+minimumReleaseAge: 1440
+# minimumReleaseAgeExclude:
+#   - some-package
+
 allowBuilds:
   esbuild: true
   onnxruntime-node: true
@@ -12,10 +20,13 @@ onlyBuiltDependencies:
   - onnxruntime-node
   - protobufjs
   - sharp
+# Pin to explicit versions rather than `latest` so a refresh of the catalog
+# can never silently pull a brand-new (possibly compromised) release.
+# Bump these deliberately when you want to move up.
 catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@latest
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-  vite-plus: latest
+  vite: npm:@voidzero-dev/vite-plus-core@0.1.21
+  vitest: npm:@voidzero-dev/vite-plus-test@0.1.21
+  vite-plus: 0.1.21
 overrides:
   vite: "catalog:"
   vitest: "catalog:"

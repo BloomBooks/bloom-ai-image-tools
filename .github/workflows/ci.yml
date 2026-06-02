@@ -10,7 +10,7 @@ on:
       - master
 
 jobs:
-  format:
+  check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,5 +25,8 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Check formatting
-        run: vp fmt --check
+      # Formatting + lint + type-check. Formatting is also enforced locally by
+      # the pre-commit hook; lint and type-check live here so they don't block
+      # commits (which would tempt --no-verify and bypass formatting too).
+      - name: Check format, lint, and types
+        run: vp check

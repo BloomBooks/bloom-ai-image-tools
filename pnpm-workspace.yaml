@@ -5,7 +5,7 @@ packages:
 # than this many minutes ago (applies to transitive deps too). pnpm v11
 # defaults to 1440 (24h); set explicitly here so the policy is documented and
 # easy to tune. Use minimumReleaseAgeExclude for an urgent hotfix exception.
-minimumReleaseAge: 1440
+minimumReleaseAge: 10080
 # minimumReleaseAgeExclude:
 #   - some-package
 

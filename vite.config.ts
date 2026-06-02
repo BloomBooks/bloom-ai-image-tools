@@ -148,7 +148,7 @@ const artStyleThumbnailPlugin = () => ({
 export default defineConfig({
   // Pre-commit runs formatting only: fast and essentially never fails, so
   // there's no incentive to `git commit --no-verify` (which would also skip
-  // the formatter). Lint and type-checking are enforced in CI instead.
+  // the formatter). Run `vp check` manually for lint/type-checking.
   staged: {
     "*": "vp fmt",
   },

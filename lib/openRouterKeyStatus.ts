@@ -1,4 +1,8 @@
-import { OPENROUTER_KEYS_URL, OpenRouterApiError } from "../services/openRouterService";
+import {
+  fetchOpenRouterCredits,
+  OPENROUTER_KEYS_URL,
+  OpenRouterApiError,
+} from "../services/openRouterService";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -9,6 +13,11 @@ export interface OpenRouterKeyStatus {
   limitRemaining: number | null;
   limitReset: string | null;
   usage: number;
+  // Account-level credit balance from the /credits endpoint. This is the
+  // total credits purchased/granted to the account (independent of any
+  // per-key spend limit). Null when the balance could not be retrieved.
+  accountTotalCredits: number | null;
+  accountRemainingCredits: number | null;
 }
 
 export interface FetchOpenRouterKeyStatusOptions {
@@ -41,15 +50,22 @@ export async function fetchOpenRouterKeyStatus(
     throw new Error("OpenRouter API key is missing. Connect to OpenRouter to continue.");
   }
 
-  const response = await fetch(`${OPENROUTER_BASE_URL}/key`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "HTTP-Referer": window.location.origin,
-      "X-Title": "Bloom AI Image Tools",
-    },
-    signal: options?.signal,
-  });
+  // Fetch the per-key status and the account-level credit balance in
+  // parallel. The balance is best-effort: a key with no per-key limit has no
+  // meaningful "remaining" of its own, so we fall back to the account balance
+  // to give the credits gauge something real to display.
+  const [response, accountCredits] = await Promise.all([
+    fetch(`${OPENROUTER_BASE_URL}/key`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Bloom AI Image Tools",
+      },
+      signal: options?.signal,
+    }),
+    fetchOpenRouterCredits(key, { signal: options?.signal }).catch(() => null),
+  ]);
 
   const rawText = await response.text().catch(() => "");
   let data: any = null;
@@ -96,5 +112,7 @@ export async function fetchOpenRouterKeyStatus(
     limitRemaining: normalizeNullable(entry.limit_remaining),
     limitReset: normalizeErrorString(entry.limit_reset) ?? null,
     usage: normalize(entry.usage),
+    accountTotalCredits: accountCredits ? accountCredits.totalCredits : null,
+    accountRemainingCredits: accountCredits ? accountCredits.remainingCredits : null,
   };
 }

@@ -29,18 +29,16 @@ export interface GeneratedTextResult {
   promptUsed: string;
 }
 
-export type CapabilityName = string;
-
-// Model capability scores are on a 0-5 scale.
-export type CapabilityScore = 0 | 1 | 2 | 3 | 4 | 5;
-export type ModelCapabilities = Partial<Record<CapabilityName, CapabilityScore>>;
-
-// Tool capability flags are boolean: true means the tool uses that capability.
-export type ToolCapabilities = Partial<Record<CapabilityName, boolean>>;
-
 export type ModelReasoningLevel = "default" | "none" | "low" | "medium" | "high";
 
-export type ModelReasoningLevelByModelId = Record<string, ModelReasoningLevel>;
+/**
+ * Last-measured generation cost and duration for a tool/model/reasoning/size
+ * combination. Time scales roughly with price, so both live under one key.
+ */
+export interface MeasuredStats {
+  cost: number;
+  durationMs: number;
+}
 
 export interface ModelInfo {
   id: string;
@@ -58,7 +56,6 @@ export interface ModelInfo {
   pricing: string;
   default?: boolean;
   badge?: string;
-  capabilities?: ModelCapabilities;
   initialReasoningLevel?: ModelReasoningLevel;
   supportedAspectRatios?: string[];
 }
@@ -90,13 +87,65 @@ export interface ToolDefinition {
   actionButtonLabel?: string;
   referenceImages: "0" | "0+" | "1" | "1+";
   outputType?: "image" | "text";
-  fixedModelId?: string;
+  /**
+   * Models this tool may run on, in display order. The first recommended model
+   * (see `recommendedModelIds`) is the default; the user can switch to any other
+   * id in this list. When omitted, the tool falls back to the shared default
+   * list (all image-capable catalog models, Gemini 3.1 Flash recommended).
+   */
+  modelIds?: string[];
+  /**
+   * Ordered subset of `modelIds` considered "recommended". May be empty (no
+   * preference). The first entry is the tool's default model. Options are shown
+   * default-first, then other recommended models, then remaining allowed ones.
+   */
+  recommendedModelIds?: string[];
+  /**
+   * Model ids to exclude for this tool even when they're in the default list
+   * (e.g. a model that produces bad results for this specific task).
+   */
+  disallowedModelIds?: string[];
   editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
-  capabilities?: ToolCapabilities;
+  /**
+   * Tool runs entirely in the browser with no OpenRouter call (e.g. PDF page
+   * rasterization). Local tools don't require authentication and bypass the
+   * normal generation pipeline in ImageToolsWorkspace.handleApplyTool.
+   */
+  localOnly?: boolean;
   /** Optional post-processing pipeline (run sequentially on the returned image). */
   postProcessingFunctions?: string[];
   /** Optional derived output handling for tools that split a generated sheet into assets. */
   derivedResultMode?: ToolDerivedResultMode;
+  /**
+   * For "split-images" tools, also keep the unsplit grid sheet alongside the
+   * individual pieces (instead of discarding it once the pieces are produced).
+   */
+  keepDerivedSourceSheet?: boolean;
+  /**
+   * The generation prompt asks the model to also return per-piece text as a
+   * JSON array in its text channel (in the same order as the produced grid).
+   * We parse that and store each entry as the matching piece's `caption`.
+   */
+  captionsFromTextChannel?: boolean;
+  /**
+   * Split the generated sheet by connected components with a small merge margin
+   * (one panel illustration = one piece). Large white gutters keep panels apart
+   * while the margin absorbs hairline gaps inside a panel.
+   */
+  splitByComponents?: boolean;
+  /**
+   * Force a reasoning level for this tool's image generation, overriding the
+   * model default. Use a low level for mechanical tasks (crop/straighten/
+   * arrange) so the model doesn't exhaust its token budget "thinking" and fail
+   * to return an image.
+   */
+  imageReasoningLevel?: ModelReasoningLevel;
+  /**
+   * Request an output size + aspect ratio matched to the input image (rounded
+   * up to the nearest supported size tier) instead of the default. Use for
+   * tools that decompose a page so a high-res source isn't downscaled.
+   */
+  autoSizeFromInput?: boolean;
   /** Hidden tools without a shape picker can still override their requested aspect ratio. */
   hiddenAspectRatioDefault?: string;
 }
@@ -112,6 +161,12 @@ export interface ImageRecordData {
   parentId: string | null;
   imageData: string; // Base64
   imageFileName?: string | null;
+  /**
+   * Human-facing text for the image (e.g. an OCR-extracted panel caption).
+   * Stored as real text data — distinct from `imageFileName` (storage name) —
+   * so it can be edited, persisted, and pasted into apps like Bloom as text.
+   */
+  caption?: string | null;
   toolId: string;
   parameters: Record<string, string>;
   sourceStyleId?: string | null;
@@ -150,6 +205,15 @@ export interface AppState {
 export interface GenerationProgressState {
   startedAt: number;
   estimatedDurationMs: number;
+  /**
+   * Optional phase indicator for tools that run more than a single image fetch
+   * (e.g. break-comic: redraw sheet → transcribe captions → split). Only set
+   * when there is more than one phase; the loading overlay shows it as
+   * "Phase {phaseIndex}/{phaseCount}: {phaseLabel}".
+   */
+  phaseLabel?: string;
+  phaseIndex?: number;
+  phaseCount?: number;
 }
 
 export interface GenerationTimingState {
@@ -185,8 +249,16 @@ export interface PersistedImageToolsState {
   appState: PersistedAppState;
   paramsByTool: ToolParamsById;
   activeToolId: string | null;
-  selectedModelId: string | null;
-  modelReasoningLevels?: ModelReasoningLevelByModelId;
+  /** toolId -> chosen model id (per-tool model selection). */
+  modelByTool?: Record<string, string>;
+  /** toolId -> reasoning-level override for that tool's selected model. */
+  reasoningByTool?: Record<string, ModelReasoningLevel>;
+  /**
+   * Last-measured cost + duration keyed by
+   * `${toolId}|${modelId}|${reasoningLevel}|${sizeToken}`, shown in the per-tool
+   * model indicator's tooltip and reused as the price/time estimate going forward.
+   */
+  measuredStatsByKey?: Record<string, MeasuredStats>;
   generationTiming?: GenerationTimingState;
   auth: AuthState;
   /** When true, the persisted history array is ordered newest -> oldest. */

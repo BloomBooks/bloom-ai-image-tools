@@ -1,5 +1,3 @@
-import type { CapabilityName } from "../types";
-
 /**
  * Formats a numeric credit value for display.
  * Returns "--" for invalid/missing values.
@@ -48,13 +46,3 @@ export const formatSourceSummary = (
   const summary = `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   return `Included ${summary}.`;
 };
-
-/**
- * Formats a capability name for display (e.g., "image-generation" -> "Image Generation").
- */
-export const formatCapabilityLabel = (name: CapabilityName): string =>
-  name
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");

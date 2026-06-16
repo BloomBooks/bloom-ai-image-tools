@@ -13,6 +13,25 @@ type Bounds = {
 
 type ExtractPieceBoundsOptions = {
   preferSeparatedSubjects?: boolean;
+  /**
+   * Return connected-component pieces directly (skip the grid-vs-component
+   * heuristic). Used for clean panel grids where each panel is one illustration.
+   */
+  preferComponents?: boolean;
+  /**
+   * Merge components whose bounding boxes are within this fraction of the image
+   * long edge of each other. Absorbs hairline gaps inside a single panel (a
+   * figure + a nearby prop) without merging panels, which sit far apart thanks
+   * to the large white gutters between them.
+   */
+  componentMergeMarginRatio?: number;
+  /**
+   * Force exactly this many pieces (used with preferComponents). When more
+   * components are found than wanted, the closest pairs are merged first — those
+   * are a panel's own fragments, since panels are separated by wide gutters — so
+   * the result lands on the known panel count instead of an over-split mess.
+   */
+  targetPieceCount?: number;
 };
 
 const ALPHA_BACKGROUND_THRESHOLD = 24;
@@ -471,6 +490,7 @@ const detectConnectedComponentBounds = (
   mask: Uint8Array,
   width: number,
   height: number,
+  mergeMargin = 1,
 ): Bounds[] => {
   const visited = new Uint8Array(mask.length);
   const minimumComponentPixels = Math.max(48, Math.floor(width * height * 0.0004));
@@ -523,7 +543,6 @@ const detectConnectedComponentBounds = (
     }
   }
 
-  const mergeMargin = 1;
   return mergeBounds(components, mergeMargin).sort((a, b) => {
     if (a.top !== b.top) {
       return a.top - b.top;
@@ -599,6 +618,46 @@ const filterThinArtifactBounds = (bounds: Bounds[]): Bounds[] => {
   return withoutWideLowerBands.length ? withoutWideLowerBands : filtered.length ? filtered : bounds;
 };
 
+const boundsGap = (a: Bounds, b: Bounds): number => {
+  const dx = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
+  const dy = Math.max(0, Math.max(a.top - b.bottom, b.top - a.bottom));
+  return Math.hypot(dx, dy);
+};
+
+// Repeatedly merge the two closest bounding boxes until `target` remain. With
+// wide gutters between panels, the closest pairs are a panel's own fragments,
+// so this collapses an over-split result onto the known panel count.
+const mergeNearestUntil = (bounds: Bounds[], target: number): Bounds[] => {
+  const items = bounds.map((b) => ({ ...b }));
+  while (items.length > target) {
+    let bestI = 0;
+    let bestJ = 1;
+    let bestGap = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < items.length; i += 1) {
+      for (let j = i + 1; j < items.length; j += 1) {
+        const gap = boundsGap(items[i], items[j]);
+        if (gap < bestGap) {
+          bestGap = gap;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+    }
+    const a = items[bestI];
+    const b = items[bestJ];
+    const merged: Bounds = {
+      left: Math.min(a.left, b.left),
+      top: Math.min(a.top, b.top),
+      right: Math.max(a.right, b.right),
+      bottom: Math.max(a.bottom, b.bottom),
+    };
+    items.splice(bestJ, 1);
+    items.splice(bestI, 1);
+    items.push(merged);
+  }
+  return items;
+};
+
 export const extractPieceBoundsFromRaster = (
   raster: RasterImageData,
   options: ExtractPieceBoundsOptions = {},
@@ -609,8 +668,22 @@ export const extractPieceBoundsFromRaster = (
   }
 
   const mask = createForegroundMask(raster);
+  const componentMergeMargin = options.componentMergeMarginRatio
+    ? Math.max(1, Math.round(Math.max(width, height) * options.componentMergeMarginRatio))
+    : 1;
   const gridBounds = detectGridBounds(mask, width, height);
-  const componentBounds = detectConnectedComponentBounds(mask, width, height);
+  const componentBounds = detectConnectedComponentBounds(mask, width, height, componentMergeMargin);
+
+  if (options.preferComponents) {
+    // Each panel is one illustration; large white gutters keep panels apart
+    // while the merge margin absorbs hairline gaps inside a panel. If we know
+    // the panel count, collapse any remaining over-split fragments onto it.
+    const merged =
+      options.targetPieceCount && componentBounds.length > options.targetPieceCount
+        ? mergeNearestUntil(componentBounds, options.targetPieceCount)
+        : componentBounds;
+    return sortBoundsInReadingOrder(merged);
+  }
 
   if (options.preferSeparatedSubjects) {
     const overallBounds = trimBoundsToForeground(mask, width, height, {

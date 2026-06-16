@@ -8,8 +8,8 @@ import {
   GenerationTimingState,
   ImageRecord,
   ImageToolsStatePersistence,
+  MeasuredStats,
   ModelReasoningLevel,
-  ModelReasoningLevelByModelId,
   PersistedAppState,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
@@ -18,10 +18,12 @@ import {
 import { ImageToolsBar } from "./ImageToolsBar";
 import {
   editImage,
+  generateText,
   OpenRouterApiError,
   OPENROUTER_KEYS_URL,
   ImageConfig,
 } from "../services/openRouterService";
+import { BREAK_COMIC_CAPTIONS_PROMPT, BREAK_COMIC_TEXT_MODEL } from "../lib/breakComic";
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -32,8 +34,16 @@ import {
   initiateOAuthFlow,
 } from "../lib/openRouterOAuth";
 import { canUseLocalDummyModelWithoutApiKey } from "../lib/localModels";
-import { DEFAULT_MODEL, MODEL_CATALOG } from "../lib/modelsCatalog";
-import { ModelChooserDialog } from "./ModelChooserDialog";
+import {
+  buildMeasuredStatKey,
+  DEFAULT_MODEL,
+  getModelInfoById,
+  isModelReasoningLevel,
+  MODEL_CATALOG,
+  resolveToolModelId,
+  resolveToolReasoningLevel,
+} from "../lib/modelsCatalog";
+import { pickSizeTokenForLongEdge } from "../lib/imageSizes";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
@@ -41,6 +51,7 @@ import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
 import { createToolParamDefaults, mergeParamsWithDefaults } from "./tools/toolParams";
+import { copyImageRecordWithFeedback } from "./copyImageRecordToClipboard";
 import { API_KEY_STORAGE_KEY, AUTH_METHOD_STORAGE_KEY } from "../lib/authStorage";
 import { WELCOME_DIALOG_SKIP_FLAG } from "../lib/authFlags";
 import {
@@ -63,7 +74,11 @@ import {
   writeHistoryImageRecord,
 } from "../services/persistence/fileSystemAccess";
 import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
-import { getAspectRatioPromptHint, resolveAspectRatioValue } from "../lib/aspectRatios";
+import {
+  AUTO_ASPECT_RATIO,
+  getAspectRatioPromptHint,
+  resolveAspectRatioValue,
+} from "../lib/aspectRatios";
 import { getImageDimensions, getMimeTypeFromUrl, prepareImageBlob } from "../lib/imageUtils";
 import {
   getRequestedAspectRatioValue,
@@ -72,6 +87,7 @@ import {
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
+import { parseCaptionArray } from "../lib/captionExtraction";
 import { createAnimatedGif } from "../lib/animatedGif";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import { extractDerivedImageItems } from "../lib/toolDerivedResults";
@@ -152,14 +168,6 @@ const hashString = (value: string) => {
   }
   return Math.abs(hash).toString(36);
 };
-
-const MODEL_REASONING_LEVEL_VALUES: ModelReasoningLevel[] = [
-  "default",
-  "none",
-  "low",
-  "medium",
-  "high",
-];
 
 const DEFAULT_GENERATION_ESTIMATE_MS = 30000;
 const MAX_PROMPT_DURATION_ESTIMATES = 40;
@@ -269,25 +277,62 @@ const updateGenerationTiming = (
   };
 };
 
-const isModelReasoningLevel = (value: unknown): value is ModelReasoningLevel => {
-  return (
-    typeof value === "string" && MODEL_REASONING_LEVEL_VALUES.includes(value as ModelReasoningLevel)
-  );
-};
-
-const normalizeModelReasoningLevels = (value: unknown): ModelReasoningLevelByModelId => {
+const normalizeModelByTool = (value: unknown): Record<string, string> => {
   if (!value || typeof value !== "object") {
     return {};
   }
 
-  const normalized: ModelReasoningLevelByModelId = {};
-  Object.entries(value as Record<string, unknown>).forEach(([modelId, level]) => {
-    const cleanModelId = modelId.trim();
-    if (!cleanModelId || !isModelReasoningLevel(level)) {
+  const normalized: Record<string, string> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([toolId, modelId]) => {
+    const cleanToolId = toolId.trim();
+    if (
+      cleanToolId &&
+      typeof modelId === "string" &&
+      MODEL_CATALOG.some((model) => model.id === modelId)
+    ) {
+      normalized[cleanToolId] = modelId;
+    }
+  });
+
+  return normalized;
+};
+
+const normalizeReasoningByTool = (value: unknown): Record<string, ModelReasoningLevel> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized: Record<string, ModelReasoningLevel> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([toolId, level]) => {
+    const cleanToolId = toolId.trim();
+    if (cleanToolId && isModelReasoningLevel(level)) {
+      normalized[cleanToolId] = level;
+    }
+  });
+
+  return normalized;
+};
+
+const normalizeMeasuredStatsByKey = (value: unknown): Record<string, MeasuredStats> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized: Record<string, MeasuredStats> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+    const cleanKey = key.trim();
+    if (!cleanKey || !entry || typeof entry !== "object") {
       return;
     }
-
-    normalized[cleanModelId] = level;
+    const { cost, durationMs } = entry as { cost?: unknown; durationMs?: unknown };
+    const safeCost = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : 0;
+    const safeDuration =
+      typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0
+        ? durationMs
+        : 0;
+    if (safeCost > 0 || safeDuration > 0) {
+      normalized[cleanKey] = { cost: safeCost, durationMs: safeDuration };
+    }
   });
 
   return normalized;
@@ -375,7 +420,11 @@ export function ImageToolsWorkspace({
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_MODEL?.id || "");
+  // Per-tool model selection: each tool remembers its own chosen model and
+  // reasoning level; `measuredStatsByKey` powers the indicator's cost/time tooltip.
+  const [modelByTool, setModelByTool] = useState<Record<string, string>>({});
+  const [reasoningByTool, setReasoningByTool] = useState<Record<string, ModelReasoningLevel>>({});
+  const [measuredStatsByKey, setMeasuredStatsByKey] = useState<Record<string, MeasuredStats>>({});
   const [generationTiming, setGenerationTiming] = useState<GenerationTimingState>({
     lastDurationMs: null,
     promptDurationsByKey: {},
@@ -397,10 +446,6 @@ export function ImageToolsWorkspace({
     reference: [],
     environment: [],
   });
-  const [modelReasoningLevels, setModelReasoningLevels] = useState<ModelReasoningLevelByModelId>(
-    {},
-  );
-  const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isWelcomeDialogOpen, setIsWelcomeDialogOpen] = useState(false);
   const hasShownWelcomeRef = useRef(false);
@@ -418,11 +463,15 @@ export function ImageToolsWorkspace({
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
   const pendingPreviewImageIdsRef = useRef<string[]>([]);
-  const selectedModel =
-    MODEL_CATALOG.find((model) => model.id === selectedModelId) || DEFAULT_MODEL;
   const envApiKey = envApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
-  const canUseSelectedModelWithoutApiKey = canUseLocalDummyModelWithoutApiKey(selectedModelId);
+  // The active tool's resolved model decides whether we can run without an API
+  // key (only the localhost dummy model qualifies).
+  const activeToolModelId = (() => {
+    const activeTool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
+    return activeTool ? resolveToolModelId(activeTool, modelByTool) : DEFAULT_MODEL?.id || "";
+  })();
+  const canUseSelectedModelWithoutApiKey = canUseLocalDummyModelWithoutApiKey(activeToolModelId);
   const usingEnvKey = !!(envApiKey && !apiKey);
   const resolvedEnvironmentEntries = useMemo(() => {
     return environmentImageUrls
@@ -672,8 +721,16 @@ export function ImageToolsWorkspace({
       referencedIds.add(state.rightPanelImageId);
     }
 
+    // Leave very fresh entries alone: multi-item tools create their records
+    // across several awaits before referencing them in a strip, and this
+    // effect can run in between (deleting brand-new results as "orphans").
+    const PRUNE_GRACE_MS = 15_000;
+    const now = Date.now();
     const orphaned = state.history.filter(
-      (entry) => entry.origin !== "environment" && !referencedIds.has(entry.id),
+      (entry) =>
+        entry.origin !== "environment" &&
+        !referencedIds.has(entry.id) &&
+        now - (entry.timestamp ?? 0) > PRUNE_GRACE_MS,
     );
     if (!orphaned.length) {
       return;
@@ -996,14 +1053,10 @@ export function ImageToolsWorkspace({
             }
           }
 
-          if (
-            persisted.selectedModelId &&
-            MODEL_CATALOG.some((model) => model.id === persisted.selectedModelId)
-          ) {
-            setSelectedModelId(persisted.selectedModelId);
-          }
+          setModelByTool(normalizeModelByTool(persisted.modelByTool));
+          setReasoningByTool(normalizeReasoningByTool(persisted.reasoningByTool));
+          setMeasuredStatsByKey(normalizeMeasuredStatsByKey(persisted.measuredStatsByKey));
           setGenerationTiming(normalizeGenerationTiming(persisted.generationTiming));
-          setModelReasoningLevels(normalizeModelReasoningLevels(persisted.modelReasoningLevels));
           if (persisted.auth?.apiKey) {
             setApiKey(persisted.auth.apiKey);
             setAuthMethod(persisted.auth.authMethod ?? null);
@@ -1061,9 +1114,10 @@ export function ImageToolsWorkspace({
   const fsBindingRef = useRef(fsBinding);
   const paramsByToolRef = useRef(paramsByTool);
   const activeToolIdRef = useRef(activeToolId);
-  const selectedModelIdRef = useRef(selectedModelId);
+  const modelByToolRef = useRef(modelByTool);
+  const reasoningByToolRef = useRef(reasoningByTool);
+  const measuredStatsByKeyRef = useRef(measuredStatsByKey);
   const generationTimingRef = useRef(generationTiming);
-  const modelReasoningLevelsRef = useRef(modelReasoningLevels);
   const selectedArtStyleIdRef = useRef(selectedArtStyleId);
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
@@ -1084,14 +1138,17 @@ export function ImageToolsWorkspace({
     activeToolIdRef.current = activeToolId;
   }, [activeToolId]);
   useEffect(() => {
-    selectedModelIdRef.current = selectedModelId;
-  }, [selectedModelId]);
+    modelByToolRef.current = modelByTool;
+  }, [modelByTool]);
+  useEffect(() => {
+    reasoningByToolRef.current = reasoningByTool;
+  }, [reasoningByTool]);
+  useEffect(() => {
+    measuredStatsByKeyRef.current = measuredStatsByKey;
+  }, [measuredStatsByKey]);
   useEffect(() => {
     generationTimingRef.current = generationTiming;
   }, [generationTiming]);
-  useEffect(() => {
-    modelReasoningLevelsRef.current = modelReasoningLevels;
-  }, [modelReasoningLevels]);
   useEffect(() => {
     selectedArtStyleIdRef.current = selectedArtStyleId;
   }, [selectedArtStyleId]);
@@ -1269,9 +1326,10 @@ export function ImageToolsWorkspace({
         },
         paramsByTool: paramsByToolRef.current,
         activeToolId: activeToolIdRef.current,
-        selectedModelId: selectedModelIdRef.current || null,
+        modelByTool: modelByToolRef.current,
+        reasoningByTool: reasoningByToolRef.current,
+        measuredStatsByKey: measuredStatsByKeyRef.current,
         generationTiming: generationTimingRef.current,
-        modelReasoningLevels: modelReasoningLevelsRef.current,
         selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
         auth: {
           apiKey: apiKeyRef.current,
@@ -1287,7 +1345,7 @@ export function ImageToolsWorkspace({
       referenceImageIds: stateRef.current.referenceImageIds,
       rightPanelImageId: stateRef.current.rightPanelImageId,
       activeToolId: activeToolIdRef.current,
-      selectedModelId: selectedModelIdRef.current || null,
+      modelByTool: modelByToolRef.current,
       selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
     });
 
@@ -1386,8 +1444,9 @@ export function ImageToolsWorkspace({
     fsBinding,
     paramsByTool,
     activeToolId,
-    selectedModelId,
-    modelReasoningLevels,
+    modelByTool,
+    reasoningByTool,
+    measuredStatsByKey,
     selectedArtStyleId,
     apiKey,
     authMethod,
@@ -1518,9 +1577,146 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, isProcessing: false }));
   }, []);
 
+  // Open the OS file picker and resolve with the chosen PDF (or null if the
+  // user cancels). Resolving on cancel keeps the tool from hanging in a
+  // "processing" state — we only show progress once a file is actually picked.
+  const pickPdfFile = (): Promise<File | null> =>
+    new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/pdf,.pdf";
+      input.style.display = "none";
+      let settled = false;
+      const finish = (file: File | null) => {
+        if (settled) return;
+        settled = true;
+        input.remove();
+        resolve(file);
+      };
+      input.addEventListener("change", () => finish(input.files?.[0] ?? null), { once: true });
+      // Fallback for the cancel case: the dialog blurs the window, so a focus
+      // return with no `change` means the user dismissed it.
+      window.addEventListener("focus", () => window.setTimeout(() => finish(null), 300), {
+        once: true,
+      });
+      document.body.appendChild(input);
+      input.click();
+    });
+
+  const runPdfToImages = async (params: Record<string, string>) => {
+    if (state.isProcessing) return;
+
+    const file = await pickPdfFile();
+    if (!file) return; // User cancelled the picker.
+
+    setResultImageIds([]);
+    setState((prev) => ({
+      ...prev,
+      isProcessing: true,
+      error: null,
+      rightPanelImageId: null,
+    }));
+
+    const abortController = new AbortController();
+    requestAbortControllerRef.current = abortController;
+
+    const progressStartedAt = getNowMs();
+    setGenerationProgress({ startedAt: progressStartedAt, estimatedDurationMs: 4000 });
+
+    try {
+      const { renderPdfToImages } = await import("../lib/pdfToImages");
+      const pages = await renderPdfToImages(file, { signal: abortController.signal });
+
+      if (!pages.length) {
+        throw new Error("That PDF has no pages to render.");
+      }
+
+      const baseName = file.name.replace(/\.pdf$/i, "") || "page";
+      const padWidth = String(pages.length).length;
+
+      const createdItems: ImageRecord[] = [];
+      for (const page of pages) {
+        const pageLabel = String(page.pageNumber).padStart(padWidth, "0");
+        let item: ImageRecord = {
+          id: uuid(),
+          parentId: null,
+          imageData: page.dataUrl,
+          imageFileName: `${baseName}-p${pageLabel}.png`,
+          toolId: "pdf_to_images",
+          parameters: params,
+          sourceStyleId: null,
+          durationMs: 0,
+          cost: 0,
+          model: "",
+          timestamp: Date.now(),
+          promptUsed: `Page ${page.pageNumber} of ${file.name}`,
+          sourceSummary: `${file.name} (page ${page.pageNumber} of ${pages.length})`,
+          resolution: page.dimensions,
+          isStarred: false,
+          origin: "uploaded",
+        };
+        if (fsBinding) {
+          item = await persistHistoryImage(item);
+        }
+        createdItems.push(item);
+      }
+
+      // Insert the whole batch in one synchronous block so the orphan-cleanup
+      // effect can't prune a page that's in history but not yet referenced by a
+      // strip (see the split-images path for the same reasoning). Pages go into
+      // the history strip in reading order (page 1 leftmost): addItemToStrip
+      // prepends at index 0, so insert back-to-front.
+      createdItems.forEach((item) => appendHistoryEntry(item, { skipHistoryStrip: true }));
+      setThumbnailStrips((prev) => {
+        let next = prev;
+        for (let i = createdItems.length - 1; i >= 0; i -= 1) {
+          next = addItemToStrip(next, "history", createdItems[i].id, 0);
+        }
+        return next;
+      });
+
+      setResultImageIds(createdItems.map((item) => item.id));
+      setGenerationProgress(null);
+      setState((prev) => ({
+        ...prev,
+        rightPanelImageId: createdItems[0]?.id ?? null,
+        isProcessing: false,
+      }));
+    } catch (error) {
+      const isAbortError =
+        error instanceof DOMException
+          ? error.name === "AbortError"
+          : (error as any)?.name === "AbortError";
+      setGenerationProgress(null);
+      if (isAbortError) {
+        setState((prev) => ({ ...prev, isProcessing: false }));
+      } else {
+        console.error("Failed to convert PDF to images:", error);
+        setState((prev) => ({
+          ...prev,
+          isProcessing: false,
+          error: error instanceof Error ? error.message : "Could not read that PDF.",
+        }));
+      }
+    } finally {
+      if (requestAbortControllerRef.current === abortController) {
+        requestAbortControllerRef.current = null;
+      }
+    }
+  };
+
   const handleApplyTool = async (toolId: string, params: Record<string, string>) => {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
+
+    if (tool.localOnly && tool.id === "pdf_to_images") {
+      await runPdfToImages(params);
+      return;
+    }
+
+    // Each tool runs on its own selected model (see modelByTool), defaulting to
+    // the tool's first recommended model.
+    const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
     const requiresEditImage = tool.editImage !== false;
     const targetImage =
@@ -1563,6 +1759,17 @@ export function ImageToolsWorkspace({
     requestAbortControllerRef.current = abortController;
     let shouldRefreshCredits = false;
 
+    // Cancel only reliably interrupts in-flight fetches. The local post-network
+    // phase (background removal, segmentation, GIF encoding) is largely
+    // uninterruptible, so without a guard a result would still be committed to
+    // history after the user cancels. Throw at each commit point if cancelled —
+    // the catch below treats AbortError as a clean cancel.
+    const throwIfCancelled = () => {
+      if (abortController.signal.aborted) {
+        throw new DOMException("Generation cancelled.", "AbortError");
+      }
+    };
+
     try {
       const targetImageResolution =
         targetImage?.resolution ??
@@ -1581,7 +1788,7 @@ export function ImageToolsWorkspace({
       }
 
       const basePrompt = tool.promptTemplate(params);
-      const requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
+      let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
 
       const constrainedReferences = referenceItems.slice(0, max);
       const referenceStyleId =
@@ -1601,6 +1808,26 @@ export function ImageToolsWorkspace({
         ...constrainedReferences.map((h) => h.imageData),
       ];
 
+      // Tools that decompose a page (break-comic) must not downscale it. Match
+      // the output size + aspect ratio to the input so resolution is preserved
+      // (a 3508px poster -> 4K), instead of falling back to a square 1K default.
+      let requestedSize = params.size;
+      let autoSizeResolution: { width: number; height: number } | undefined;
+      if (tool.autoSizeFromInput && sourceImages[0]) {
+        const inputResolution = await getImageDimensions(sourceImages[0]);
+        if (inputResolution?.width && inputResolution?.height) {
+          autoSizeResolution = inputResolution;
+          requestedSize = pickSizeTokenForLongEdge(
+            Math.max(inputResolution.width, inputResolution.height),
+          );
+          requestedAspectRatio = resolveAspectRatioValue(
+            AUTO_ASPECT_RATIO,
+            inputResolution,
+            toolModel?.supportedAspectRatios,
+          );
+        }
+      }
+
       const promptWithoutAspectRatio =
         tool.id === "custom"
           ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
@@ -1611,23 +1838,55 @@ export function ImageToolsWorkspace({
         ? promptWithoutAspectRatio
         : `${promptWithoutAspectRatio}\n\n${getAspectRatioPromptHint(
             requestedAspectRatio,
-            targetImageResolution,
-            selectedModel?.supportedAspectRatios,
+            autoSizeResolution ?? targetImageResolution,
+            toolModel?.supportedAspectRatios,
           )}`;
       const modelTimingKey = usesLocalBackgroundRemoval
         ? "local-background-removal"
         : envApiKey && !apiKey
           ? "default-image-model"
-          : selectedModel?.id || "default-image-model";
+          : toolModel?.id || "default-image-model";
       const promptDurationKey = createPromptDurationKey(tool.id, modelTimingKey, prompt);
       const toolDurationKey = createToolDurationKey(tool.id, modelTimingKey);
 
       let processedImageData: string;
+      // All images returned by the generation (post-processed), in order.
+      // Usually length 1, but interleaved image models can return several
+      // (e.g. one per comic panel). processedImageData === processedImages[0].
+      let processedImages: string[] = [];
       let durationMs = 0;
       let cost = 0;
       let model = "";
+      let generationText: string | null = null;
       let reasoningLevelForRequest: ModelReasoningLevel | null = null;
       let progressStartedAt = 0;
+      const isBreakComic = tool.id === "break_comic_into_images";
+
+      // Phase plan for the loading overlay. Only tools that do more than a
+      // single image fetch get phases: break-comic redraws the sheet, then
+      // transcribes captions, then splits it; other split-image tools generate
+      // a sheet then split it. setPhase is a no-op for single-phase tools.
+      const willSplitDerived =
+        tool.derivedResultMode === "split-images" &&
+        (tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true");
+      const phaseLabels: string[] = isBreakComic
+        ? ["Redrawing combined sheet", "Transcribing captions", "Splitting into images"]
+        : willSplitDerived
+          ? ["Generating sheet", "Splitting into images"]
+          : [];
+      const setPhase = (index: number) => {
+        if (phaseLabels.length <= 1 || index < 0 || index >= phaseLabels.length) return;
+        setGenerationProgress((prev) =>
+          prev
+            ? {
+                ...prev,
+                phaseLabel: phaseLabels[index],
+                phaseIndex: index + 1,
+                phaseCount: phaseLabels.length,
+              }
+            : prev,
+        );
+      };
 
       if (usesLocalBackgroundRemoval) {
         if (!targetImage) {
@@ -1652,11 +1911,12 @@ export function ImageToolsWorkspace({
           result.imageData,
           tool.postProcessingFunctions,
         );
+        processedImages = [processedImageData];
         durationMs = result.durationMs;
         model = result.model;
       } else {
         const resolvedApiKey = effectiveApiKey;
-        const canRunWithoutApiKey = canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
+        const canRunWithoutApiKey = canUseLocalDummyModelWithoutApiKey(toolModel?.id);
         if (!resolvedApiKey && !canRunWithoutApiKey) {
           setGenerationProgress(null);
           setState((prev) => ({
@@ -1673,26 +1933,33 @@ export function ImageToolsWorkspace({
         // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
         // rather than whatever the UI's default model happens to be.
         const modelIdForRequest = canRunWithoutApiKey
-          ? selectedModel?.id
+          ? toolModel?.id
           : envApiKey && !apiKey
             ? undefined
-            : selectedModel?.id;
-        const selectedModelIdForReasoning = selectedModel?.id || "";
-        const configuredReasoningLevel = modelReasoningLevels[selectedModelIdForReasoning];
-        const initialReasoningLevel = isModelReasoningLevel(selectedModel?.initialReasoningLevel)
-          ? selectedModel.initialReasoningLevel
-          : "default";
-        reasoningLevelForRequest = configuredReasoningLevel ?? initialReasoningLevel;
+            : toolModel?.id;
+        // Per-tool reasoning: the user's override, then the tool's hard
+        // imageReasoningLevel cap (e.g. break-comic stays at the model default
+        // so it doesn't "think" away its image-output budget), then the model's
+        // initial level. See resolveToolReasoningLevel.
+        reasoningLevelForRequest = resolveToolReasoningLevel(tool, toolModel, reasoningByTool);
 
         // Build image configuration from tool parameters.
         const imageConfig: ImageConfig = {
           aspectRatio: resolveAspectRatioValue(
             requestedAspectRatio,
-            targetImageResolution,
-            selectedModel?.supportedAspectRatios,
+            autoSizeResolution ?? targetImageResolution,
+            toolModel?.supportedAspectRatios,
           ),
-          size: params.size,
+          size: requestedSize,
         };
+
+        if (tool.autoSizeFromInput) {
+          console.log("[break-comic] request size/aspect", {
+            requestedSize,
+            aspect: imageConfig.aspectRatio,
+            inputResolution: autoSizeResolution,
+          });
+        }
 
         progressStartedAt = getNowMs();
         setGenerationProgress({
@@ -1703,6 +1970,7 @@ export function ImageToolsWorkspace({
             toolDurationKey,
           ),
         });
+        setPhase(0);
 
         const result = await editImage(sourceImages, prompt, resolvedApiKey, modelIdForRequest, {
           signal: abortController.signal,
@@ -1710,18 +1978,73 @@ export function ImageToolsWorkspace({
           reasoningLevel: reasoningLevelForRequest,
         });
 
-        processedImageData = await applyPostProcessingPipeline(
-          result.imageData,
-          tool.postProcessingFunctions,
+        const returnedImages = result.images?.length ? result.images : [result.imageData];
+        processedImages = await Promise.all(
+          returnedImages.map((image) =>
+            applyPostProcessingPipeline(image, tool.postProcessingFunctions),
+          ),
         );
+        processedImageData = processedImages[0];
         durationMs = result.duration;
         cost = result.cost;
         model = result.model;
+        generationText = result.text ?? null;
+
+        if (returnedImages.length > 1) {
+          console.log("[break-comic] model returned multiple images", {
+            toolId: tool.id,
+            imagesReturned: returnedImages.length,
+          });
+        }
+
+        if (isBreakComic && resolvedApiKey) {
+          setPhase(1);
+          // The cleanup-edit image call carries no caption JSON (and models
+          // like Gemini 3.1 Flash can't return image+text in one turn), so
+          // transcribe the captions from the ORIGINAL page in a separate
+          // cheap text call. Reading order matches the edited sheet because
+          // the edit preserves the page layout.
+          const captionsResult = await generateText(
+            [sourceImages[0]],
+            BREAK_COMIC_CAPTIONS_PROMPT,
+            resolvedApiKey,
+            { signal: abortController.signal, modelId: BREAK_COMIC_TEXT_MODEL },
+          );
+          console.log("[break-comic] captions call result", {
+            model: captionsResult.model,
+            textChars: captionsResult.text.length,
+            cost: captionsResult.cost,
+          });
+          generationText = captionsResult.text;
+          durationMs += captionsResult.duration;
+          cost += captionsResult.cost;
+        }
+      }
+
+      // Remember what this tool/model/reasoning/size combination cost and how
+      // long it took (time scales ~with price). The model indicator reuses this
+      // as the estimate going forward — see ToolModelPicker.
+      if (toolModel?.id) {
+        const safeCost = Number.isFinite(cost) && cost > 0 ? cost : 0;
+        const safeDuration = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 0;
+        if (safeCost > 0 || safeDuration > 0) {
+          const statKey = buildMeasuredStatKey(
+            tool.id,
+            toolModel.id,
+            reasoningLevelForRequest ?? "default",
+            requestedSize,
+          );
+          setMeasuredStatsByKey((prev) => ({
+            ...prev,
+            [statKey]: { cost: safeCost, durationMs: safeDuration },
+          }));
+        }
       }
 
       const createHistoryItem = async (
         imageData: string,
         parentIdOverride?: string | null,
+        extraFields?: Partial<ImageRecord>,
       ): Promise<ImageRecord> => {
         const resolution = await getImageDimensions(imageData);
 
@@ -1746,6 +2069,7 @@ export function ImageToolsWorkspace({
           sourceSummary,
           resolution,
           isStarred: false,
+          ...extraFields,
         };
 
         if (fsBinding) {
@@ -1786,6 +2110,7 @@ export function ImageToolsWorkspace({
         });
 
         if (!shouldSplitDerivedItems) {
+          throwIfCancelled();
           const newItem = await createHistoryItem(
             processedImageData,
             constrainedReferences[0]?.id || null,
@@ -1816,15 +2141,49 @@ export function ImageToolsWorkspace({
           return;
         }
 
-        const derivedItemsResult = await extractDerivedImageItems(processedImageData, {
-          signal: abortController.signal,
-          preferSeparatedSubjects: tool.id === "extract_cast_of_characters",
-        });
-        durationMs += derivedItemsResult.durationMs;
-        console.log("[ExtractCast/debug] extractDerivedImageItems result", {
-          toolId: tool.id,
-          itemCount: derivedItemsResult.imageDataItems.length,
-        });
+        // Final phase: split the generated sheet into individual images.
+        setPhase(phaseLabels.length - 1);
+
+        // Captions arrive in the generation's text channel as a JSON array, one
+        // per panel in reading order. Parse them first so we can tell the
+        // splitter exactly how many pieces to produce (the AI grid's connectivity
+        // varies run to run, so we merge over-split fragments down to this count).
+        const parsedCaptions = tool.captionsFromTextChannel
+          ? parseCaptionArray(generationText)
+          : null;
+
+        // If the model already returned several images (e.g. Gemini 3 Pro emits
+        // one image per panel instead of a single grid), use those directly as
+        // the pieces. Otherwise split the single returned sheet ourselves.
+        const modelReturnedMultipleImages = processedImages.length > 1;
+        let imageDataItems: string[];
+        if (modelReturnedMultipleImages) {
+          imageDataItems = processedImages;
+          console.log("[break-comic] using model's returned images as pieces (no split)", {
+            toolId: tool.id,
+            pieceCount: imageDataItems.length,
+          });
+        } else {
+          const derivedItemsResult = await extractDerivedImageItems(processedImageData, {
+            signal: abortController.signal,
+            preferSeparatedSubjects: tool.id === "extract_cast_of_characters",
+            preferComponents: tool.splitByComponents,
+            componentMergeMarginRatio: tool.splitByComponents ? 0.006 : undefined,
+            targetPieceCount: tool.splitByComponents
+              ? (parsedCaptions?.length ?? undefined)
+              : undefined,
+          });
+          durationMs += derivedItemsResult.durationMs;
+          imageDataItems = derivedItemsResult.imageDataItems;
+          console.log("[ExtractCast/debug] extractDerivedImageItems result", {
+            toolId: tool.id,
+            itemCount: imageDataItems.length,
+          });
+        }
+
+        // Pieces are about to be written to history; bail if cancelled during
+        // the (uninterruptible) split/segmentation above.
+        throwIfCancelled();
 
         const parentId = constrainedReferences[0]?.id || null;
 
@@ -1832,19 +2191,116 @@ export function ImageToolsWorkspace({
           const createdPieces: ImageRecord[] = [];
           let sheetItem: ImageRecord | null = null;
 
-          if (tool.id === "extract_cast_of_characters") {
-            // Also keep the unsplit cast sheet so the original AI output is
-            // not lost when splitting is enabled. It appears in regular
-            // history (via appendHistoryEntry), in the Characters strip
-            // alongside the pieces, and in the Result pane.
-            sheetItem = await createHistoryItem(processedImageData, parentId);
-            appendHistoryEntry(sheetItem);
+          const pieceCount = imageDataItems.length;
+
+          if (tool.captionsFromTextChannel) {
+            console.log("[break-comic] CAPTION DIAGNOSIS", {
+              modelUsed: model,
+              textChannelReturned: Boolean(generationText),
+              textChannelLength: generationText?.length ?? 0,
+              textChannelPreview: generationText ? generationText.slice(0, 400) : null,
+              parsedCaptionCount: parsedCaptions?.length ?? null,
+              parsedCaptionPreviews: parsedCaptions?.map((c) => c.slice(0, 45)) ?? null,
+              pieceCountFromSplit: pieceCount,
+              countsMatch: parsedCaptions?.length === pieceCount,
+              splitByComponents: Boolean(tool.splitByComponents),
+              modelReturnedMultipleImages,
+            });
           }
 
-          for (const pieceImage of derivedItemsResult.imageDataItems) {
-            const pieceItem = await createHistoryItem(pieceImage, parentId);
+          // Attach per piece ONLY when the counts match — otherwise the split
+          // and the caption list disagree and index-pairing would attach text
+          // to the wrong picture. When they don't match we still keep the full
+          // text on the sheet (below) so it is never lost.
+          let pieceCaptions: string[] = [];
+          if (parsedCaptions && parsedCaptions.length === pieceCount) {
+            pieceCaptions = parsedCaptions;
+            console.log("[break-comic] captions from text channel", {
+              pieces: pieceCount,
+              withText: parsedCaptions.filter((caption) => caption.trim().length > 0).length,
+            });
+          } else if (tool.captionsFromTextChannel) {
+            console.warn("[break-comic] caption/piece count mismatch — text kept on sheet only", {
+              pieces: pieceCount,
+              captions: parsedCaptions?.length ?? null,
+            });
+          }
+
+          if (tool.keepDerivedSourceSheet && !modelReturnedMultipleImages) {
+            // Keep the unsplit grid sheet (it carries the real generation cost
+            // and appears alongside the pieces / in the Characters strip). Carry
+            // the whole caption list on it so the text is recoverable even if
+            // per-piece alignment failed. When the model returned separate
+            // images there is no single grid sheet to keep.
+            const sheetCaption =
+              parsedCaptions && parsedCaptions.length ? parsedCaptions.join("\n\n") : null;
+            sheetItem = await createHistoryItem(
+              processedImageData,
+              parentId,
+              sheetCaption ? { caption: sheetCaption } : undefined,
+            );
+            console.log("[break-comic] sheet resolution", sheetItem.resolution);
+          }
+
+          for (let index = 0; index < imageDataItems.length; index += 1) {
+            // Pieces persist to disk one at a time; stop before committing any to
+            // history if the user cancelled mid-loop. (Nothing is appended to
+            // history/strips until after this loop, so throwing here yields no
+            // visible result.)
+            throwIfCancelled();
+            const pieceImage = imageDataItems[index];
+            const caption = pieceCaptions[index]?.trim() || null;
+            const extraFields: Partial<ImageRecord> = {};
+            // Avoid double-charging. When the model returned separate images,
+            // the whole generation cost lands on the first piece and the rest
+            // are zeroed. When we split a single grid sheet (which carries the
+            // cost) every piece is zeroed.
+            const zeroPieceCost = modelReturnedMultipleImages
+              ? index > 0
+              : tool.keepDerivedSourceSheet;
+            if (zeroPieceCost) {
+              extraFields.cost = 0;
+            }
+            if (caption) {
+              extraFields.caption = caption;
+            }
+            const pieceItem = await createHistoryItem(
+              pieceImage,
+              parentId,
+              Object.keys(extraFields).length ? extraFields : undefined,
+            );
             createdPieces.push(pieceItem);
-            appendHistoryEntry(pieceItem);
+          }
+
+          // Enter every created record into history AND the history strip in
+          // ONE synchronous block. The orphan-cleanup effect deletes history
+          // entries that no strip references, and effects can run between the
+          // awaits above — so an item appended to history while still awaiting
+          // its siblings would be pruned before the strip insert below ever
+          // ran (the pieces "vanished" after a successful generation).
+          //
+          // Strip order: reading order (piece 1 on the left).
+          // appendHistoryEntry prepends each item at index 0, so adding them
+          // one-by-one would reverse the batch; insert the block back-to-front
+          // so the first piece ends up leftmost.
+          const batchItems = [...(sheetItem ? [sheetItem] : []), ...createdPieces];
+          batchItems.forEach((item) => appendHistoryEntry(item, { skipHistoryStrip: true }));
+          setThumbnailStrips((prev) => {
+            let next = prev;
+            for (let i = batchItems.length - 1; i >= 0; i -= 1) {
+              next = addItemToStrip(next, "history", batchItems[i].id, 0);
+            }
+            return next;
+          });
+
+          if (tool.captionsFromTextChannel) {
+            console.log("[break-comic] PIECES CREATED", {
+              totalPieces: createdPieces.length,
+              piecesWithCaption: createdPieces.filter(
+                (piece) => piece.caption && piece.caption.trim().length > 0,
+              ).length,
+              sheetHasCaption: Boolean(sheetItem?.caption && sheetItem.caption.trim().length > 0),
+            });
           }
 
           if (tool.id === "extract_cast_of_characters") {
@@ -1869,16 +2325,18 @@ export function ImageToolsWorkspace({
           return;
         }
 
-        const gifImageData = await createAnimatedGif(derivedItemsResult.imageDataItems, {
+        const gifImageData = await createAnimatedGif(imageDataItems, {
           delayMs: 140,
           repeat: 0,
         });
+        throwIfCancelled();
         const gifItem = await createHistoryItem(gifImageData, parentId);
         appendHistoryEntry(gifItem);
         finalizeDerivedItems([gifItem]);
         return;
       }
 
+      throwIfCancelled();
       const newItem = await createHistoryItem(processedImageData);
 
       if (progressStartedAt > 0) {
@@ -2275,6 +2733,41 @@ export function ImageToolsWorkspace({
     };
   }, [commitPreviewSelection]);
 
+  // Ctrl/Cmd+C copies the currently selected image (the one shown in the right
+  // panel) to the clipboard — mirroring the per-thumbnail copy button. We defer
+  // to the browser when the user is editing text or has an active text
+  // selection so normal copy still works.
+  useEffect(() => {
+    const handleCopyShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "c" && event.key !== "C") return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isEditable =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!target?.isContentEditable;
+      if (isEditable) return;
+
+      // Let the browser handle copying highlighted text.
+      const selection = typeof window !== "undefined" ? window.getSelection() : null;
+      if (selection && selection.toString().length > 0) return;
+
+      const selectedId = stateRef.current.rightPanelImageId;
+      if (!selectedId) return;
+      const selectedImage = stateRef.current.history.find((item) => item.id === selectedId);
+      if (!selectedImage || !selectedImage.imageData) return;
+
+      event.preventDefault();
+      void copyImageRecordWithFeedback(selectedImage);
+    };
+
+    window.addEventListener("keydown", handleCopyShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleCopyShortcut);
+    };
+  }, []);
+
   const handleSelectHistoryItem = (id: string) => {
     if (isPreviewModifierActive) {
       queuePreviewImage(id);
@@ -2395,9 +2888,12 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, error: null }));
   };
 
-  const handleSelectModel = (modelId: string, reasoningLevels: ModelReasoningLevelByModelId) => {
-    setSelectedModelId(modelId);
-    setModelReasoningLevels(normalizeModelReasoningLevels(reasoningLevels));
+  const handleToolModelChange = (toolId: string, modelId: string) => {
+    setModelByTool((prev) => ({ ...prev, [toolId]: modelId }));
+  };
+
+  const handleToolReasoningChange = (toolId: string, level: ModelReasoningLevel) => {
+    setReasoningByTool((prev) => ({ ...prev, [toolId]: level }));
   };
 
   const targetImage = state.targetImageId
@@ -2432,6 +2928,35 @@ export function ImageToolsWorkspace({
     });
   };
 
+  // What the gauge measures: the per-key spend limit when one is set,
+  // otherwise the account-level credit balance. A usage-only key (no per-key
+  // limit) has no denominator of its own, so without this fallback the bar
+  // would be blank.
+  const creditsGauge = (() => {
+    if (!credits) {
+      return null;
+    }
+    if (credits.limit !== null && credits.limit > 0 && credits.limitRemaining !== null) {
+      return {
+        source: "limit" as const,
+        total: credits.limit,
+        remaining: credits.limitRemaining,
+      };
+    }
+    if (
+      credits.accountTotalCredits !== null &&
+      credits.accountTotalCredits > 0 &&
+      credits.accountRemainingCredits !== null
+    ) {
+      return {
+        source: "account" as const,
+        total: credits.accountTotalCredits,
+        remaining: credits.accountRemainingCredits,
+      };
+    }
+    return null;
+  })();
+
   const creditsPrimaryLabel = (() => {
     if (!effectiveApiKey) {
       return "Connect to view";
@@ -2443,8 +2968,8 @@ export function ImageToolsWorkspace({
       return creditsError;
     }
     if (credits) {
-      if (credits.limitRemaining !== null) {
-        return `${formatCreditsValue(credits.limitRemaining)} left`;
+      if (creditsGauge) {
+        return `${formatCreditsValue(creditsGauge.remaining)} left`;
       }
 
       return `${formatCreditsValue(credits.usage)} used`;
@@ -2454,22 +2979,27 @@ export function ImageToolsWorkspace({
 
   const creditsSecondaryLabel =
     effectiveApiKey && credits && !creditsLoading && !creditsError
-      ? credits.limit !== null
+      ? creditsGauge?.source === "limit"
         ? (() => {
-            const periodUsage =
-              credits.limitRemaining !== null
-                ? Math.max(0, credits.limit - credits.limitRemaining)
-                : credits.usage;
+            const periodUsage = Math.max(0, creditsGauge.total - creditsGauge.remaining);
             const periodSuffix = credits.limitReset ? ` ${credits.limitReset}` : "";
             return `${formatCreditsValue(periodUsage)} of ${formatCreditsValue(
-              credits.limit,
+              creditsGauge.total,
             )} used${periodSuffix}`;
           })()
-        : `${formatCreditsValue(credits.usage)} used (no limit set)`
+        : creditsGauge?.source === "account"
+          ? `${formatCreditsValue(
+              creditsGauge.total - creditsGauge.remaining,
+            )} of ${formatCreditsValue(creditsGauge.total)} account credits used`
+          : `${formatCreditsValue(credits.usage)} used (no limit set)`
       : null;
 
   const creditsTotalLabel =
-    effectiveApiKey && credits && !creditsLoading && !creditsError && credits.limit !== null
+    effectiveApiKey &&
+    credits &&
+    !creditsLoading &&
+    !creditsError &&
+    creditsGauge?.source === "limit"
       ? `${formatCreditsValue(credits.usage)} total`
       : null;
 
@@ -2481,20 +3011,18 @@ export function ImageToolsWorkspace({
 
   const creditsTooltipLabel = creditsTooltipLines.join(". ") || creditsPrimaryLabel;
 
-  const creditsProgressFraction =
-    credits && credits.limit !== null && credits.limit > 0 && credits.limitRemaining !== null
-      ? Math.min(1, Math.max(0, credits.limitRemaining / credits.limit))
-      : null;
+  const creditsProgressFraction = creditsGauge
+    ? Math.min(1, Math.max(0, creditsGauge.remaining / creditsGauge.total))
+    : null;
 
-  const creditsProgressAriaProps: React.HTMLAttributes<HTMLElement> =
-    creditsProgressFraction !== null && credits
-      ? {
-          role: "progressbar",
-          "aria-valuemin": 0,
-          "aria-valuemax": credits.limit ?? 0,
-          "aria-valuenow": credits.limitRemaining ?? 0,
-        }
-      : { role: "status" };
+  const creditsProgressAriaProps: React.HTMLAttributes<HTMLElement> = creditsGauge
+    ? {
+        role: "progressbar",
+        "aria-valuemin": 0,
+        "aria-valuemax": creditsGauge.total,
+        "aria-valuenow": creditsGauge.remaining,
+      }
+    : { role: "status" };
 
   const isCreditsLow =
     creditsProgressFraction !== null && !creditsError ? creditsProgressFraction < 0.1 : false;
@@ -2592,25 +3120,6 @@ export function ImageToolsWorkspace({
                 progressFillColor={progressFillColor}
                 appColors={theme.colors}
               />
-              {selectedModel && (
-                <Button
-                  type="button"
-                  variant="outlined"
-                  onClick={() => setIsModelDialogOpen(true)}
-                  sx={{
-                    borderRadius: "999px",
-                    fontWeight: 400,
-                    fontSize: "0.9rem",
-                    letterSpacing: "0.04em",
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceAlt,
-                    boxShadow: theme.colors.panelShadow,
-                    color: theme.colors.textPrimary,
-                  }}
-                >
-                  Model: {selectedModel.name}
-                </Button>
-              )}
               <IconButton
                 onClick={() => setIsSettingsDialogOpen(true)}
                 title={settingsButtonTitle}
@@ -2668,7 +3177,11 @@ export function ImageToolsWorkspace({
         <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ImageToolsBar
             appState={state}
-            selectedModel={selectedModel || null}
+            modelByTool={modelByTool}
+            reasoningByTool={reasoningByTool}
+            measuredStatsByKey={measuredStatsByKey}
+            onToolModelChange={handleToolModelChange}
+            onToolReasoningChange={handleToolReasoningChange}
             targetImage={targetImage}
             referenceImages={referenceItems}
             rightImage={rightItem}
@@ -2780,15 +3293,6 @@ export function ImageToolsWorkspace({
               void handleDisableFolderStorage();
             },
           }}
-        />
-
-        <ModelChooserDialog
-          isOpen={isModelDialogOpen}
-          models={MODEL_CATALOG}
-          selectedModelId={selectedModel?.id || ""}
-          modelReasoningLevels={modelReasoningLevels}
-          onSelect={handleSelectModel}
-          onClose={() => setIsModelDialogOpen(false)}
         />
       </Box>
     </ThemeProvider>

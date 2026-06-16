@@ -162,7 +162,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const showTargetPanel = tool ? tool.editImage !== false : true;
   const derivedResultLabel = tool?.id === "break_into_pieces" ? "Pieces" : "Result";
   const targetPanelLabel =
-    tool?.id === "ethnicity" ? "Character grid or scene to change" : "Image to Edit";
+    tool?.id === "ethnicity"
+      ? "Character grid or scene to change"
+      : tool?.id === "break_comic_into_images"
+        ? "Original Comic"
+        : "Image to Edit";
   const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;
   const canAddReferenceSlot =
     referenceImages.length < maxReferenceCount || !Number.isFinite(maxReferenceCount);

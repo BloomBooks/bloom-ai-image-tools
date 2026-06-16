@@ -23,16 +23,11 @@ import {
   setInternalImageDragData,
 } from "./dragConstants";
 import { recordDragDelayMs } from "./dndDragState";
-import {
-  getTypeFromFileName,
-  getTypeFromMime,
-  handleCopy as copyImageToClipboard,
-  handlePaste as pasteImageFromClipboard,
-} from "../lib/clipboardUtils";
+import { getTypeFromFileName, handlePaste as pasteImageFromClipboard } from "../lib/clipboardUtils";
 import { getImageFileExtensionFromMimeType, getMimeTypeFromUrl } from "../lib/imageUtils";
 import { hasImageFilePayload, getImageFileFromDataTransfer } from "../lib/dragUtils";
-import { TOOLS } from "./tools/tools-registry";
-import { getModelNameById } from "../lib/modelsCatalog";
+import { copyImageRecordWithFeedback } from "./copyImageRecordToClipboard";
+import { subscribeToImageCopyFeedback } from "../lib/imageCopyFeedback";
 
 let transparentDragImage: HTMLImageElement | null = null;
 const getTransparentDragImage = (): HTMLImageElement | null => {
@@ -347,6 +342,35 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
   }, [image, disabled]);
 
+  // Surface the "Copied!" status badge whenever this image is copied — whether
+  // from this slot's own copy button or from the global Ctrl/Cmd+C shortcut.
+  const imageId = image?.id;
+  React.useEffect(() => {
+    if (!imageId) return;
+    let resetTimeout: number | null = null;
+    const clearReset = () => {
+      if (resetTimeout !== null) {
+        window.clearTimeout(resetTimeout);
+        resetTimeout = null;
+      }
+    };
+
+    const unsubscribe = subscribeToImageCopyFeedback(imageId, (status) => {
+      clearReset();
+      setThumbnailStatus(status);
+      if (status === "copied") {
+        resetTimeout = window.setTimeout(() => setThumbnailStatus("idle"), 1500);
+      } else if (status === "copyError") {
+        resetTimeout = window.setTimeout(() => setThumbnailStatus("idle"), 3000);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      clearReset();
+    };
+  }, [imageId]);
+
   const openFilePicker = () => {
     if (!onUpload || disabled) return;
     fileInputRef.current?.click();
@@ -377,37 +401,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
   const handleCopy = async () => {
     if (!image || !mergedControls.copy) return;
-
-    try {
-      setThumbnailStatus("copying");
-
-      const tool = TOOLS.find((t) => t.id === image.toolId) || null;
-      const isNewImageTool = tool?.editImage === false;
-      const modelId = (image.model || "").trim();
-      const modelName = getModelNameById(modelId) || modelId;
-      const reasoningLevel = (image.reasoningLevel || "").trim();
-      const pngMetadata = modelId
-        ? isNewImageTool
-          ? {
-              IllustratorModel: modelName,
-              IllustratorModelId: modelId,
-              IllustratorReasoningLevel: reasoningLevel,
-            }
-          : {
-              EditorModel: modelName,
-              EditorModelId: modelId,
-              EditorReasoningLevel: reasoningLevel,
-            }
-        : undefined;
-
-      await copyImageToClipboard(image.imageData, pngMetadata);
-      setThumbnailStatus("copied");
-      setTimeout(() => setThumbnailStatus("idle"), 1500);
-    } catch (err) {
-      console.error("Failed to copy image:", err);
-      setThumbnailStatus("copyError");
-      setTimeout(() => setThumbnailStatus("idle"), 3000);
-    }
+    // Status badge ("Copying..." → "Copied!") is driven by the copy-feedback
+    // subscription below, so a copy started here OR via Ctrl+C looks identical.
+    await copyImageRecordWithFeedback(image);
   };
 
   const handleDownload = () => {

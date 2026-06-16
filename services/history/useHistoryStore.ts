@@ -35,6 +35,7 @@ export const historyEntryToImageRecord = (
   timestamp: entry.timestamp,
   promptUsed: entry.promptUsed,
   sourceSummary: entry.sourceSummary ?? null,
+  caption: entry.caption ?? null,
   resolution: entry.resolution,
   isStarred: entry.isStarred ?? false,
   origin: entry.origin,
@@ -56,6 +57,7 @@ export const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): Hi
   isStarred: record.isStarred ?? false,
   sourceStyleId: record.sourceStyleId ?? null,
   sourceSummary: record.sourceSummary ?? null,
+  caption: record.caption ?? null,
   imageMime: mime,
   metaUpdatedAt: Date.now(),
 });
@@ -206,6 +208,7 @@ export const useHistoryStore = (): UseHistoryStoreResult => {
       if (typeof patch.promptUsed === "string") allowed.promptUsed = patch.promptUsed;
       if (typeof patch.sourceSummary !== "undefined") allowed.sourceSummary = patch.sourceSummary;
       if (typeof patch.sourceStyleId !== "undefined") allowed.sourceStyleId = patch.sourceStyleId;
+      if (typeof patch.caption !== "undefined") allowed.caption = patch.caption;
       if (typeof patch.parameters !== "undefined") allowed.parameters = patch.parameters;
       if (Object.keys(allowed).length === 0) return;
       await store.updateMeta(id, allowed);
@@ -234,7 +237,7 @@ export const useHistoryStore = (): UseHistoryStoreResult => {
         referenceImageIds: partial.referenceImageIds ?? [],
         rightPanelImageId: partial.rightPanelImageId ?? null,
         activeToolId: partial.activeToolId ?? null,
-        selectedModelId: partial.selectedModelId ?? null,
+        modelByTool: partial.modelByTool ?? {},
         selectedArtStyleId: partial.selectedArtStyleId ?? null,
       };
       await store.writeAppState(full);

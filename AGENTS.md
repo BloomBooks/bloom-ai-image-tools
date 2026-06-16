@@ -45,7 +45,7 @@ Use the chrome-devtools in a terminal to drive and probe the running app.
    - Composed from repeated **ImagePanel** instances to normalize uploads, drag/drop, and clearing.
 4. **Supporting Panels**
    - `HistoryStrip` (and `ImageSlot` thumbnails) keep recent generations accessible for drag-over to the main panels.
-   - `CapabilityPanel`, `ToolPanel`, and files under components/tools describe the registry-driven tool controls.
+   - `ToolModelPicker`, `ToolPanel`, and files under components/tools describe the registry-driven tool controls (each tool picks its own model + reasoning).
    - `ReferenceImagesPanel`, `ImageInfoPanel`, and `ImageToolsPanel` subcomponents round out auxiliary UI.
 
 ## UI

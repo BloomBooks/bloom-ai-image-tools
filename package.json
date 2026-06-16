@@ -52,6 +52,7 @@
     "gifenc": "^1.0.3",
     "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",
+    "pdfjs-dist": "6.0.227",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "rembg-webgpu": "^0.2.1"

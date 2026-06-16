@@ -115,33 +115,56 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
   }
   const image = item.imageData ? item : null;
   const isHistoryStrip = stripId === "history";
+  const caption = item.caption?.trim();
   return (
-    <ImageSlot
-      image={image}
-      variant="thumb"
-      isAnyDndDragging={isAnyDndDragging}
-      previewModifierActive={previewModifierActive}
-      previewSelected={isPreviewSelected}
-      dataTestId="history-card"
-      onClick={onSelect}
-      isSelected={isSelected}
-      draggableImageId={undefined}
-      controls={{
-        upload: false,
-        paste: false,
-        copy: !!image,
-        download: !!image,
-        remove: allowRemove,
-      }}
-      onRemove={allowRemove ? onRemove : undefined}
-      removeIcon={isHistoryStrip ? Icons.Trash : undefined}
-      actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
-      actionDisabledReasons={removeDisabledReason ? { remove: removeDisabledReason } : undefined}
-      starState={{
-        isStarred: Boolean(item.isStarred) || stripId === "starred",
-        onToggle: onToggleStar,
-      }}
-    />
+    <>
+      <ImageSlot
+        image={image}
+        variant="thumb"
+        isAnyDndDragging={isAnyDndDragging}
+        previewModifierActive={previewModifierActive}
+        previewSelected={isPreviewSelected}
+        dataTestId="history-card"
+        onClick={onSelect}
+        isSelected={isSelected}
+        draggableImageId={undefined}
+        controls={{
+          upload: false,
+          paste: false,
+          copy: !!image,
+          download: !!image,
+          remove: allowRemove,
+        }}
+        onRemove={allowRemove ? onRemove : undefined}
+        removeIcon={isHistoryStrip ? Icons.Trash : undefined}
+        actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
+        actionDisabledReasons={removeDisabledReason ? { remove: removeDisabledReason } : undefined}
+        starState={{
+          isStarred: Boolean(item.isStarred) || stripId === "starred",
+          onToggle: onToggleStar,
+        }}
+      />
+      {caption && (
+        <div
+          data-testid="thumb-caption"
+          title={caption}
+          style={{
+            marginTop: 3,
+            maxWidth: "100%",
+            fontSize: 10,
+            lineHeight: 1.25,
+            color: theme.colors.textSecondary,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            wordBreak: "break-word",
+          }}
+        >
+          {caption}
+        </div>
+      )}
+    </>
   );
 };
 
@@ -153,6 +176,7 @@ const ThumbVisual = React.memo(ThumbVisualInner, (prev, next) => {
     prev.item.id === next.item.id &&
     prev.item.imageData === next.item.imageData &&
     prev.item.isStarred === next.item.isStarred &&
+    prev.item.caption === next.item.caption &&
     prev.isSelected === next.isSelected &&
     prev.isPreviewSelected === next.isPreviewSelected &&
     prev.previewModifierActive === next.previewModifierActive &&

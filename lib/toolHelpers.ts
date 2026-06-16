@@ -1,13 +1,10 @@
-import { CapabilityName, ModelInfo, ToolDefinition, ToolParams } from "../types";
+import { ToolDefinition, ToolParams } from "../types";
 import { TOOLS } from "../components/tools/tools-registry";
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "./aspectRatios";
 
 export type ReferenceMode = ToolDefinition["referenceImages"];
 
 const DEFAULT_REFERENCE_MODE: ReferenceMode = "0";
-const CAPABILITY_READY_SCORE = 3;
-
-const normalizeId = (id: string | null | undefined): string => (id || "").trim().toLowerCase();
 
 export const getToolById = (toolId: string | null): ToolDefinition | null => {
   if (!toolId) {
@@ -63,57 +60,4 @@ export const getRequestedAspectRatioValue = (
 export const toolRequiresReferenceImage = (tool: ToolDefinition | null): boolean => {
   const mode = tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
   return getReferenceConstraints(mode).min > 0;
-};
-
-export const getRequiredCapabilities = (tool: ToolDefinition | null): CapabilityName[] => {
-  if (!tool?.capabilities) {
-    return [];
-  }
-  return Object.entries(tool.capabilities)
-    .filter(([, required]) => !!required)
-    .map(([capability]) => capability);
-};
-
-export const isOllamaOrLocal = (model: ModelInfo | null): boolean => {
-  const normalized = normalizeId(model?.id);
-  if (!normalized) {
-    return false;
-  }
-  return (
-    normalized.startsWith("ollama/") ||
-    normalized.startsWith("local/") ||
-    normalized.includes(":local") ||
-    normalized.startsWith("ollama-")
-  );
-};
-
-export const hasRequiredCapabilities = (
-  tool: ToolDefinition | null,
-  model: ModelInfo | null,
-): boolean => {
-  const required = getRequiredCapabilities(tool);
-  if (!required.length) {
-    return true;
-  }
-
-  if (!model) {
-    return true;
-  }
-
-  if (isOllamaOrLocal(model)) {
-    return true;
-  }
-
-  const scores = model.capabilities;
-  if (!scores) {
-    return true;
-  }
-
-  return required.every((capability) => {
-    const score = scores[capability];
-    if (typeof score !== "number") {
-      return true;
-    }
-    return score >= CAPABILITY_READY_SCORE;
-  });
 };

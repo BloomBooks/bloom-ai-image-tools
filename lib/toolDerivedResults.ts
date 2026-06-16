@@ -8,11 +8,20 @@ export type DerivedImageExtractionResult = {
 
 export const extractDerivedImageItems = async (
   imageData: string,
-  options: { signal?: AbortSignal; preferSeparatedSubjects?: boolean } = {},
+  options: {
+    signal?: AbortSignal;
+    preferSeparatedSubjects?: boolean;
+    preferComponents?: boolean;
+    componentMergeMarginRatio?: number;
+    targetPieceCount?: number;
+  } = {},
 ): Promise<DerivedImageExtractionResult> => {
   const backgroundRemoved = await removeBackgroundFromImage(imageData, options);
   const segmentedItems = await segmentImageIntoPieces(backgroundRemoved.imageData, {
     preferSeparatedSubjects: options.preferSeparatedSubjects,
+    preferComponents: options.preferComponents,
+    componentMergeMarginRatio: options.componentMergeMarginRatio,
+    targetPieceCount: options.targetPieceCount,
   });
 
   return {

@@ -450,9 +450,15 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       if (!image || disabled || orderedActions.length === 0) return null;
 
       const removeAction = orderedActions.find((action) => action.key === "remove");
-      const overflowActions = orderedActions.filter((action) => action.key !== "remove");
+      // Surface copy as a dedicated, always-on-hover button (rather than burying
+      // it in the "..." overflow) so a single hover-click copies the thumbnail.
+      const copyAction = orderedActions.find((action) => action.key === "copy");
+      const overflowActions = orderedActions.filter(
+        (action) => action.key !== "remove" && action.key !== "copy",
+      );
 
       const showRemove = isHovered;
+      const showCopy = isHovered;
       const showMoreTrigger =
         overflowActions.length > 0 && ((isHovered && isThumbMoreReady) || isThumbOverflowOpen);
 
@@ -474,6 +480,25 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
               }}
             >
               {renderActionButton(removeAction)}
+            </div>
+          ) : null}
+
+          {copyAction ? (
+            <div
+              style={{
+                position: "absolute",
+                bottom: cornerOffset,
+                right: cornerOffset,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                zIndex: 20,
+                opacity: showCopy ? 1 : 0,
+                pointerEvents: disabled ? "none" : showCopy ? "auto" : "none",
+                transition: "opacity 120ms ease",
+              }}
+            >
+              {renderActionButton(copyAction)}
             </div>
           ) : null}
 

@@ -21,7 +21,8 @@ import {
   AppState,
   GenerationProgressState,
   ImageRecord,
-  ModelInfo,
+  MeasuredStats,
+  ModelReasoningLevel,
   ToolParamsById,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
@@ -388,7 +389,11 @@ const DragOverlayLayer: React.FC<{
 
 interface ImageToolsPanelBar {
   appState: AppState;
-  selectedModel: ModelInfo | null;
+  modelByTool: Record<string, string>;
+  reasoningByTool: Record<string, ModelReasoningLevel>;
+  measuredStatsByKey: Record<string, MeasuredStats>;
+  onToolModelChange: (toolId: string, modelId: string) => void;
+  onToolReasoningChange: (toolId: string, level: ModelReasoningLevel) => void;
   targetImage: ImageRecord | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
@@ -437,7 +442,11 @@ interface ImageToolsPanelBar {
 
 export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   appState,
-  selectedModel,
+  modelByTool,
+  reasoningByTool,
+  measuredStatsByKey,
+  onToolModelChange,
+  onToolReasoningChange,
   targetImage,
   referenceImages,
   rightImage,
@@ -679,7 +688,11 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             hasTargetImage={hasTargetImage}
             targetImageResolution={targetImage?.resolution ?? null}
             isAuthenticated={appState.isAuthenticated}
-            selectedModel={selectedModel}
+            modelByTool={modelByTool}
+            reasoningByTool={reasoningByTool}
+            measuredStatsByKey={measuredStatsByKey}
+            onToolModelChange={onToolModelChange}
+            onToolReasoningChange={onToolReasoningChange}
             activeToolId={activeToolId}
             paramsByTool={toolParams}
             onParamChange={onParamChange}

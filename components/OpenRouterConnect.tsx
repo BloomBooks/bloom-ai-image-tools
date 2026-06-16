@@ -87,7 +87,7 @@ export function OpenRouterConnect({
     setTestMessage("");
     try {
       const status = await fetchOpenRouterKeyStatus(key);
-      const remaining = status.limitRemaining;
+      const remaining = status.limitRemaining ?? status.accountRemainingCredits;
       const balancePart =
         remaining !== null
           ? `, ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", currencyDisplay: "symbol" }).format(remaining)} available`

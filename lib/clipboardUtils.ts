@@ -199,11 +199,21 @@ export const copyWithFallbackIfNeeded = async (blob: Blob): Promise<void> => {
   await copyBlobToClipboard(pngBlob);
 };
 
+const canWriteImageAndText = (): boolean =>
+  typeof navigator !== "undefined" &&
+  !!navigator.clipboard &&
+  typeof navigator.clipboard.write === "function" &&
+  typeof ClipboardItem !== "undefined" &&
+  clipboardSupportsMime("image/png");
+
 export const handleCopy = async (
   imageData: string | null | undefined,
   pngTextMetadata?: PngTextMetadata,
+  caption?: string | null,
 ): Promise<boolean> => {
   if (!imageData) return false;
+
+  const trimmedCaption = typeof caption === "string" ? caption.trim() : "";
 
   try {
     const normalizedBlob = await getNormalizedImageBlob(imageData);
@@ -212,10 +222,37 @@ export const handleCopy = async (
       !!pngTextMetadata &&
       Object.values(pngTextMetadata).some((v) => typeof v === "string" && v.trim().length > 0);
 
+    // Build the image blob we will place on the clipboard (PNG + any metadata).
+    let imageBlob = normalizedBlob;
     if (hasMetadata) {
       const pngBlob = await convertBlobToPngWithFallback(normalizedBlob);
-      const pngWithMetadata = await injectPngTextMetadataIntoBlob(pngBlob, pngTextMetadata || {});
-      await copyBlobToClipboard(pngWithMetadata);
+      imageBlob = await injectPngTextMetadataIntoBlob(pngBlob, pngTextMetadata || {});
+    }
+
+    // When the image has caption text, write BOTH representations as a single
+    // clipboard entry: the paste target chooses which it wants — an image slot
+    // takes image/png, a text box takes text/plain. (e.g. pasting into Bloom.)
+    if (trimmedCaption && canWriteImageAndText()) {
+      try {
+        const pngForClipboard = isPngBlob(imageBlob)
+          ? imageBlob
+          : await convertBlobToPngWithFallback(imageBlob);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "image/png": pngForClipboard,
+            "text/plain": new Blob([trimmedCaption], { type: "text/plain" }),
+          }),
+        ]);
+        return true;
+      } catch (error) {
+        // Fall back to an image-only copy below if the combined write is
+        // rejected (older browsers, permission quirks, etc.).
+        console.warn("Combined image+text clipboard write failed; copying image only.", error);
+      }
+    }
+
+    if (hasMetadata) {
+      await copyBlobToClipboard(imageBlob);
     } else {
       await copyWithFallbackIfNeeded(normalizedBlob);
     }

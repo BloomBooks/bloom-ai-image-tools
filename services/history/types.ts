@@ -21,6 +21,8 @@ export interface HistoryEntry {
   isStarred?: boolean;
   sourceStyleId?: string | null;
   sourceSummary?: string | null;
+  /** Human-facing text for the image (e.g. an OCR-extracted panel caption). */
+  caption?: string | null;
   /** MIME type of the stored bytes (e.g. "image/png"). Drives file extension. */
   imageMime: string;
   /** Bumped every time mutable metadata changes; LWW key during reconcile. */
@@ -44,7 +46,8 @@ export interface AppStateFile {
   referenceImageIds: string[];
   rightPanelImageId: string | null;
   activeToolId: string | null;
-  selectedModelId: string | null;
+  /** Per-tool model selection mirrored for folder sync (toolId -> model id). */
+  modelByTool?: Record<string, string>;
   selectedArtStyleId?: string | null;
   /** Persisted at write time; used for `mtime`-style conflict resolution. */
   savedAt: number;

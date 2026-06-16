@@ -7,6 +7,8 @@ import ContentCutOutlinedIcon from "@mui/icons-material/ContentCutOutlined";
 import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
 import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
 import GifBoxOutlinedIcon from "@mui/icons-material/GifBoxOutlined";
+import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
@@ -15,6 +17,7 @@ import { ToolDefinition, ToolParameter } from "../../types";
 import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
 import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
+import { BREAK_COMIC_EDIT_PROMPT } from "../../lib/breakComic";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
@@ -48,9 +51,11 @@ const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
 });
 
 const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
+  "pdf_to_images",
   "ethnicity",
   "apply_localized_characters",
   "enhance_drawing",
+  "break_comic_into_images",
   "change_style",
   "change_text",
   "custom",
@@ -193,6 +198,7 @@ export const TOOLS: ToolDefinition[] = (
       referenceImages: "1+",
       editImage: false,
       derivedResultMode: "split-images",
+      keepDerivedSourceSheet: true,
     },
     {
       id: "apply_localized_characters",
@@ -312,6 +318,63 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) =>
         `Change the text "${params.match}" to "${params.replace}" in this image. Maintain the font style and background.`,
       referenceImages: "0",
+    },
+    {
+      id: "break_comic_into_images",
+      title: "Break Comic into Images",
+      description:
+        "Aims to split a multi-frame comic into individual panels, with text extracted and stored as captions. If it works, you can then copy each extracted panel and then paste both into the image and the text box of a Bloom page.",
+      group: "more",
+      icon: GridViewOutlinedIcon,
+      parameters: [
+        {
+          name: "furtherInstructions",
+          label: "Further Instructions",
+          type: "textarea",
+          placeholder:
+            "Optional: note which panels to include or skip, or anything to preserve (e.g. the title banner).",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) =>
+        appendOptionalInstructions(
+          BREAK_COMIC_EDIT_PROMPT,
+          params.furtherInstructions,
+          "Additional instructions for the illustrations:",
+        ),
+      actionButtonLabel: "Break into Images",
+      referenceImages: "0",
+      editImage: true,
+      // GPT-5.4 Image 2 is the recommended engine for splitting comics apart.
+      // Plain GPT-5 Image is not offered for this tool at all; the remaining
+      // catalog models stay selectable as alternatives.
+      recommendedModelIds: ["openai/gpt-5.4-image-2"],
+      disallowedModelIds: ["openai/gpt-5-image"],
+      // Leave reasoning at the model default for the cleanup-edit image call.
+      // With reasoning forced on (e.g. Flash's "medium" initial level) the
+      // model "plans a better poster" and redraws the artwork wholesale; the
+      // faithful runs all omitted the reasoning parameter.
+      imageReasoningLevel: "default",
+      derivedResultMode: "split-images",
+      keepDerivedSourceSheet: true,
+      captionsFromTextChannel: true,
+      splitByComponents: true,
+      autoSizeFromInput: true,
+    },
+    {
+      id: "pdf_to_images",
+      title: "PDF to Images",
+      description:
+        "Convert a PDF into a series of images. Runs entirely in your browser — no AI, no upload.",
+      group: "more",
+      icon: PictureAsPdfOutlinedIcon,
+      parameters: [],
+      // No model call: a local tool has no prompt. Kept for the shared interface.
+      promptTemplate: () => "",
+      actionButtonLabel: "Choose PDF…",
+      referenceImages: "0",
+      editImage: false,
+      localOnly: true,
     },
     {
       id: "coloring_book",

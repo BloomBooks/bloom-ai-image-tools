@@ -86,6 +86,32 @@ describe("ethnicity tool prompt", () => {
     expect(paletteTool?.hiddenAspectRatioDefault).toBe("21:9");
   });
 
+  it("adds a break-comic tool that splits into pieces and keeps the grid sheet", () => {
+    const breakComicTool = TOOLS.find((tool) => tool.id === "break_comic_into_images");
+
+    expect(breakComicTool).toBeDefined();
+    expect(breakComicTool?.group).toBe("more");
+    expect(breakComicTool?.derivedResultMode).toBe("split-images");
+    expect(breakComicTool?.keepDerivedSourceSheet).toBe(true);
+    expect(breakComicTool?.captionsFromTextChannel).toBe(true);
+    expect(breakComicTool?.editImage).toBe(true);
+    expect(breakComicTool?.referenceImages).toBe("0");
+    expect(breakComicTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
+
+    // No method selector — the tool always uses the cleanup-edit extraction.
+    expect(breakComicTool?.parameters.some((param) => param.name === "method")).toBe(false);
+
+    // The prompt is edit-framed and demands one image.
+    const defaultPrompt = breakComicTool?.promptTemplate?.({
+      furtherInstructions: "Skip the title banner.",
+    });
+    expect(defaultPrompt).toContain("Edit this image");
+    expect(defaultPrompt).toContain("exactly ONE output image");
+    expect(defaultPrompt).toContain(
+      "Additional instructions for the illustrations: Skip the title banner.",
+    );
+  });
+
   it("moves coloring-book restyling into its own more tool with difficulty support", () => {
     const changeStyleTool = TOOLS.find((tool) => tool.id === "change_style");
     const coloringBookTool = TOOLS.find((tool) => tool.id === "coloring_book");

@@ -9,10 +9,6 @@ export const LOCAL_DUMMY_MODEL: ModelInfo = {
   description:
     "Deterministic local test model that returns a cast sheet for split-image testing without calling OpenRouter.",
   pricing: "Free on localhost",
-  capabilities: {
-    "transparent-background": 1,
-    "edit-with-reference-image": 1,
-  },
   supportedAspectRatios: ["2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9"],
 };
 

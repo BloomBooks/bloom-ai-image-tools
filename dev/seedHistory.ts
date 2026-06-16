@@ -63,7 +63,7 @@ export async function seedHistory(
     },
     paramsByTool: existing?.paramsByTool ?? {},
     activeToolId: existing?.activeToolId ?? null,
-    selectedModelId: existing?.selectedModelId ?? null,
+    modelByTool: existing?.modelByTool ?? {},
     auth: existing?.auth ?? { apiKey: null, authMethod: null },
     historyNewestFirst: true,
   };

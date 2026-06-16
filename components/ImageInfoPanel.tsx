@@ -59,12 +59,18 @@ const resolveStyleSummary = (item: ImageRecord): string | null => {
   return `${style.name} (${styleId})`;
 };
 
+// Prompts longer than this are collapsed by default so the info panel doesn't
+// grow taller than the viewport and run off the screen.
+const PROMPT_COLLAPSE_THRESHOLD = 280;
+
 export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
   const tool = TOOLS.find((t) => t.id === item.toolId);
   const promptContent =
     item.promptUsed && item.promptUsed.length ? item.promptUsed : "Prompt unavailable.";
+  const isPromptLong = promptContent.length > PROMPT_COLLAPSE_THRESHOLD;
 
   const [promptCopied, setPromptCopied] = React.useState(false);
+  const [promptExpanded, setPromptExpanded] = React.useState(false);
   const copyResetTimeoutRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
@@ -155,6 +161,37 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
         gap: "6px",
       }}
     >
+      {item.caption && item.caption.trim().length > 0 && (
+        <div
+          style={{
+            marginBottom: 8,
+            paddingBottom: 8,
+            borderBottom: `1px solid ${theme.colors.border}`,
+          }}
+        >
+          <span
+            style={{
+              display: "block",
+              marginBottom: 4,
+              color: theme.colors.textMuted,
+            }}
+          >
+            Associated text:
+          </span>
+          <div
+            data-testid="image-caption"
+            style={{
+              color: theme.colors.textPrimary,
+              fontSize: "12px",
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.4,
+            }}
+          >
+            {item.caption}
+          </div>
+        </div>
+      )}
+
       <div style={rowStyle}>
         <span style={{ color: theme.colors.textMuted }}>Tool:</span>
         <span
@@ -218,17 +255,38 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           }}
         >
           <span style={{ display: "block" }}>Full Prompt:</span>
-          <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
-            <IconButton
-              aria-label="Copy full prompt"
-              onClick={handleCopyPrompt}
-              size="small"
-              data-testid="copy-full-prompt"
-              sx={{ color: theme.colors.textMuted }}
-            >
-              <ContentCopyIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {isPromptLong && (
+              <button
+                type="button"
+                onClick={() => setPromptExpanded((prev) => !prev)}
+                data-testid="toggle-full-prompt"
+                aria-expanded={promptExpanded}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: theme.colors.textSecondary,
+                  fontSize: "11px",
+                  textDecoration: "underline",
+                }}
+              >
+                {promptExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+            <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
+              <IconButton
+                aria-label="Copy full prompt"
+                onClick={handleCopyPrompt}
+                size="small"
+                data-testid="copy-full-prompt"
+                sx={{ color: theme.colors.textMuted }}
+              >
+                <ContentCopyIcon fontSize="inherit" />
+              </IconButton>
+            </Tooltip>
+          </div>
         </div>
         <div
           style={{
@@ -236,6 +294,14 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
             fontSize: "11px",
             whiteSpace: "pre-wrap",
             lineHeight: 1.4,
+            ...(isPromptLong && !promptExpanded
+              ? {
+                  maxHeight: "7.5em",
+                  overflow: "hidden",
+                  maskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
+                  WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
+                }
+              : {}),
           }}
         >
           {promptContent}

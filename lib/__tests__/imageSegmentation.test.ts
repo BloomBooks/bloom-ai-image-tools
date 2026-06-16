@@ -85,6 +85,56 @@ describe("extractPieceBoundsFromRaster", () => {
     });
   });
 
+  it("merges hairline gaps inside a panel with preferComponents + margin", () => {
+    // Left panel = two blobs separated by a 4px gap; right panel = one blob, far
+    // away across a large gutter. Connected components see 3 blobs.
+    const width = 120;
+    const height = 60;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 8, top: 8, right: 40, bottom: 25 }, { r: 30, g: 30, b: 30 });
+    fillRect(data, width, { left: 8, top: 30, right: 40, bottom: 52 }, { r: 30, g: 30, b: 30 });
+    fillRect(data, width, { left: 80, top: 8, right: 112, bottom: 52 }, { r: 30, g: 30, b: 30 });
+
+    // Plain connected components see all 3 blobs.
+    expect(extractPieceBoundsFromRaster({ data, width, height })).toHaveLength(3);
+
+    // A merge margin absorbs the small intra-panel gap (groups the two left
+    // blobs) while the large gutter keeps the right panel separate -> 2 pieces.
+    expect(
+      extractPieceBoundsFromRaster(
+        { data, width, height },
+        { preferComponents: true, componentMergeMarginRatio: 0.05 },
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("collapses over-split components onto a known target piece count", () => {
+    // Three panels across a wide row; the middle panel is split into two blobs.
+    // Connected components see 4; targetPieceCount=3 merges the closest pair
+    // (the middle panel's fragments) back to 3.
+    const width = 200;
+    const height = 60;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 8, top: 10, right: 40, bottom: 50 }, { r: 30, g: 30, b: 30 });
+    // Middle panel: two blobs separated by a small gap.
+    fillRect(data, width, { left: 88, top: 10, right: 104, bottom: 50 }, { r: 30, g: 30, b: 30 });
+    fillRect(data, width, { left: 110, top: 10, right: 126, bottom: 50 }, { r: 30, g: 30, b: 30 });
+    fillRect(data, width, { left: 168, top: 10, right: 192, bottom: 50 }, { r: 30, g: 30, b: 30 });
+
+    expect(
+      extractPieceBoundsFromRaster({ data, width, height }, { preferComponents: true }),
+    ).toHaveLength(4);
+
+    expect(
+      extractPieceBoundsFromRaster(
+        { data, width, height },
+        { preferComponents: true, targetPieceCount: 3 },
+      ),
+    ).toHaveLength(3);
+  });
+
   it("falls back to connected components when there is no clear grid", () => {
     const width = 60;
     const height = 28;

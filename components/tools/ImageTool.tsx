@@ -16,7 +16,13 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import type { ModelInfo, ToolDefinition, ToolParameter, ToolParamsById } from "../../types";
+import type {
+  MeasuredStats,
+  ModelReasoningLevel,
+  ToolDefinition,
+  ToolParameter,
+  ToolParamsById,
+} from "../../types";
 import { TOOLS } from "./tools-registry";
 import { Icon, Icons } from "../Icons";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
@@ -30,9 +36,15 @@ import {
 } from "../../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
+import { getModelInfoById, resolveToolModelId } from "../../lib/modelsCatalog";
+import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
+import { ToolModelPicker } from "./ToolModelPicker";
 import { theme } from "../../themes";
 
-const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image";
+// Must match the catalog id in data/models-registry.json5, which is the
+// "-preview" key while OpenRouter only exposes the preview. Keep in sync if the
+// non-preview key is ever published and the registry id is updated.
+const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
 
 const LOCALIZE_TOOL_ORDER = [
   "extract_cast_of_characters",
@@ -95,7 +107,11 @@ interface ToolPanelProps {
   hasTargetImage: boolean;
   targetImageResolution?: { width: number; height: number } | null;
   isAuthenticated: boolean;
-  selectedModel: ModelInfo | null;
+  modelByTool: Record<string, string>;
+  reasoningByTool: Record<string, ModelReasoningLevel>;
+  measuredStatsByKey: Record<string, MeasuredStats>;
+  onToolModelChange: (toolId: string, modelId: string) => void;
+  onToolReasoningChange: (toolId: string, level: ModelReasoningLevel) => void;
   activeToolId: string | null;
   paramsByTool: ToolParamsById;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
@@ -371,7 +387,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   hasTargetImage,
   targetImageResolution,
   isAuthenticated,
-  selectedModel,
+  modelByTool,
+  reasoningByTool,
+  measuredStatsByKey,
+  onToolModelChange,
+  onToolReasoningChange,
   activeToolId,
   paramsByTool,
   onParamChange,
@@ -545,6 +565,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   const renderParameterField = useCallback(
     (tool: ToolDefinition, param: ToolParameter, value: string) => {
       const inputTestId = `input-${param.name}`;
+      // Aspect-ratio / size widgets depend on the model this specific tool runs on.
+      const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool));
 
       if (param.type === "art-style") {
         const storedValue = value;
@@ -583,7 +605,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
       if (param.type === "textarea") {
         const persistHeightKey = `bloom-ai-image-tools:textarea-height:${tool.id}:${param.name}`;
-        return (
+        // "Further Instructions" is an optional refinement field — render it
+        // de-emphasized (about 50% more transparent) so it sits behind the
+        // primary controls.
+        const isFurtherInstructions = param.name === "furtherInstructions";
+        const field = (
           <ParamTextInput
             key={param.name}
             name={param.name}
@@ -598,6 +624,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             onCommit={(nextValue) => handleParamChange(tool.id, param.name, nextValue)}
           />
         );
+        if (isFurtherInstructions) {
+          return (
+            <Box key={param.name} sx={{ opacity: 0.5 }}>
+              {field}
+            </Box>
+          );
+        }
+        return field;
       }
 
       if (param.type === "checkbox") {
@@ -630,7 +664,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
       if (param.type === "aspect-ratio") {
         const isEditTool = tool.editImage !== false;
-        const supportedAspectRatios = selectedModel?.supportedAspectRatios;
+        const supportedAspectRatios = toolModel?.supportedAspectRatios;
         const fallbackValue = isEditTool
           ? AUTO_ASPECT_RATIO
           : getDefaultAspectRatioValue(supportedAspectRatios) || DEFAULT_CREATE_ASPECT_RATIO;
@@ -658,10 +692,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "size") {
-        const sizeOptions = getOrderedSizeOptions(param.options, selectedModel?.id);
+        const sizeOptions = getOrderedSizeOptions(param.options, toolModel?.id);
         const shouldPreferModelDefault =
-          selectedModel?.id === GEMINI_3_1_FLASH_MODEL_ID &&
-          (!value || value === param.defaultValue);
+          toolModel?.id === GEMINI_3_1_FLASH_MODEL_ID && (!value || value === param.defaultValue);
         const sizeValue = shouldPreferModelDefault
           ? sizeOptions[0] || param.defaultValue || ""
           : value || sizeOptions[0] || param.defaultValue || "";
@@ -747,7 +780,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       muiTheme.palette.text.secondary,
       onArtStyleChange,
       selectedArtStyleId,
-      selectedModel?.id,
+      modelByTool,
       handleParamChange,
       targetImageResolution,
     ],
@@ -768,10 +801,30 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     </Typography>
   );
 
+  // The output-size token this tool would request right now, so the model
+  // picker can look up the remembered cost/time for that exact size. Mirrors
+  // the resolution in ImageToolsWorkspace.handleApplyTool.
+  const resolveToolSizeToken = (tool: ToolDefinition): string => {
+    const sizeParam = tool.parameters.find((param) => param.type === "size");
+    if (sizeParam) {
+      return (
+        paramsByTool[tool.id]?.[sizeParam.name] || sizeParam.defaultValue || DEFAULT_SIZE_TOKEN
+      );
+    }
+    if (tool.autoSizeFromInput && targetImageResolution?.width && targetImageResolution?.height) {
+      return pickSizeTokenForLongEdge(
+        Math.max(targetImageResolution.width, targetImageResolution.height),
+      );
+    }
+    return DEFAULT_SIZE_TOKEN;
+  };
+
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
     const requiresOpenRouter =
-      tool.id !== "remove_background" && !canUseLocalDummyModelWithoutApiKey(selectedModel?.id);
+      tool.id !== "remove_background" &&
+      !tool.localOnly &&
+      !canUseLocalDummyModelWithoutApiKey(resolveToolModelId(tool, modelByTool));
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
@@ -808,6 +861,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         data-tool-id={tool.id}
         variant="outlined"
         sx={{
+          position: "relative",
           borderRadius: 3,
           borderStyle: "solid",
           borderWidth: `${cardBorderWidth}px`,
@@ -819,6 +873,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           transition: "all 0.2s ease",
         }}
       >
+        {isSelected && !tool.localOnly && (
+          <Box sx={{ position: "absolute", top: 14, right: 10, zIndex: 2 }}>
+            <ToolModelPicker
+              tool={tool}
+              modelByTool={modelByTool}
+              reasoningByTool={reasoningByTool}
+              measuredStatsByKey={measuredStatsByKey}
+              sizeToken={resolveToolSizeToken(tool)}
+              onModelChange={(modelId) => onToolModelChange(tool.id, modelId)}
+              onReasoningChange={(level) => onToolReasoningChange(tool.id, level)}
+              disabled={isProcessing}
+            />
+          </Box>
+        )}
         <ButtonBase
           onClick={() => handleToolSelect(tool.id)}
           disableRipple
@@ -829,7 +897,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             display: "grid",
             gridTemplateColumns: "32px 1fr",
             columnGap: 2,
-            alignItems: "center",
+            alignItems: "start",
             borderRadius: 3,
           }}
         >

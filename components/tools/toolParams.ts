@@ -32,5 +32,19 @@ export const mergeParamsWithDefaults = (existing?: ToolParamsById): ToolParamsBy
       ...existing[toolId],
     };
   });
+
+  // A persisted select value can be an option label from an older build (e.g.
+  // a renamed method). Reset such values to the default so the select widget
+  // doesn't render blank.
+  TOOLS.forEach((tool) => {
+    tool.parameters.forEach((param) => {
+      if (param.type !== "select" || !param.options?.length) return;
+      const value = merged[tool.id]?.[param.name];
+      if (value && !param.options.includes(value)) {
+        merged[tool.id][param.name] = defaults[tool.id][param.name];
+      }
+    });
+  });
+
   return merged;
 };

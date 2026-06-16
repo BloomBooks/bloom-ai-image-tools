@@ -1,7 +1,7 @@
 import type { ModelReasoningLevel } from "../types";
 import { getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
-import { getRequestModelIds } from "../lib/modelsCatalog";
+import { getModelNameById, getRequestModelIds } from "../lib/modelsCatalog";
 
 /**
  * Builds the OpenRouter model selector for a request body. When a model
@@ -16,7 +16,7 @@ function buildModelSelector(modelId: string): Record<string, unknown> {
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_KEYS_URL = "https://openrouter.ai/settings/keys";
 
-export type OpenRouterApiErrorReason = "insufficient-credits";
+export type OpenRouterApiErrorReason = "insufficient-credits" | "rate-limited";
 
 export class OpenRouterApiError extends Error {
   status: number;
@@ -56,10 +56,19 @@ const DEFAULT_IMAGE_MODEL = (
 const DEFAULT_TEXT_MODEL = "~google/gemini-flash-latest";
 
 export interface EditImageResult {
-  imageData: string; // Data URL for the edited or generated image
+  imageData: string; // Data URL for the FIRST returned image (back-compat)
+  /**
+   * ALL images the model returned, in order, as data URLs. Usually length 1,
+   * but interleaved image models (e.g. Gemini 3 Pro Image) can emit several in
+   * one response — e.g. one image per comic panel instead of a single grid.
+   * `imageData` is `images[0]`.
+   */
+  images: string[];
   duration: number;
   model: string; // Model ID used (from API response)
   cost: number; // Cost in dollars (from API response usage.cost)
+  /** The model's text-channel response, if any (e.g. structured JSON alongside the image). */
+  text?: string;
 }
 
 export interface GenerateTextResult {
@@ -112,6 +121,16 @@ function getOpenRouterErrorDetail(data: any): string | undefined {
     normalizeErrorString(data?.error?.message) ||
     normalizeErrorString(data?.message)
   );
+}
+
+/**
+ * OpenRouter's raw 429 message ("...is temporarily rate-limited upstream.
+ * Please retry shortly, or add your own key...") is confusing for end users.
+ * Rewrite it into something approachable that names the model in plain terms.
+ */
+function buildRateLimitMessage(modelId: string): string {
+  const friendlyName = getModelNameById(modelId) || modelId;
+  return `Apparently, the AI server running ${friendlyName} is too busy at the moment, and they would like us to try again later. You could wait and retry, or use a different model.`;
 }
 
 function dataUrlToParts(dataUrl: string): { base64: string; mimeType: string } {
@@ -423,6 +442,18 @@ function mapSizeToGeminiImageSize(size?: string): string {
 }
 
 /**
+ * `.catch` handler for response-body reads: rethrow a cancellation so it
+ * propagates, but treat any other read failure as an empty body (the callers
+ * tolerate that and surface a clearer downstream error).
+ */
+const rethrowIfAbort = (error: unknown): string => {
+  if ((error as { name?: string } | null)?.name === "AbortError") {
+    throw error;
+  }
+  return "";
+};
+
+/**
  * Uses OpenRouter image endpoints to generate or edit an image.
  * @param base64Images - Source images for editing/reference (data URLs). Empty array for generation.
  * @param prompt - Instruction sent to the model.
@@ -442,8 +473,10 @@ export const editImage = async (
   const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   if (canUseLocalDummyModelWithoutApiKey(modelToUse)) {
+    const dummyImage = await createLocalDummyImage(options?.imageConfig?.aspectRatio);
     return {
-      imageData: await createLocalDummyImage(options?.imageConfig?.aspectRatio),
+      imageData: dummyImage,
+      images: [dummyImage],
       duration: getNow() - startTime,
       model: LOCAL_DUMMY_MODEL_ID,
       cost: 0,
@@ -472,11 +505,20 @@ export const editImage = async (
     }
   }
 
-  // Build image generation parameters for different providers
-  // Gemini-style: aspect_ratio and image_size in image_config
+  // Build image generation parameters for different providers.
+  // - google/* (Gemini): uses image_config with image_size "1K"|"2K"|"4K"
+  // - openai/gpt-5.4-image*: uses image_config but only supports "1K"|"2K" (not "4K")
+  // - other OpenAI (gpt-image-1, DALL-E, etc.): uses size as pixel dimensions
+  const isGeminiModel = modelToUse.startsWith("google/");
+  const isGpt54ImageModel = modelToUse.startsWith("openai/gpt-5.4-image");
+  const usesImageConfig = isGeminiModel || isGpt54ImageModel;
+
   const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
-  const geminiImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
-  // OpenAI-style: size as a direct parameter
+  const rawImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
+  // gpt-5.4-image-2 caps at "2K"; cap any "4K" request to "2K" for those models
+  const resolvedImageSize = !isGeminiModel && rawImageSize === "4K" ? "2K" : rawImageSize;
+
+  // OpenAI-style size (pixel dimensions) for models that don't support image_config
   const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
 
   const body: Record<string, any> = {
@@ -489,108 +531,241 @@ export const editImage = async (
     ],
     modalities: ["text", "image"],
     stream: false,
-    // OpenAI-style size parameter (for DALL-E, gpt-image models)
-    size: openAISize,
-    // Gemini-style image configuration
-    image_config: {
-      aspect_ratio: geminiAspectRatio,
-      image_size: geminiImageSize,
-    },
+    // The generated image is billed as output tokens in the SAME budget as any
+    // reasoning/commentary text. Without an explicit ceiling, a "thinking"
+    // model (e.g. Gemini 3 Flash) can spend the default completion budget on
+    // reasoning and hit finish_reason="length" (MAX_TOKENS) BEFORE it emits the
+    // image — surfacing as "did not return an image." Give image requests ample
+    // headroom so reasoning + image both fit. (Image output itself is small:
+    // <=2520 tokens even at 4K, so this budget is almost entirely for thinking.)
+    max_tokens: 64_000,
+    // Provider-specific image size parameters — only include what the model accepts
+    ...(usesImageConfig
+      ? {
+          image_config: {
+            aspect_ratio: geminiAspectRatio,
+            image_size: resolvedImageSize,
+          },
+        }
+      : { size: openAISize }),
   };
 
-  if (reasoningLevel !== "default") {
-    body.reasoning = {
-      effort: reasoningLevel === "none" ? "none" : reasoningLevel,
+  // Gemini image endpoints fail to return an image in several DIFFERENT ways,
+  // all observed with the exact same request resent. Every attempt uses the
+  // reasoning effort the user asked for — we never silently change it:
+  //   - empty response: finish_reason="stop" with 0 completion tokens (costs
+  //     only the prompt). Transient; a plain retry usually succeeds.
+  //   - text without image: the model answers the text part of a combined
+  //     image+text prompt but skips the image. Also transient; retry.
+  //   - truncation: reasoning consumes the same output-token budget as the
+  //     image, so finish_reason="length"/MAX_TOKENS arrives before the image.
+  //     The whole budget was spent (and billed) on thinking, so retrying the
+  //     same request is the EXPENSIVE failure — don't. Fail immediately with
+  //     a message telling the user to pick a lower reasoning level.
+  //
+  // We never send effort:"none": several image endpoints (e.g. Gemini 3 Pro
+  // Image) make reasoning mandatory and reject "none" with a 400 ("Reasoning is
+  // mandatory for this endpoint and cannot be disabled"). "default" (and an
+  // explicit "none" request) omit the reasoning parameter entirely and leave
+  // the decision to the model.
+  const MAX_IMAGE_ATTEMPTS = 3;
+  const effort: string | null =
+    reasoningLevel === "default" || reasoningLevel === "none" ? null : reasoningLevel;
+
+  let lastNoImageDetail = "no text either";
+
+  for (let attempt = 0; attempt < MAX_IMAGE_ATTEMPTS; attempt += 1) {
+    if (effort) {
       // We only need the image output, not the model's reasoning text.
-      exclude: true,
-    };
-  }
+      body.reasoning = { effort, exclude: true };
+    } else {
+      delete body.reasoning;
+    }
 
-  const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": window.location.origin,
-      "X-Title": "Bloom AI Image Tools",
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+    // Log the request parameters (never the image bytes) so the full request is
+    // visible in the console without opening the Network panel.
+    console.log("[openRouter] image request", {
+      model: modelToUse,
+      attempt: attempt + 1,
+      attemptsPlanned: MAX_IMAGE_ATTEMPTS,
+      reasoningLevelRequested: reasoningLevel,
+      reasoningEffortSent: effort ?? "(omitted — model default)",
+      modalities: body.modalities,
+      maxTokens: body.max_tokens,
+      sizeOpenAI: body.size,
+      imageConfigGemini: body.image_config,
+      inputImageCount: images.length,
+      promptChars: prompt.length,
+      promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,
+    });
 
-  const rawText = await response.text().catch(() => "");
-  let data: any = null;
-  try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = { _nonJsonBody: rawText };
-  }
+    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Bloom AI Image Tools",
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
 
-  if (!response.ok) {
-    const detailMessage = getOpenRouterErrorDetail(data);
+    // If the user cancelled while the body was streaming, the read rejects with
+    // AbortError — rethrow it so cancel propagates instead of being swallowed
+    // into an empty body and treated as a retryable "no image" response.
+    const rawText = await response.text().catch(rethrowIfAbort);
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = { _nonJsonBody: rawText };
+    }
 
-    if (response.status === 402 && detailMessage) {
-      throw new OpenRouterApiError(detailMessage, {
+    if (!response.ok) {
+      const detailMessage = getOpenRouterErrorDetail(data);
+
+      if (response.status === 402 && detailMessage) {
+        throw new OpenRouterApiError(detailMessage, {
+          status: response.status,
+          reason: "insufficient-credits",
+          detailMessage,
+          infoUrl: OPENROUTER_KEYS_URL,
+        });
+      }
+
+      if (response.status === 429) {
+        throw new OpenRouterApiError(buildRateLimitMessage(modelToUse), {
+          status: response.status,
+          reason: "rate-limited",
+          detailMessage,
+        });
+      }
+
+      const message = detailMessage || rawText || response.statusText || "";
+      const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+      throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
         status: response.status,
-        reason: "insufficient-credits",
         detailMessage,
-        infoUrl: OPENROUTER_KEYS_URL,
       });
     }
 
-    const message = detailMessage || rawText || response.statusText || "";
-    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-    throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
+    // Try to extract image(s) from chat-style response. Interleaved image
+    // models can return MORE THAN ONE image (e.g. one per panel), so collect
+    // them all in order rather than stopping at the first.
+    const choice = data?.choices?.[0];
+    const contentArray = choice?.message?.content;
+    const imagesArray = choice?.message?.images;
+    const finishReason = choice?.finish_reason ?? choice?.native_finish_reason ?? null;
+    const returnedText =
+      extractTextContent(contentArray) || normalizeErrorString(choice?.message?.text);
+
+    const collectedImages: string[] = [];
+    const addImage = (url: unknown) => {
+      if (
+        typeof url === "string" &&
+        url.startsWith("data:image") &&
+        !collectedImages.includes(url)
+      ) {
+        collectedImages.push(url);
+      }
+    };
+    // Content array (some models return images here)
+    if (Array.isArray(contentArray)) {
+      for (const part of contentArray) {
+        if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
+      }
+    }
+    // Images array (Gemini models return images here)
+    if (Array.isArray(imagesArray)) {
+      for (const part of imagesArray) {
+        if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
+      }
+    }
+    // OpenAI-style b64_json data array (DALL·E / gpt-image)
+    if (collectedImages.length === 0 && Array.isArray(data?.data)) {
+      for (const entry of data.data) {
+        if (entry?.b64_json) addImage(`data:image/png;base64,${entry.b64_json}`);
+      }
+    }
+
+    // Log the response shape (counts/metadata only — never the image bytes).
+    console.log("[openRouter] image response", {
       status: response.status,
-      detailMessage,
+      model: (data?.model as string) || modelToUse,
+      attempt: attempt + 1,
+      reasoningEffortSent: effort ?? "(omitted — model default)",
+      finishReason,
+      imagesReturned: collectedImages.length,
+      textChars: returnedText?.length ?? 0,
+      textPreview: returnedText ? returnedText.slice(0, 400) : null,
+      cost: (data?.usage?.cost as number) ?? null,
+      usage: data?.usage ?? null,
     });
-  }
 
-  // Try to extract an image URL/base64 from chat-style response
-  const choice = data?.choices?.[0];
-  const contentArray = choice?.message?.content;
-  const imagesArray = choice?.message?.images;
+    if (collectedImages.length > 0) {
+      return {
+        imageData: collectedImages[0],
+        images: collectedImages,
+        duration: getNow() - localStartTime,
+        model: (data?.model as string) || modelToUse,
+        cost: (data?.usage?.cost as number) ?? 0,
+        text: extractTextContent(contentArray) || undefined,
+      };
+    }
 
-  let imageUrl: string | null = null;
-  // First check the content array (some models return images here)
-  if (Array.isArray(contentArray)) {
-    for (const part of contentArray) {
-      if (part?.type === "image_url" && part?.image_url?.url) {
-        imageUrl = part.image_url.url as string;
-        break;
-      }
+    // No image. Diagnose what came back so the failure isn't opaque.
+    const refusal = normalizeErrorString(choice?.message?.refusal);
+    console.warn("[openRouter] No image in response.", {
+      attempt,
+      effort,
+      model: (data?.model as string) || modelToUse,
+      finishReason,
+      refusal: refusal || null,
+      textPreview: returnedText ? returnedText.slice(0, 800) : null,
+      hadContentArray: Array.isArray(contentArray),
+      hadImagesArray: Array.isArray(imagesArray),
+    });
+
+    const detail =
+      refusal ||
+      returnedText ||
+      (finishReason ? `finish_reason="${finishReason}"` : "") ||
+      "no text either";
+    lastNoImageDetail = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;
+
+    const truncated = finishReason === "length" || finishReason === "MAX_TOKENS";
+    if (truncated) {
+      // The full output-token budget was spent (and billed) on reasoning, so
+      // resending the same request would likely just burn it again. Tell the
+      // user what to change instead of retrying or silently lowering it.
+      const currentLevel =
+        reasoningLevel === "default" || reasoningLevel === "none"
+          ? "the model's default"
+          : `"${reasoningLevel}"`;
+      const lowerLevel =
+        reasoningLevel === "high" ? '"medium"' : reasoningLevel === "medium" ? '"low"' : null;
+      const suggestion = lowerLevel
+        ? `Try lowering it to ${lowerLevel} in the model settings.`
+        : reasoningLevel === "low"
+          ? "Reasoning is already at the lowest level; try a smaller image size."
+          : 'Try setting it to "low" in the model settings.';
+      throw new Error(
+        `The model spent its whole output budget thinking before producing the image. ` +
+          `The reasoning level is currently ${currentLevel}. ${suggestion}`,
+      );
+    }
+
+    if (attempt < MAX_IMAGE_ATTEMPTS - 1) {
+      console.warn(
+        `[openRouter] No image in response (attempt ${attempt + 1}/${MAX_IMAGE_ATTEMPTS}); retrying.`,
+      );
     }
   }
-  // Also check the images array (Gemini models return images here)
-  if (!imageUrl && Array.isArray(imagesArray)) {
-    for (const part of imagesArray) {
-      if (part?.type === "image_url" && part?.image_url?.url) {
-        imageUrl = part.image_url.url as string;
-        break;
-      }
-    }
-  }
 
-  const b64 = imageUrl?.startsWith("data:image")
-    ? imageUrl
-    : (data?.data?.[0]?.b64_json as string | undefined)
-      ? `data:image/png;base64,${data.data[0].b64_json}`
-      : null;
-
-  if (!b64) {
-    throw new Error("OpenRouter did not return an image.");
-  }
-
-  // Extract model and cost from the API response
-  const responseModel = (data?.model as string) || modelToUse;
-  const responseCost = (data?.usage?.cost as number) ?? 0;
-
-  return {
-    imageData: b64,
-    duration: getNow() - localStartTime,
-    model: responseModel,
-    cost: responseCost,
-  };
+  throw new Error(
+    `OpenRouter did not return an image. The model responded with: ${lastNoImageDetail}`,
+  );
 };
 
 export const generateText = async (
@@ -617,72 +792,112 @@ export const generateText = async (
     });
   }
 
-  const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": window.location.origin,
-      "X-Title": "Bloom AI Image Tools",
-    },
-    body: JSON.stringify({
-      ...buildModelSelector(modelToUse),
-      messages: [
-        {
-          role: "user",
-          content,
-        },
-      ],
-      stream: false,
-    }),
-    signal: options?.signal,
+  const requestBody = JSON.stringify({
+    ...buildModelSelector(modelToUse),
+    messages: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+    stream: false,
   });
 
-  const rawText = await response.text().catch(() => "");
-  let data: any = null;
-  try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = { _nonJsonBody: rawText };
-  }
+  // Text endpoints occasionally return an OK response with an EMPTY body
+  // (finish_reason="stop", 0 completion tokens) — the same transient hiccup we
+  // see with image calls. A plain retry usually succeeds. This matters most for
+  // the break-comic flow, where a successful (and expensive, multi-minute) image
+  // edit is followed by a cheap caption/probe text call: a single empty text
+  // response here used to throw "OpenRouter did not return text" and discard all
+  // the prior work. HTTP errors are NOT retried — they fail immediately as before.
+  const MAX_TEXT_ATTEMPTS = 3;
+  let accumulatedCost = 0;
+  let lastModel = modelToUse;
 
-  if (!response.ok) {
-    const detailMessage = getOpenRouterErrorDetail(data);
+  for (let attempt = 0; attempt < MAX_TEXT_ATTEMPTS; attempt += 1) {
+    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Bloom AI Image Tools",
+      },
+      body: requestBody,
+      signal: options?.signal,
+    });
 
-    if (response.status === 402 && detailMessage) {
-      throw new OpenRouterApiError(detailMessage, {
+    const rawText = await response.text().catch(rethrowIfAbort);
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = { _nonJsonBody: rawText };
+    }
+
+    if (!response.ok) {
+      const detailMessage = getOpenRouterErrorDetail(data);
+
+      if (response.status === 402 && detailMessage) {
+        throw new OpenRouterApiError(detailMessage, {
+          status: response.status,
+          reason: "insufficient-credits",
+          detailMessage,
+          infoUrl: OPENROUTER_KEYS_URL,
+        });
+      }
+
+      if (response.status === 429) {
+        throw new OpenRouterApiError(buildRateLimitMessage(modelToUse), {
+          status: response.status,
+          reason: "rate-limited",
+          detailMessage,
+        });
+      }
+
+      const message = detailMessage || rawText || response.statusText || "";
+      const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+      throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
         status: response.status,
-        reason: "insufficient-credits",
         detailMessage,
-        infoUrl: OPENROUTER_KEYS_URL,
       });
     }
 
-    const message = detailMessage || rawText || response.statusText || "";
-    const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-    throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
-      status: response.status,
-      detailMessage,
-    });
+    // An empty attempt may still bill prompt tokens, so keep a running total.
+    accumulatedCost += (data?.usage?.cost as number) ?? 0;
+    lastModel = (data?.model as string) || modelToUse;
+
+    const text =
+      extractTextContent(data?.choices?.[0]?.message?.content) ||
+      normalizeErrorString(data?.choices?.[0]?.message?.text) ||
+      normalizeErrorString(data?.output_text);
+
+    if (text) {
+      return {
+        text: stripMarkdownCodeFence(text),
+        duration: performance.now() - startTime,
+        model: lastModel,
+        cost: accumulatedCost,
+      };
+    }
+
+    const finishReason =
+      data?.choices?.[0]?.finish_reason ?? data?.choices?.[0]?.native_finish_reason ?? null;
+    console.warn(
+      `[openRouter] No text in response (attempt ${attempt + 1}/${MAX_TEXT_ATTEMPTS}).`,
+      { model: lastModel, finishReason },
+    );
+
+    if (attempt === MAX_TEXT_ATTEMPTS - 1) {
+      throw new Error(
+        `OpenRouter did not return text after ${MAX_TEXT_ATTEMPTS} attempts.` +
+          (finishReason ? ` (finish_reason="${finishReason}")` : ""),
+      );
+    }
   }
 
-  const text =
-    extractTextContent(data?.choices?.[0]?.message?.content) ||
-    normalizeErrorString(data?.choices?.[0]?.message?.text) ||
-    normalizeErrorString(data?.output_text);
-
-  if (!text) {
-    throw new Error("OpenRouter did not return text.");
-  }
-
-  const normalizedText = stripMarkdownCodeFence(text);
-
-  return {
-    text: normalizedText,
-    duration: performance.now() - startTime,
-    model: (data?.model as string) || modelToUse,
-    cost: (data?.usage?.cost as number) ?? 0,
-  };
+  // Unreachable: the loop either returns or throws on the final attempt.
+  throw new Error("OpenRouter did not return text.");
 };
 
 export const fetchOpenRouterCredits = async (

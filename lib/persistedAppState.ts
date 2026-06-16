@@ -35,6 +35,7 @@ const mergeImageRecord = (current: ImageRecord, incoming: ImageRecord) => {
     ...current,
     imageData: current.imageData || incoming.imageData,
     imageFileName: current.imageFileName || incoming.imageFileName,
+    caption: current.caption ?? incoming.caption,
     isStarred: current.isStarred ?? incoming.isStarred,
   };
 };

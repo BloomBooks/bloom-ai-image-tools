@@ -3,6 +3,7 @@ import {
   detectMagentaFrameBounds,
   extractOpaqueBoundsFromRaster,
   extractPieceBoundsFromRaster,
+  isMagentaishPixel,
 } from "../imageSegmentation";
 
 const expectBoundsToContain = (
@@ -442,6 +443,28 @@ describe("detectMagentaFrameBounds", () => {
     expect(
       extractPieceBoundsFromRaster({ data, width, height }, { detectColoredFrames: true }),
     ).toHaveLength(0);
+  });
+});
+
+describe("isMagentaishPixel (frame-erase test)", () => {
+  const px = (r: number, g: number, b: number, a = 255) =>
+    isMagentaishPixel(new Uint8ClampedArray([r, g, b, a]), 0);
+
+  it("erases solid and anti-aliased (halo) magenta", () => {
+    expect(px(255, 0, 255)).toBe(true); // solid border
+    expect(px(255, 120, 255)).toBe(true); // mid halo
+    expect(px(255, 210, 255)).toBe(true); // light halo toward white
+  });
+
+  it("keeps pink/purple-ish artwork (germ characters)", () => {
+    expect(px(240, 100, 160)).toBe(false); // pink: red well above blue
+    expect(px(235, 90, 150)).toBe(false);
+  });
+
+  it("keeps clearly non-magenta colors and transparent pixels", () => {
+    expect(px(80, 120, 220)).toBe(false); // blue
+    expect(px(220, 180, 70)).toBe(false); // skin/orange
+    expect(px(255, 0, 255, 0)).toBe(false); // transparent
   });
 });
 

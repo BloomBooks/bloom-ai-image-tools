@@ -84,6 +84,24 @@ const isMagentaPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean =>
   return red >= 160 && blue >= 160 && green <= 120 && red - green >= 80 && blue - green >= 80;
 };
 
+// Looser test used when ERASING the frame from a crop (not when detecting it).
+// A thin magenta line anti-aliases into a magenta→white halo whose pixels are
+// too light for the strict detector, leaving a faint ring if only the core is
+// removed. In any magenta/white blend red and blue stay high and near-equal
+// while green dips below both; real pink/purple artwork (the germ characters)
+// has red well above blue, so the |red − blue| ≤ 70 guard spares it.
+export const isMagentaishPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean => {
+  if (data[pixelIndex + 3] <= ALPHA_BACKGROUND_THRESHOLD) {
+    return false;
+  }
+  const red = data[pixelIndex];
+  const green = data[pixelIndex + 1];
+  const blue = data[pixelIndex + 2];
+  return (
+    red >= 150 && blue >= 150 && green <= Math.min(red, blue) - 25 && Math.abs(red - blue) <= 70
+  );
+};
+
 const createForegroundMask = ({ data, width, height }: RasterImageData): Uint8Array => {
   const mask = new Uint8Array(width * height);
   for (let index = 0; index < width * height; index += 1) {
@@ -944,12 +962,13 @@ const cropBoundsToDataUrl = async (image: HTMLImageElement, bounds: Bounds): Pro
 
   const imageData = context.getImageData(0, 0, cropWidth, cropHeight);
   for (let pixelIndex = 0; pixelIndex < imageData.data.length; pixelIndex += 4) {
-    // Drop the white/transparent background AND any magenta frame border, so a
-    // bordered panel trims down to just its artwork (magenta never appears in
-    // the artwork itself, so this is safe for every tool).
+    // Drop the white/transparent background AND any magenta frame border
+    // (including its anti-aliased halo, hence the looser test), so a bordered
+    // panel trims down to just its artwork. Magenta never appears in the
+    // artwork itself, so this is safe for every tool.
     if (
       isBackgroundPixel(imageData.data, pixelIndex) ||
-      isMagentaPixel(imageData.data, pixelIndex)
+      isMagentaishPixel(imageData.data, pixelIndex)
     ) {
       imageData.data[pixelIndex + 3] = 0;
     }

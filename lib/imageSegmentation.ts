@@ -32,6 +32,15 @@ type ExtractPieceBoundsOptions = {
    * the result lands on the known panel count instead of an over-split mess.
    */
   targetPieceCount?: number;
+  /**
+   * Detect explicit magenta (#FF00FF) frame rectangles the generator was asked
+   * to draw around each illustration, and split on those instead of inferring
+   * panels from whitespace. Far more reliable when present: the frame count is
+   * explicit and magenta never occurs in the artwork. Returns the frames when at
+   * least two are found; otherwise yields nothing so the caller can fall back to
+   * whitespace/component splitting.
+   */
+  detectColoredFrames?: boolean;
 };
 
 const ALPHA_BACKGROUND_THRESHOLD = 24;
@@ -58,6 +67,21 @@ const isBackgroundPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean
     blue >= WHITE_BACKGROUND_THRESHOLD &&
     spread <= WHITE_SPREAD_THRESHOLD
   );
+};
+
+// Detects the pure-magenta (#FF00FF) frame borders the break-comic generator is
+// asked to draw. Tolerant of compression/anti-aliasing drift (the rendered line
+// is rarely exactly 255/0/255) but tight enough to exclude pink/purple artwork
+// such as the germ characters: red and blue must both be high while green stays
+// low, with a wide red-to-green and blue-to-green margin.
+const isMagentaPixel = (data: Uint8ClampedArray, pixelIndex: number): boolean => {
+  if (data[pixelIndex + 3] <= ALPHA_BACKGROUND_THRESHOLD) {
+    return false;
+  }
+  const red = data[pixelIndex];
+  const green = data[pixelIndex + 1];
+  const blue = data[pixelIndex + 2];
+  return red >= 160 && blue >= 160 && green <= 120 && red - green >= 80 && blue - green >= 80;
 };
 
 const createForegroundMask = ({ data, width, height }: RasterImageData): Uint8Array => {
@@ -658,10 +682,148 @@ const mergeNearestUntil = (bounds: Bounds[], target: number): Bounds[] => {
   return items;
 };
 
+// Repeatedly split the largest splittable box at its cleanest whitespace gutter
+// until `target` pieces exist. The mirror of mergeNearestUntil: when connected
+// components UNDER-split (two panels bridged across a thin gutter become one
+// blob), this recovers the known panel count. Merged panels are the widest
+// boxes, so splitting the largest first targets them; trySplitBoundsByWhitespace
+// only cuts at a genuine gutter (minimum child span/pixels enforced), so a
+// single legitimate panel is left intact and we stop short of `target` rather
+// than carve a real picture in two.
+const splitWidestUntil = (
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  bounds: Bounds[],
+  target: number,
+): Bounds[] => {
+  const items = bounds.map((b) => ({ ...b }));
+  while (items.length < target) {
+    let bestIndex = -1;
+    let bestSplit: Bounds[] | null = null;
+    let bestArea = -1;
+    for (let i = 0; i < items.length; i += 1) {
+      const split =
+        trySplitBoundsByWhitespace(mask, width, height, items[i], "column") ??
+        trySplitBoundsByWhitespace(mask, width, height, items[i], "row");
+      if (!split) {
+        continue;
+      }
+      const area = (items[i].right - items[i].left + 1) * (items[i].bottom - items[i].top + 1);
+      if (area > bestArea) {
+        bestArea = area;
+        bestIndex = i;
+        bestSplit = split;
+      }
+    }
+    if (bestIndex < 0 || !bestSplit) {
+      // No box has a clean gutter left — stop rather than force a bad cut.
+      break;
+    }
+    items.splice(bestIndex, 1, ...bestSplit);
+  }
+  return items;
+};
+
+// Find the magenta frame rectangles drawn around each illustration. Each frame
+// is a (mostly hollow) rectangular outline, so we flood-fill the magenta mask
+// into connected components and keep those that look like a frame: spanning a
+// real share of the page and hollow (an outline, not a filled magenta blob). The
+// returned bounds are the OUTER extent of each frame; cropping strips the
+// magenta line and trims to the artwork inside.
+export const detectMagentaFrameBounds = (raster: RasterImageData): Bounds[] => {
+  const { data, width, height } = raster;
+  if (!width || !height) {
+    return [];
+  }
+
+  const mask = new Uint8Array(width * height);
+  for (let index = 0; index < width * height; index += 1) {
+    if (isMagentaPixel(data, index * 4)) {
+      mask[index] = 1;
+    }
+  }
+
+  const visited = new Uint8Array(mask.length);
+  const minFrameWidth = Math.max(16, Math.floor(width * 0.05));
+  const minFrameHeight = Math.max(16, Math.floor(height * 0.05));
+  const minFrameArea = width * height * 0.01;
+  const frames: Bounds[] = [];
+
+  for (let index = 0; index < mask.length; index += 1) {
+    if (!mask[index] || visited[index]) {
+      continue;
+    }
+    visited[index] = 1;
+    const queue = [index];
+    let pixels = 0;
+    let left = index % width;
+    let right = left;
+    let top = Math.floor(index / width);
+    let bottom = top;
+
+    while (queue.length) {
+      const current = queue.pop() as number;
+      const x = current % width;
+      const y = Math.floor(current / width);
+      pixels += 1;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+          const nextX = x + dx;
+          const nextY = y + dy;
+          if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) {
+            continue;
+          }
+          const nextIndex = nextY * width + nextX;
+          if (!mask[nextIndex] || visited[nextIndex]) {
+            continue;
+          }
+          visited[nextIndex] = 1;
+          queue.push(nextIndex);
+        }
+      }
+    }
+
+    const frameWidth = right - left + 1;
+    const frameHeight = bottom - top + 1;
+    const boxArea = frameWidth * frameHeight;
+    const fillRatio = pixels / boxArea;
+    // Keep substantial, hollow rectangles (a thin outline fills a small
+    // fraction of its box); reject small flecks and any solid magenta blob.
+    if (
+      frameWidth >= minFrameWidth &&
+      frameHeight >= minFrameHeight &&
+      boxArea >= minFrameArea &&
+      fillRatio < 0.5
+    ) {
+      frames.push({ left, top, right, bottom });
+    }
+  }
+
+  return sortBoundsInReadingOrder(frames);
+};
+
 export const extractPieceBoundsFromRaster = (
   raster: RasterImageData,
   options: ExtractPieceBoundsOptions = {},
 ): Bounds[] => {
+  if (options.detectColoredFrames) {
+    // Dedicated "frames or nothing" mode: explicit magenta frames are
+    // authoritative when the generator drew them; fewer than two means it
+    // didn't cooperate, so we return nothing and let the caller fall back to
+    // whitespace/component inference on the background-removed sheet.
+    const frames = detectMagentaFrameBounds(raster);
+    return frames.length >= 2 ? frames : [];
+  }
+
   const { width, height } = raster;
   if (!width || !height) {
     return [];
@@ -677,12 +839,18 @@ export const extractPieceBoundsFromRaster = (
   if (options.preferComponents) {
     // Each panel is one illustration; large white gutters keep panels apart
     // while the merge margin absorbs hairline gaps inside a panel. If we know
-    // the panel count, collapse any remaining over-split fragments onto it.
-    const merged =
-      options.targetPieceCount && componentBounds.length > options.targetPieceCount
-        ? mergeNearestUntil(componentBounds, options.targetPieceCount)
-        : componentBounds;
-    return sortBoundsInReadingOrder(merged);
+    // the panel count, reconcile the components onto it in BOTH directions:
+    // collapse over-split fragments down, and split under-split (bridged) panels
+    // back up along their whitespace gutters. The component count varies run to
+    // run, so this is what makes the piece count match the caption count.
+    const target = options.targetPieceCount;
+    let reconciled = componentBounds;
+    if (target && componentBounds.length > target) {
+      reconciled = mergeNearestUntil(componentBounds, target);
+    } else if (target && componentBounds.length < target) {
+      reconciled = splitWidestUntil(mask, width, height, componentBounds, target);
+    }
+    return sortBoundsInReadingOrder(reconciled);
   }
 
   if (options.preferSeparatedSubjects) {
@@ -776,7 +944,13 @@ const cropBoundsToDataUrl = async (image: HTMLImageElement, bounds: Bounds): Pro
 
   const imageData = context.getImageData(0, 0, cropWidth, cropHeight);
   for (let pixelIndex = 0; pixelIndex < imageData.data.length; pixelIndex += 4) {
-    if (isBackgroundPixel(imageData.data, pixelIndex)) {
+    // Drop the white/transparent background AND any magenta frame border, so a
+    // bordered panel trims down to just its artwork (magenta never appears in
+    // the artwork itself, so this is safe for every tool).
+    if (
+      isBackgroundPixel(imageData.data, pixelIndex) ||
+      isMagentaPixel(imageData.data, pixelIndex)
+    ) {
       imageData.data[pixelIndex + 3] = 0;
     }
   }

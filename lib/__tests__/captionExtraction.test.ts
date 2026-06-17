@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCaptionText, parseCaptionArray } from "../captionExtraction";
+import {
+  captionLeadingNumber,
+  normalizeCaptionText,
+  parseCaptionArray,
+  stripLeadingTitle,
+} from "../captionExtraction";
 
 describe("normalizeCaptionText", () => {
   it("joins layout-wrapped lines into continuous text", () => {
@@ -43,5 +48,67 @@ describe("parseCaptionArray", () => {
     expect(parseCaptionArray("")).toBeNull();
     expect(parseCaptionArray(null)).toBeNull();
     expect(parseCaptionArray("[not, valid, json]")).toBeNull();
+  });
+});
+
+describe("stripLeadingTitle", () => {
+  it("drops a leading title ahead of a numbered list", () => {
+    const captions = [
+      "Coughs, colds and pneumonia 10 messages for children to learn & share",
+      "1. Lungs help us breathe.",
+      "2. Everyone gets coughs and colds.",
+      "3. Handwashing with soap and water.",
+    ];
+    expect(stripLeadingTitle(captions)).toEqual([
+      "1. Lungs help us breathe.",
+      "2. Everyone gets coughs and colds.",
+      "3. Handwashing with soap and water.",
+    ]);
+  });
+
+  it("supports ')' style numbering", () => {
+    expect(stripLeadingTitle(["My Title", "1) first", "2) second"])).toEqual([
+      "1) first",
+      "2) second",
+    ]);
+  });
+
+  it("leaves an already-numbered first entry untouched", () => {
+    const captions = ["1. first", "2. second", "3. third"];
+    expect(stripLeadingTitle(captions)).toEqual(captions);
+  });
+
+  it("leaves an unnumbered list untouched", () => {
+    const captions = ["alpha", "beta", "gamma"];
+    expect(stripLeadingTitle(captions)).toEqual(captions);
+  });
+
+  it("does not strip when a numbered entry precedes the '1.' entry (out of order)", () => {
+    const captions = ["2. second", "1. first", "3. third"];
+    expect(stripLeadingTitle(captions)).toEqual(captions);
+  });
+
+  it("returns short lists unchanged", () => {
+    expect(stripLeadingTitle(["only one"])).toEqual(["only one"]);
+    expect(stripLeadingTitle([])).toEqual([]);
+  });
+});
+
+describe("captionLeadingNumber", () => {
+  it("reads the leading panel number", () => {
+    expect(captionLeadingNumber("1. Lungs help us breathe.")).toBe(1);
+    expect(captionLeadingNumber("10. Stop coughs spreading.")).toBe(10);
+    expect(captionLeadingNumber("2) second style")).toBe(2);
+  });
+
+  it("returns null when there is no leading number", () => {
+    expect(captionLeadingNumber("Lungs help us breathe.")).toBeNull();
+    expect(captionLeadingNumber("")).toBeNull();
+    expect(captionLeadingNumber(null)).toBeNull();
+    expect(captionLeadingNumber(undefined)).toBeNull();
+  });
+
+  it("does not read a number from mid-caption text", () => {
+    expect(captionLeadingNumber("Wait 20 seconds")).toBeNull();
   });
 });

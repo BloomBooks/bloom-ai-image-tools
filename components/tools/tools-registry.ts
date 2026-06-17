@@ -167,26 +167,16 @@ export const TOOLS: ToolDefinition[] = (
       icon: Diversity3OutlinedIcon,
       parameters: [
         {
-          name: "splitIntoSeparateFiles",
-          label: "Split into separate files",
-          type: "checkbox",
-          defaultValue: "false",
-          optional: true,
-        },
-        {
           name: "furtherInstructions",
           label: "Further Instructions",
           type: "textarea",
-          placeholder:
-            "Optional: identify the main characters, say which incidental figures to skip, or note any details to preserve.",
+
           optional: true,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
-        const shouldSplit = params.splitIntoSeparateFiles === "true";
-        const basePrompt = shouldSplit
-          ? "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
-          : "Using the supplied reference image or images, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
+        const basePrompt =
+          "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
         const extraInstructions = params.furtherInstructions?.trim();
         if (!extraInstructions) {
           return basePrompt;

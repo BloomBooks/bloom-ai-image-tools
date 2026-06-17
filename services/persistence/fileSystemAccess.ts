@@ -376,6 +376,7 @@ const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): HistoryEn
   sourceStyleId: record.sourceStyleId ?? null,
   sourceSummary: record.sourceSummary ?? null,
   caption: record.caption ?? null,
+  name: record.name ?? null,
   imageMime: mime,
   metaUpdatedAt: Date.now(),
 });
@@ -399,6 +400,7 @@ const imageRecordFromHistoryEntry = (
   promptUsed: entry.promptUsed,
   sourceSummary: entry.sourceSummary ?? null,
   caption: entry.caption ?? null,
+  name: entry.name ?? null,
   resolution: entry.resolution,
   isStarred: entry.isStarred ?? false,
   origin: entry.origin,

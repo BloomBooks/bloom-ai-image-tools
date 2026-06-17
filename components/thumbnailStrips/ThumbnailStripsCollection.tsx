@@ -21,7 +21,9 @@ interface ThumbnailStripsCollectionProps {
   onRequestHistoryAccess: () => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
+  onRenameItem?: (id: string, name: string) => void;
   onRemoveFromStrip: (stripId: ThumbnailStripId, id: string) => void;
+  onAddCharacterImage?: (file: File) => void;
   onDropToStrip: (
     stripId: ThumbnailStripId,
     dropIndex: number,
@@ -46,7 +48,9 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   onRequestHistoryAccess,
   onSelect,
   onToggleStar,
+  onRenameItem,
   onRemoveFromStrip,
+  onAddCharacterImage,
   onDropToStrip,
   onVisibleItemIdsChange,
   onActivateStrip,
@@ -131,7 +135,9 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         emptyStateMessage={emptyStateMessage}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
+        onRenameItem={onRenameItem}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
+        onAddCharacterImage={stripId === "characters" ? onAddCharacterImage : undefined}
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
       />

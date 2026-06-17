@@ -44,6 +44,32 @@ export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = (
     };
   }, [isVisible, progress]);
 
+  // The spinner MUST be sized as a square. MUI scales its 44x44 viewBox into
+  // whatever width/height we give it, so a non-square box (e.g. a `46%` value,
+  // which resolves against width for width and height for height inside a
+  // landscape panel) renders the ring as an ellipse — and a rotating arc on an
+  // ellipse looks like it wobbles around a shifting center. We instead measure
+  // the container and derive ONE square pixel size from its smaller dimension.
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [spinnerSize, setSpinnerSize] = React.useState(220);
+
+  React.useLayoutEffect(() => {
+    if (!isVisible || typeof window === "undefined") return;
+    const element = containerRef.current;
+    if (!element) return;
+
+    const measure = () => {
+      const basis = Math.min(element.clientWidth, element.clientHeight);
+      if (basis <= 0) return;
+      setSpinnerSize(Math.round(Math.max(160, Math.min(300, basis * 0.46))));
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   const estimatedDurationMs = Math.max(1, progress?.estimatedDurationMs ?? 1);
@@ -77,6 +103,7 @@ export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = (
       }}
     >
       <div
+        ref={containerRef}
         style={{
           position: "relative",
           display: "grid",
@@ -90,11 +117,12 @@ export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = (
           // `disableShrink` removes MUI's grow/shrink + dash-offset animation,
           // which is what makes a large indeterminate ring appear to wobble
           // around a shifting center. What's left is a fixed-length arc that
-          // simply rotates around a stable center — clean at any size.
+          // simply rotates around a stable center — clean at any size, as long
+          // as the box is square (see spinnerSize above).
           <CircularProgress
             variant="indeterminate"
             disableShrink
-            size="clamp(160px, 46%, 300px)"
+            size={spinnerSize}
             sx={{ color: theme.colors.accent }}
           />
         ) : (
@@ -102,7 +130,7 @@ export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = (
             variant="determinate"
             value={progressValue}
             thickness={1.6}
-            size="clamp(160px, 46%, 300px)"
+            size={spinnerSize}
             sx={{ color: theme.colors.accent }}
           />
         )}

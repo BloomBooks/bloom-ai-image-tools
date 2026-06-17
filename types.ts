@@ -167,6 +167,13 @@ export interface ImageRecordData {
    * so it can be edited, persisted, and pasted into apps like Bloom as text.
    */
   caption?: string | null;
+  /**
+   * Human-assigned name for the subject of the image (e.g. a character's name
+   * like "Maria"). Editable below character thumbnails. When this image is used
+   * as a reference or edit target, the name is sent alongside the image so the
+   * prompt can refer to the person/character by name.
+   */
+  name?: string | null;
   toolId: string;
   parameters: Record<string, string>;
   sourceStyleId?: string | null;

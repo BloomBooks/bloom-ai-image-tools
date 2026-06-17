@@ -89,6 +89,13 @@ export interface EditImageOptions {
   signal?: AbortSignal;
   imageConfig?: ImageConfig;
   reasoningLevel?: ModelReasoningLevel;
+  /**
+   * Optional human-facing names aligned by index with `base64Images`. When a
+   * name is present, a short text part is inserted right before that image so
+   * the model can associate the picture with the name the prompt refers to
+   * (e.g. a character called "Maria"). Use null/"" for unlabeled images.
+   */
+  imageLabels?: (string | null | undefined)[];
 }
 
 export interface GenerateTextOptions {
@@ -496,13 +503,21 @@ export const editImage = async (
 
   const content: any[] = [{ type: "text", text: prompt }];
   if (hasImage) {
-    for (const dataUrl of images) {
+    const labels = options?.imageLabels ?? [];
+    images.forEach((dataUrl, index) => {
+      const label = labels[index]?.trim();
+      if (label) {
+        content.push({
+          type: "text",
+          text: `The next image shows "${label}". When the instructions mention "${label}", they refer to the subject of this image.`,
+        });
+      }
       const { base64, mimeType } = dataUrlToParts(dataUrl);
       content.push({
         type: "image_url",
         image_url: { url: `data:${mimeType};base64,${base64}` },
       });
-    }
+    });
   }
 
   // Build image generation parameters for different providers.

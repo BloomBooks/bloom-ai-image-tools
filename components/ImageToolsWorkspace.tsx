@@ -1807,6 +1807,13 @@ export function ImageToolsWorkspace({
         ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
         ...constrainedReferences.map((h) => h.imageData),
       ];
+      // Named images (e.g. characters named in the strip) get their name sent
+      // alongside the pixels so the prompt can refer to them by name. Aligned
+      // by index with sourceImages.
+      const imageLabels = [
+        ...(requiresEditImage && targetImage ? [targetImage.name ?? null] : []),
+        ...constrainedReferences.map((h) => h.name ?? null),
+      ];
 
       // Tools that decompose a page (break-comic) must not downscale it. Match
       // the output size + aspect ratio to the input so resolution is preserved
@@ -1866,9 +1873,7 @@ export function ImageToolsWorkspace({
       // single image fetch get phases: break-comic redraws the sheet, then
       // transcribes captions, then splits it; other split-image tools generate
       // a sheet then split it. setPhase is a no-op for single-phase tools.
-      const willSplitDerived =
-        tool.derivedResultMode === "split-images" &&
-        (tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true");
+      const willSplitDerived = tool.derivedResultMode === "split-images";
       const phaseLabels: string[] = isBreakComic
         ? ["Redrawing combined sheet", "Transcribing captions", "Splitting into images"]
         : willSplitDerived
@@ -1976,6 +1981,7 @@ export function ImageToolsWorkspace({
           signal: abortController.signal,
           imageConfig,
           reasoningLevel: reasoningLevelForRequest,
+          imageLabels,
         });
 
         const returnedImages = result.images?.length ? result.images : [result.imageData];
@@ -2101,46 +2107,6 @@ export function ImageToolsWorkspace({
       };
 
       if (tool.derivedResultMode) {
-        const shouldSplitDerivedItems =
-          tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true";
-        console.log("[ExtractCast/debug] derived split decision", {
-          toolId: tool.id,
-          splitIntoSeparateFiles: params.splitIntoSeparateFiles,
-          shouldSplitDerivedItems,
-        });
-
-        if (!shouldSplitDerivedItems) {
-          throwIfCancelled();
-          const newItem = await createHistoryItem(
-            processedImageData,
-            constrainedReferences[0]?.id || null,
-          );
-          appendHistoryEntry(newItem);
-          setThumbnailStrips((prev) => {
-            const nextCharacterIds = [
-              ...(prev.itemIdsByStrip.characters || []).filter((id) => id !== newItem.id),
-              newItem.id,
-            ];
-            const next = replaceStripItems(prev, "characters", nextCharacterIds);
-            return setActiveStrip(next, "characters");
-          });
-
-          if (progressStartedAt > 0) {
-            const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
-            setGenerationTiming((prev) =>
-              updateGenerationTiming(prev, promptDurationKey, toolDurationKey, observedDurationMs),
-            );
-          }
-
-          setGenerationProgress(null);
-          setState((prev) => ({
-            ...prev,
-            rightPanelImageId: newItem.id,
-            isProcessing: false,
-          }));
-          return;
-        }
-
         // Final phase: split the generated sheet into individual images.
         setPhase(phaseLabels.length - 1);
 
@@ -2460,6 +2426,47 @@ export function ImageToolsWorkspace({
     [handleUpload],
   );
 
+  // Pasting (or picking) an image on the characters strip placeholder adds it to
+  // history and registers it as a new character.
+  const handleAddCharacterImage = useCallback(
+    async (file: File) => {
+      try {
+        const { dataUrl, dimensions } = await prepareImageBlob(file);
+        let newItem: ImageRecord = {
+          id: uuid(),
+          parentId: null,
+          imageData: dataUrl,
+          toolId: "original",
+          parameters: {},
+          sourceStyleId: null,
+          durationMs: 0,
+          cost: 0,
+          model: "",
+          timestamp: Date.now(),
+          promptUsed: "Original Upload",
+          resolution: dimensions,
+          isStarred: false,
+        };
+
+        if (fsBinding) {
+          newItem = await persistHistoryImage(newItem);
+        }
+
+        appendHistoryEntry(newItem);
+        // Insert at the front so the new character lands right next to the
+        // paste placeholder (the strip then animates it sliding into place).
+        setThumbnailStrips((prev) => addItemToStrip(prev, "characters", newItem.id, 0));
+      } catch (error) {
+        console.error("Failed to add character image", error);
+        setState((prev) => ({
+          ...prev,
+          error: "Could not load image. Please try again.",
+        }));
+      }
+    },
+    [fsBinding, persistHistoryImage, appendHistoryEntry],
+  );
+
   const handleSetTargetImage = useCallback((id: string) => {
     setState((prev) => ({
       ...prev,
@@ -2777,6 +2784,25 @@ export function ImageToolsWorkspace({
     setResultImageIds([]);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
+
+  const handleRenameImage = useCallback((id: string, name: string) => {
+    const trimmed = name.trim();
+    setState((prev) => {
+      let changed = false;
+      const nextHistory = prev.history.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+        const nextName = trimmed.length > 0 ? trimmed : null;
+        if ((item.name ?? null) === nextName) {
+          return item;
+        }
+        changed = true;
+        return { ...item, name: nextName };
+      });
+      return changed ? { ...prev, history: nextHistory } : prev;
+    });
+  }, []);
 
   const handleToggleHistoryStar = useCallback((id: string) => {
     let toggled: boolean | null = null;
@@ -3223,6 +3249,8 @@ export function ImageToolsWorkspace({
             onUploadRight={handleUploadRight}
             onSelectHistoryItem={handleSelectHistoryItem}
             onToggleHistoryStar={handleToggleHistoryStar}
+            onRenameHistoryItem={handleRenameImage}
+            onAddCharacterImage={handleAddCharacterImage}
             generationProgress={generationProgress}
             previewModifierActive={isPreviewModifierActive}
             previewSelectionImageIds={previewSelectionImageIds}

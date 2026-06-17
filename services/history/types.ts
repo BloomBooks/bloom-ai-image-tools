@@ -23,6 +23,8 @@ export interface HistoryEntry {
   sourceSummary?: string | null;
   /** Human-facing text for the image (e.g. an OCR-extracted panel caption). */
   caption?: string | null;
+  /** Human-assigned name for the image's subject (e.g. a character name). */
+  name?: string | null;
   /** MIME type of the stored bytes (e.g. "image/png"). Drives file extension. */
   imageMime: string;
   /** Bumped every time mutable metadata changes; LWW key during reconcile. */

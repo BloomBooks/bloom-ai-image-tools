@@ -174,17 +174,25 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const slots: ImagePanelSlot[] = !showReferencePanel
     ? []
     : [
-        ...referenceImages.map((image, i) => ({
-          image,
-          slotIndex: i,
-          canRemove: true,
-          dndDropId: `panel:reference:${i}`,
-          dndDragId: `panelItem:reference:${i}:${image.id}`,
-          dataTestId: `reference-slot-${i}`,
-          uploadInputTestId: `reference-upload-input-${i}`,
-          dropLabel: "Drop to add",
-          actionLabels: { remove: "Remove reference" },
-        })),
+        ...referenceImages.map((image, i) => {
+          const name = image.name?.trim();
+          return {
+            image,
+            slotIndex: i,
+            canRemove: true,
+            // Show the character's name (set in the Characters strip) so the
+            // user can see which named person occupies each reference slot.
+            rolePill: name
+              ? { label: name, kind: "reference" as const, testId: `reference-name-${i}` }
+              : undefined,
+            dndDropId: `panel:reference:${i}`,
+            dndDragId: `panelItem:reference:${i}:${image.id}`,
+            dataTestId: `reference-slot-${i}`,
+            uploadInputTestId: `reference-upload-input-${i}`,
+            dropLabel: "Drop to add",
+            actionLabels: { remove: "Remove reference" },
+          };
+        }),
         ...(canAddReferenceSlot
           ? [
               {

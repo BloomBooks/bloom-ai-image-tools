@@ -25,6 +25,13 @@ export const Icon: React.FC<IconProps> = ({ path, ...props }) => {
   );
 };
 
+// Filled clipboard icon (not part of the stroke-based Icons set below).
+export const PasteIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 22" fill="currentColor" {...props}>
+    <path d="M16 2H11.82C11.4 0.84 10.3 0 9 0C7.7 0 6.6 0.84 6.18 2H2C0.9 2 0 2.9 0 4V20C0 21.1 0.9 22 2 22H16C17.1 22 18 21.1 18 20V4C18 2.9 17.1 2 16 2ZM9 2C9.55 2 10 2.45 10 3C10 3.55 9.55 4 9 4C8.45 4 8 3.55 8 3C8 2.45 8.45 2 9 2ZM15 20H3C2.45 20 2 19.55 2 19V5C2 4.45 2.45 4 3 4H4V5C4 6.1 4.9 7 6 7H12C13.1 7 14 6.1 14 5V4H15C15.55 4 16 4.45 16 5V19C16 19.55 15.55 20 15 20Z" />
+  </svg>
+);
+
 export const ColoringBookIcon: React.FC<SvgIconProps> = (props) => (
   <SvgIcon {...props} viewBox="0 0 18 18" fill="none">
     <g
@@ -56,7 +63,6 @@ export const Icons = {
   Layout: "M3 3h18v18H3z M9 3v18 M15 3v18",
   ArrowRight: "M5 12h14 M12 5l7 7-7 7",
   Pin: "M21.4 13.5L12 21.9 2.6 13.5a7 7 0 0 1 9.9-9.9 7 7 0 0 1 8.9 9.9z",
-  Paste: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6",
   Refresh: "M23 4v6h-6 M1 20v-6h6 M20.49 15a9 9 0 1 1 2.12-9.36L23 10",
   MoveRight: "M13 5l7 7-7 7 M5 12h15",
   Info: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 16v-4 M12 8h.01",

@@ -435,6 +435,8 @@ interface ImageToolsPanelBar {
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
+  onRenameHistoryItem: (id: string, name: string) => void;
+  onAddCharacterImage: (file: File) => void;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   onDismissError: () => void;
@@ -483,6 +485,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
+  onRenameHistoryItem,
+  onAddCharacterImage,
   previewModifierActive = false,
   previewSelectionImageIds = [],
   onDismissError,
@@ -822,7 +826,9 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onRequestHistoryAccess={onRequestHistoryAccess}
               onSelect={onSelectHistoryItem}
               onToggleStar={onToggleHistoryStar}
+              onRenameItem={onRenameHistoryItem}
               onRemoveFromStrip={onStripRemoveItem}
+              onAddCharacterImage={onAddCharacterImage}
               onDropToStrip={onStripItemDrop}
               onVisibleItemIdsChange={onVisibleStripItemIdsChange}
               onActivateStrip={onStripActivate}

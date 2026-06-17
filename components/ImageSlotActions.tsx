@@ -3,7 +3,7 @@ import { ClickAwayListener, IconButton, Popper, Tooltip } from "@mui/material";
 import type { SxProps, Theme as MuiTheme } from "@mui/material/styles";
 import { ImageRecord, ImageSlotActionKey } from "../types";
 import { theme } from "../themes";
-import { Icon, Icons } from "./Icons";
+import { Icon, Icons, PasteIcon } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 
 type SlotControls = {
@@ -19,6 +19,8 @@ type SlotActionKey = ImageSlotActionKey | "info" | "magnifier" | "more";
 type SlotActionButton = {
   key: SlotActionKey;
   icon: string;
+  /** Optional filled icon component, used in place of the stroke-based `icon` path. */
+  iconComponent?: React.FC<React.SVGProps<SVGSVGElement>>;
   title: string;
   onClick: () => void;
   disabled?: boolean;
@@ -222,7 +224,8 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       },
       {
         key: "paste",
-        icon: Icons.Paste,
+        icon: "",
+        iconComponent: PasteIcon,
         title: actionLabels?.paste ?? defaultActionLabels.paste,
         onClick: onPaste,
         isVisible: controls.paste && supportsUpload,
@@ -345,7 +348,11 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
           aria-label={action.title}
           aria-pressed={typeof action.ariaPressed === "boolean" ? action.ariaPressed : undefined}
         >
-          <Icon path={action.icon} width={iconSize} height={iconSize} />
+          {action.iconComponent ? (
+            <action.iconComponent width={iconSize} height={iconSize} />
+          ) : (
+            <Icon path={action.icon} width={iconSize} height={iconSize} />
+          )}
         </IconButton>
       );
 

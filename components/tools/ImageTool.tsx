@@ -979,13 +979,25 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
               <Stack spacing={1.5}>
                 <Button
-                  type={isProcessing ? "button" : "submit"}
+                  // Always a plain button — never a native submit. If this were
+                  // type="submit", clicking it to cancel would flip isProcessing
+                  // to false, re-render this same element back to a submit
+                  // button mid-click, and the click's default action would then
+                  // submit the form — immediately starting a brand-new
+                  // generation. Instead we submit the form ourselves below.
+                  type="button"
                   variant={isProcessing ? "outlined" : "contained"}
                   color={isProcessing ? "inherit" : "primary"}
                   fullWidth
                   disabled={isProcessing ? false : isSubmitDisabled}
                   title={isProcessing ? undefined : submitDisabledReason}
-                  onClick={isProcessing ? onCancelProcessing : undefined}
+                  onClick={(event) => {
+                    if (isProcessing) {
+                      onCancelProcessing();
+                      return;
+                    }
+                    event.currentTarget.closest("form")?.requestSubmit();
+                  }}
                   sx={{
                     minHeight: 44,
                     fontWeight: 400,

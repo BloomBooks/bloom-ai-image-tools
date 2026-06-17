@@ -23,7 +23,11 @@ import {
   OPENROUTER_KEYS_URL,
   ImageConfig,
 } from "../services/openRouterService";
-import { BREAK_COMIC_CAPTIONS_PROMPT, BREAK_COMIC_TEXT_MODEL } from "../lib/breakComic";
+import {
+  BREAK_COMIC_CAPTIONS_PROMPT,
+  BREAK_COMIC_MERGE_MARGIN_RATIO,
+  BREAK_COMIC_TEXT_MODEL,
+} from "../lib/breakComic";
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -87,7 +91,11 @@ import {
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
 import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
-import { parseCaptionArray } from "../lib/captionExtraction";
+import {
+  captionLeadingNumber,
+  parseCaptionArray,
+  stripLeadingTitle,
+} from "../lib/captionExtraction";
 import { createAnimatedGif } from "../lib/animatedGif";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import { extractDerivedImageItems } from "../lib/toolDerivedResults";
@@ -175,6 +183,9 @@ const MAX_TOOL_DURATION_ESTIMATES = 24;
 const PESSIMISTIC_MS = 3000;
 const HISTORY_HYDRATION_BATCH_SIZE = 8;
 const PERSISTENCE_POINTER_QUIET_MS = 1000;
+// Show the credits gauge in the "danger" (red) styling once the remaining
+// balance drops below this many US dollars.
+const LOW_CREDITS_THRESHOLD_USD = 3;
 
 const getNowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
@@ -324,7 +335,10 @@ const normalizeMeasuredStatsByKey = (value: unknown): Record<string, MeasuredSta
     if (!cleanKey || !entry || typeof entry !== "object") {
       return;
     }
-    const { cost, durationMs } = entry as { cost?: unknown; durationMs?: unknown };
+    const { cost, durationMs } = entry as {
+      cost?: unknown;
+      durationMs?: unknown;
+    };
     const safeCost = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : 0;
     const safeDuration =
       typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0
@@ -1593,7 +1607,9 @@ export function ImageToolsWorkspace({
         input.remove();
         resolve(file);
       };
-      input.addEventListener("change", () => finish(input.files?.[0] ?? null), { once: true });
+      input.addEventListener("change", () => finish(input.files?.[0] ?? null), {
+        once: true,
+      });
       // Fallback for the cancel case: the dialog blurs the window, so a focus
       // return with no `change` means the user dismissed it.
       window.addEventListener("focus", () => window.setTimeout(() => finish(null), 300), {
@@ -1621,11 +1637,16 @@ export function ImageToolsWorkspace({
     requestAbortControllerRef.current = abortController;
 
     const progressStartedAt = getNowMs();
-    setGenerationProgress({ startedAt: progressStartedAt, estimatedDurationMs: 4000 });
+    setGenerationProgress({
+      startedAt: progressStartedAt,
+      estimatedDurationMs: 4000,
+    });
 
     try {
       const { renderPdfToImages } = await import("../lib/pdfToImages");
-      const pages = await renderPdfToImages(file, { signal: abortController.signal });
+      const pages = await renderPdfToImages(file, {
+        signal: abortController.signal,
+      });
 
       if (!pages.length) {
         throw new Error("That PDF has no pages to render.");
@@ -1875,7 +1896,7 @@ export function ImageToolsWorkspace({
       // a sheet then split it. setPhase is a no-op for single-phase tools.
       const willSplitDerived = tool.derivedResultMode === "split-images";
       const phaseLabels: string[] = isBreakComic
-        ? ["Redrawing combined sheet", "Transcribing captions", "Splitting into images"]
+        ? ["Editing to remove background", "Transcribing captions", "Splitting into images"]
         : willSplitDerived
           ? ["Generating sheet", "Splitting into images"]
           : [];
@@ -2118,6 +2139,12 @@ export function ImageToolsWorkspace({
           ? parseCaptionArray(generationText)
           : null;
 
+        // The transcriber sometimes returns the page's title/heading as the
+        // first entry, ahead of the numbered panel captions. Drop it so the
+        // per-panel count and index-pairing line up with the actual panels (the
+        // full list, title included, still rides on the kept sheet below).
+        const panelCaptions = parsedCaptions ? stripLeadingTitle(parsedCaptions) : null;
+
         // If the model already returned several images (e.g. Gemini 3 Pro emits
         // one image per panel instead of a single grid), use those directly as
         // the pieces. Otherwise split the single returned sheet ourselves.
@@ -2134,10 +2161,21 @@ export function ImageToolsWorkspace({
             signal: abortController.signal,
             preferSeparatedSubjects: tool.id === "extract_cast_of_characters",
             preferComponents: tool.splitByComponents,
-            componentMergeMarginRatio: tool.splitByComponents ? 0.006 : undefined,
-            targetPieceCount: tool.splitByComponents
-              ? (parsedCaptions?.length ?? undefined)
+            // Small margin so adjacent panels stay separate: over-splitting is
+            // recoverable (mergeNearestUntil collapses fragments down to the
+            // known panel count) but under-splitting two fused panels usually
+            // is not. See BREAK_COMIC_MERGE_MARGIN_RATIO. (Was 0.006, which
+            // fused close panels.)
+            componentMergeMarginRatio: tool.splitByComponents
+              ? BREAK_COMIC_MERGE_MARGIN_RATIO
               : undefined,
+            targetPieceCount: tool.splitByComponents
+              ? (panelCaptions?.length ?? undefined)
+              : undefined,
+            // Break-comic asks the generator to draw magenta frames; when present
+            // they drive the split directly (falls back to whitespace inference
+            // if the generator didn't draw usable frames).
+            detectColoredFrames: tool.splitByComponents,
           });
           durationMs += derivedItemsResult.durationMs;
           imageDataItems = derivedItemsResult.imageDataItems;
@@ -2166,9 +2204,11 @@ export function ImageToolsWorkspace({
               textChannelLength: generationText?.length ?? 0,
               textChannelPreview: generationText ? generationText.slice(0, 400) : null,
               parsedCaptionCount: parsedCaptions?.length ?? null,
-              parsedCaptionPreviews: parsedCaptions?.map((c) => c.slice(0, 45)) ?? null,
+              titleStripped: (parsedCaptions?.length ?? 0) !== (panelCaptions?.length ?? 0),
+              panelCaptionCount: panelCaptions?.length ?? null,
+              panelCaptionPreviews: panelCaptions?.map((c) => c.slice(0, 45)) ?? null,
               pieceCountFromSplit: pieceCount,
-              countsMatch: parsedCaptions?.length === pieceCount,
+              countsMatch: panelCaptions?.length === pieceCount,
               splitByComponents: Boolean(tool.splitByComponents),
               modelReturnedMultipleImages,
             });
@@ -2179,16 +2219,21 @@ export function ImageToolsWorkspace({
           // to the wrong picture. When they don't match we still keep the full
           // text on the sheet (below) so it is never lost.
           let pieceCaptions: string[] = [];
-          if (parsedCaptions && parsedCaptions.length === pieceCount) {
-            pieceCaptions = parsedCaptions;
+          let captionPieceMismatch = false;
+          if (panelCaptions && panelCaptions.length === pieceCount) {
+            pieceCaptions = panelCaptions;
             console.log("[break-comic] captions from text channel", {
               pieces: pieceCount,
-              withText: parsedCaptions.filter((caption) => caption.trim().length > 0).length,
+              withText: panelCaptions.filter((caption) => caption.trim().length > 0).length,
             });
-          } else if (tool.captionsFromTextChannel) {
+          } else if (tool.captionsFromTextChannel && panelCaptions && panelCaptions.length > 0) {
+            // The split count and the transcribed caption count disagree, so we
+            // can't trust index-pairing. Keep the full text on the sheet (below)
+            // and warn the user to check the pairings themselves.
+            captionPieceMismatch = true;
             console.warn("[break-comic] caption/piece count mismatch — text kept on sheet only", {
               pieces: pieceCount,
-              captions: parsedCaptions?.length ?? null,
+              captions: panelCaptions.length,
             });
           }
 
@@ -2238,6 +2283,27 @@ export function ImageToolsWorkspace({
             createdPieces.push(pieceItem);
           }
 
+          // Order the pieces by the panel number in their caption ("1.", "2.",
+          // …) when present, so the strip reads 1→N even if the page laid the
+          // panels out in a different physical order (e.g. panel 10 sits before
+          // 8 and 9). Stable: pieces without a number keep their reading-order
+          // position, sorted after the numbered ones.
+          if (tool.captionsFromTextChannel) {
+            const ordered = createdPieces
+              .map((piece, index) => ({
+                piece,
+                index,
+                number: captionLeadingNumber(piece.caption),
+              }))
+              .sort((a, b) => {
+                const aNumber = a.number ?? Number.POSITIVE_INFINITY;
+                const bNumber = b.number ?? Number.POSITIVE_INFINITY;
+                return aNumber !== bNumber ? aNumber - bNumber : a.index - b.index;
+              })
+              .map((entry) => entry.piece);
+            createdPieces.splice(0, createdPieces.length, ...ordered);
+          }
+
           // Enter every created record into history AND the history strip in
           // ONE synchronous block. The orphan-cleanup effect deletes history
           // entries that no strip references, and effects can run between the
@@ -2245,7 +2311,7 @@ export function ImageToolsWorkspace({
           // its siblings would be pruned before the strip insert below ever
           // ran (the pieces "vanished" after a successful generation).
           //
-          // Strip order: reading order (piece 1 on the left).
+          // Strip order: caption order (piece 1 on the left, see sort above).
           // appendHistoryEntry prepends each item at index 0, so adding them
           // one-by-one would reverse the batch; insert the block back-to-front
           // so the first piece ends up leftmost.
@@ -2288,6 +2354,14 @@ export function ImageToolsWorkspace({
 
           const resultItems = sheetItem ? [sheetItem, ...createdPieces] : createdPieces;
           finalizeDerivedItems(resultItems, { showAsCollection: true });
+          if (captionPieceMismatch) {
+            setState((prev) => ({
+              ...prev,
+              error: `Heads up: this page split into ${pieceCount} image${
+                pieceCount === 1 ? "" : "s"
+              } but ${panelCaptions?.length ?? 0} captions were found, so the text could not be matched to individual images automatically. The full text is on the combined sheet — please check the image/text pairings carefully.`,
+            }));
+          }
           return;
         }
 
@@ -3051,7 +3125,7 @@ export function ImageToolsWorkspace({
     : { role: "status" };
 
   const isCreditsLow =
-    creditsProgressFraction !== null && !creditsError ? creditsProgressFraction < 0.1 : false;
+    creditsGauge && !creditsError ? creditsGauge.remaining < LOW_CREDITS_THRESHOLD_USD : false;
 
   const creditsLabelColor = isCreditsLow ? theme.colors.danger : theme.colors.textMuted;
 

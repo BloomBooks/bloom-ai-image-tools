@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { extractOpaqueBoundsFromRaster, extractPieceBoundsFromRaster } from "../imageSegmentation";
+import {
+  detectMagentaFrameBounds,
+  extractOpaqueBoundsFromRaster,
+  extractPieceBoundsFromRaster,
+} from "../imageSegmentation";
 
 const expectBoundsToContain = (
   actual: { left: number; top: number; right: number; bottom: number },
@@ -133,6 +137,52 @@ describe("extractPieceBoundsFromRaster", () => {
         { preferComponents: true, targetPieceCount: 3 },
       ),
     ).toHaveLength(3);
+  });
+
+  it("splits under-split (bridged) panels back up to a known target count", () => {
+    // Two panels across a wide row, separated by a clean gutter. A large merge
+    // margin bridges them into a single connected component (the real-world
+    // under-split: adjacent panels whose content nearly touches). targetPieceCount=2
+    // must split that blob back apart at the whitespace gutter.
+    const width = 200;
+    const height = 60;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 8, top: 10, right: 80, bottom: 50 }, { r: 30, g: 30, b: 30 });
+    fillRect(data, width, { left: 120, top: 10, right: 192, bottom: 50 }, { r: 30, g: 30, b: 30 });
+
+    // A large merge margin bridges the gutter -> connected components see 1 blob.
+    expect(
+      extractPieceBoundsFromRaster(
+        { data, width, height },
+        { preferComponents: true, componentMergeMarginRatio: 0.25 },
+      ),
+    ).toHaveLength(1);
+
+    // Knowing the panel count, splitWidestUntil recovers the 2 panels.
+    expect(
+      extractPieceBoundsFromRaster(
+        { data, width, height },
+        { preferComponents: true, componentMergeMarginRatio: 0.25, targetPieceCount: 2 },
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("stops short of the target when no clean gutter remains", () => {
+    // A single solid panel with no internal whitespace. Even with a higher
+    // target, splitWidestUntil must not carve a real picture in two.
+    const width = 120;
+    const height = 60;
+    const data = createWhiteRaster(width, height);
+
+    fillRect(data, width, { left: 8, top: 10, right: 112, bottom: 50 }, { r: 30, g: 30, b: 30 });
+
+    expect(
+      extractPieceBoundsFromRaster(
+        { data, width, height },
+        { preferComponents: true, targetPieceCount: 3 },
+      ),
+    ).toHaveLength(1);
   });
 
   it("falls back to connected components when there is no clear grid", () => {
@@ -293,6 +343,105 @@ describe("extractPieceBoundsFromRaster", () => {
       right: 122,
       bottom: 64,
     });
+  });
+});
+
+const strokeRect = (
+  data: Uint8ClampedArray,
+  width: number,
+  bounds: { left: number; top: number; right: number; bottom: number },
+  color: { r: number; g: number; b: number },
+  thickness = 3,
+) => {
+  for (let t = 0; t < thickness; t += 1) {
+    fillRect(data, width, { ...bounds, bottom: bounds.top + t }, color); // top edge
+    fillRect(data, width, { ...bounds, top: bounds.bottom - t }, color); // bottom edge
+    fillRect(data, width, { ...bounds, right: bounds.left + t }, color); // left edge
+    fillRect(data, width, { ...bounds, left: bounds.right - t }, color); // right edge
+  }
+};
+
+const MAGENTA = { r: 255, g: 0, b: 255 };
+
+describe("detectMagentaFrameBounds", () => {
+  it("finds each magenta frame rectangle in reading order", () => {
+    const width = 400;
+    const height = 300;
+    const data = createWhiteRaster(width, height);
+    const frames = [
+      { left: 20, top: 20, right: 170, bottom: 140 },
+      { left: 220, top: 20, right: 370, bottom: 140 },
+      { left: 20, top: 160, right: 170, bottom: 280 },
+      { left: 220, top: 160, right: 370, bottom: 280 },
+    ];
+    for (const frame of frames) {
+      strokeRect(data, width, frame, MAGENTA);
+      // Some artwork inside each frame (must not affect frame detection).
+      fillRect(
+        data,
+        width,
+        {
+          left: frame.left + 30,
+          top: frame.top + 30,
+          right: frame.right - 30,
+          bottom: frame.bottom - 30,
+        },
+        { r: 80, g: 140, b: 220 },
+      );
+    }
+
+    const bounds = detectMagentaFrameBounds({ data, width, height });
+    expect(bounds).toHaveLength(4);
+    bounds.forEach((bound, index) => {
+      expectBoundsToContain(frames[index], bound); // detected box ~ the drawn frame
+      expect(bound.left).toBeGreaterThanOrEqual(frames[index].left - 1);
+      expect(bound.right).toBeLessThanOrEqual(frames[index].right + 1);
+    });
+  });
+
+  it("ignores pink/purple artwork (e.g. germ characters)", () => {
+    const width = 200;
+    const height = 160;
+    const data = createWhiteRaster(width, height);
+    // A pink blob: green too high / blue-green margin too small to be magenta.
+    fillRect(
+      data,
+      width,
+      { left: 40, top: 40, right: 120, bottom: 120 },
+      { r: 240, g: 100, b: 160 },
+    );
+    expect(detectMagentaFrameBounds({ data, width, height })).toHaveLength(0);
+  });
+
+  it("ignores a solid magenta blob (not a hollow frame)", () => {
+    const width = 200;
+    const height = 160;
+    const data = createWhiteRaster(width, height);
+    fillRect(data, width, { left: 40, top: 40, right: 140, bottom: 130 }, MAGENTA);
+    expect(detectMagentaFrameBounds({ data, width, height })).toHaveLength(0);
+  });
+
+  it("drives extractPieceBoundsFromRaster when detectColoredFrames is set", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    strokeRect(data, width, { left: 20, top: 20, right: 180, bottom: 180 }, MAGENTA);
+    strokeRect(data, width, { left: 220, top: 20, right: 380, bottom: 180 }, MAGENTA);
+
+    expect(
+      extractPieceBoundsFromRaster({ data, width, height }, { detectColoredFrames: true }),
+    ).toHaveLength(2);
+  });
+
+  it("yields nothing (for caller fallback) when fewer than two frames exist", () => {
+    const width = 300;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    strokeRect(data, width, { left: 20, top: 20, right: 280, bottom: 180 }, MAGENTA);
+
+    expect(
+      extractPieceBoundsFromRaster({ data, width, height }, { detectColoredFrames: true }),
+    ).toHaveLength(0);
   });
 });
 

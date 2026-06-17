@@ -1894,7 +1894,9 @@ export function ImageToolsWorkspace({
       // single image fetch get phases: break-comic redraws the sheet, then
       // transcribes captions, then splits it; other split-image tools generate
       // a sheet then split it. setPhase is a no-op for single-phase tools.
-      const willSplitDerived = tool.derivedResultMode === "split-images";
+      const willSplitDerived =
+        tool.derivedResultMode === "split-images" &&
+        (tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true");
       const phaseLabels: string[] = isBreakComic
         ? ["Editing to remove background", "Transcribing captions", "Splitting into images"]
         : willSplitDerived
@@ -2128,6 +2130,41 @@ export function ImageToolsWorkspace({
       };
 
       if (tool.derivedResultMode) {
+        const shouldSplitDerivedItems =
+          tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true";
+
+        if (!shouldSplitDerivedItems) {
+          throwIfCancelled();
+          const newItem = await createHistoryItem(
+            processedImageData,
+            constrainedReferences[0]?.id || null,
+          );
+          appendHistoryEntry(newItem);
+          setThumbnailStrips((prev) => {
+            const nextCharacterIds = [
+              ...(prev.itemIdsByStrip.characters || []).filter((id) => id !== newItem.id),
+              newItem.id,
+            ];
+            const next = replaceStripItems(prev, "characters", nextCharacterIds);
+            return setActiveStrip(next, "characters");
+          });
+
+          if (progressStartedAt > 0) {
+            const observedDurationMs = Math.max(1, getNowMs() - progressStartedAt);
+            setGenerationTiming((prev) =>
+              updateGenerationTiming(prev, promptDurationKey, toolDurationKey, observedDurationMs),
+            );
+          }
+
+          setGenerationProgress(null);
+          setState((prev) => ({
+            ...prev,
+            rightPanelImageId: newItem.id,
+            isProcessing: false,
+          }));
+          return;
+        }
+
         // Final phase: split the generated sheet into individual images.
         setPhase(phaseLabels.length - 1);
 

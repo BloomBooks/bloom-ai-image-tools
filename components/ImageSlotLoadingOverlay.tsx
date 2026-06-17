@@ -122,6 +122,7 @@ export const ImageSlotLoadingOverlay: React.FC<ImageSlotLoadingOverlayProps> = (
           <CircularProgress
             variant="indeterminate"
             disableShrink
+            thickness={1.6}
             size={spinnerSize}
             sx={{ color: theme.colors.accent }}
           />

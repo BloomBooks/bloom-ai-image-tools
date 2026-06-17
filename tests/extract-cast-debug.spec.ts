@@ -47,7 +47,14 @@ test("extract cast of characters with split-into-separate-files (dummy model)", 
   await page.getByTestId("reference-upload-input-0").setInputFiles(SAMPLE_IMAGE_PATH);
   await expect(page.getByTestId("reference-slot-0").locator('img[alt="Reference"]')).toBeVisible();
 
-  // Extracting the cast always splits into separate files.
+  // Check "Split into separate files".
+  const splitCheckbox = page.getByTestId("input-splitIntoSeparateFiles");
+  await expect(splitCheckbox).toBeVisible();
+  if (!(await splitCheckbox.isChecked())) {
+    await splitCheckbox.check();
+  }
+  await expect(splitCheckbox).toBeChecked();
+
   // Click Extract Characters.
   await page.getByRole("button", { name: /Extract Characters/i }).click();
 

@@ -42,6 +42,7 @@ describe("ethnicity tool prompt", () => {
     expect(extractCastTool).toBeDefined();
 
     const prompt = extractCastTool?.promptTemplate?.({
+      splitIntoSeparateFiles: "false",
       furtherInstructions: "There are 3 characters: Brother, Sister, and Mother.",
     });
 

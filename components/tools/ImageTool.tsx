@@ -206,14 +206,21 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
   const [draft, setDraft] = useState(value);
   const draftRef = useRef(value);
   const commitRef = useRef(onCommit);
+  const isFocusedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     commitRef.current = onCommit;
   }, [onCommit]);
 
-  // Sync external value changes to draft (e.g., when loading persisted state)
+  // Sync external value changes to draft (e.g., when loading persisted state).
+  // While the field is focused the local draft is authoritative: commits run
+  // through startTransition, so the parent echoes `value` back asynchronously
+  // and lagging behind fast typing. Accepting those stale echoes here would
+  // revert characters and snap the caret to the end. Only re-sync when the
+  // user is not actively editing.
   useEffect(() => {
+    if (isFocusedRef.current) return;
     if (value !== draftRef.current) {
       draftRef.current = value;
       setDraft(value);
@@ -241,8 +248,13 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
     [],
   );
 
+  const handleFocus = useCallback(() => {
+    isFocusedRef.current = true;
+  }, []);
+
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      isFocusedRef.current = false;
       const nextValue = event.target.value;
       draftRef.current = nextValue;
       commitRef.current(nextValue);
@@ -345,6 +357,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
       placeholder={placeholder}
       value={draft}
       onChange={handleChange}
+      onFocus={handleFocus}
       onBlur={handleBlur}
       multiline={multiline}
       rows={rows}

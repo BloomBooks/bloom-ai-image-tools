@@ -8,6 +8,7 @@ import type { ModelReasoningLevel, ThumbnailStripsSnapshot } from "../../types";
 export interface HistoryEntry {
   id: string;
   parentId: string | null;
+  incomingSlotId?: string;
   toolId: string;
   parameters: Record<string, string>;
   promptUsed: string;
@@ -17,7 +18,7 @@ export interface HistoryEntry {
   durationMs: number;
   cost: number;
   resolution?: { width: number; height: number };
-  origin?: "generated" | "uploaded" | "environment";
+  origin?: "generated" | "uploaded" | "bookImages";
   isStarred?: boolean;
   sourceStyleId?: string | null;
   sourceSummary?: string | null;

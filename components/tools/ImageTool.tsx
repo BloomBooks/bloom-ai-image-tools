@@ -39,7 +39,7 @@ import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHe
 import { getModelInfoById, resolveToolModelId } from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
 import { ToolModelPicker } from "./ToolModelPicker";
-import { theme } from "../../themes";
+import { getHighContrastScrollbarStyles, theme } from "../../themes";
 
 // Must match the catalog id in data/models-registry.json5, which is the
 // "-preview" key while OpenRouter only exposes the preview. Keep in sync if the
@@ -51,15 +51,6 @@ const LOCALIZE_TOOL_ORDER = [
   "ethnicity",
   "apply_localized_characters",
 ] as const;
-const ADVANCED_TOOL_IDS = new Set([
-  "generate_image",
-  "change_style",
-  "custom",
-  "improve_drawing",
-  "generate_pallet",
-  "game_theme_generator",
-]);
-
 const isGamesTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "games");
 
@@ -458,6 +449,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const handleToolSelect = (toolId: string) => {
     const timingLabel = `tool-panel-open:${toolId}`;
+    if (selectionTimingRef.current && selectionTimingRef.current !== timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(selectionTimingRef.current);
+      }
+      selectionTimingRef.current = null;
+    }
+
+    if (selectionTimingRef.current === timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(timingLabel);
+      }
+      selectionTimingRef.current = null;
+    }
+
     selectionTimingRef.current = timingLabel;
     if (typeof console !== "undefined" && console.time) {
       console.time(timingLabel);
@@ -1077,14 +1082,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           display: "flex",
           flexDirection: "column",
           gap: 2,
-          "&::-webkit-scrollbar": { width: 8 },
-          "&::-webkit-scrollbar-thumb": {
-            backgroundColor: alpha(muiTheme.palette.text.primary, 0.2),
-            borderRadius: 999,
-          },
-          "&::-webkit-scrollbar-track": {
-            backgroundColor: alpha(muiTheme.palette.background.paper, 0.4),
-          },
+          ...getHighContrastScrollbarStyles(),
         }}
       >
         {defaultTools.map(renderToolCard)}

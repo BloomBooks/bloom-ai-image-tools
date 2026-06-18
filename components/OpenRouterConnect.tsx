@@ -307,28 +307,29 @@ export function OpenRouterConnect({
             }}
           />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            {(hasManualKey || hasEnvKey) && connectionMode !== "oauth" && (
-              <Button
-                type="button"
-                data-testid="openrouter-test-key"
-                onClick={handleTestKey}
-                disabled={testState === "testing"}
-                variant="contained"
-                size="small"
-                startIcon={testState === "testing" ? <CircularProgress size={14} /> : undefined}
-                sx={{
-                  borderRadius: 2,
-                  fontWeight: 600,
-                  px: 3,
-                  backgroundColor: theme.colors.accent,
-                  color: theme.colors.textOnAccent,
-                  opacity: testState === "testing" ? 0.6 : 1,
-                  "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
-                }}
-              >
-                {testState === "testing" ? "Testing…" : "Test Key"}
-              </Button>
-            )}
+            {(hasManualKey || hasEnvKey || Boolean(keyValue.trim())) &&
+              connectionMode !== "oauth" && (
+                <Button
+                  type="button"
+                  data-testid="openrouter-test-key"
+                  onClick={handleTestKey}
+                  disabled={testState === "testing"}
+                  variant="contained"
+                  size="small"
+                  startIcon={testState === "testing" ? <CircularProgress size={14} /> : undefined}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    px: 3,
+                    backgroundColor: theme.colors.accent,
+                    color: theme.colors.textOnAccent,
+                    opacity: testState === "testing" ? 0.6 : 1,
+                    "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
+                  }}
+                >
+                  {testState === "testing" ? "Testing…" : "Test Key"}
+                </Button>
+              )}
             {hasManualKey && !usingEnvKey && (
               <Button
                 type="button"

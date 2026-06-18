@@ -1,6 +1,6 @@
 import React from "react";
 import { Paper, Stack, Typography } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 
 interface PanelToolbarProps {
   label: string;
@@ -9,7 +9,6 @@ interface PanelToolbarProps {
 
 export const PanelToolbar: React.FC<PanelToolbarProps> = ({ label, actions }) => {
   const muiTheme = useTheme();
-  const background = alpha(muiTheme.palette.background.paper, 0.9);
 
   return (
     <Paper

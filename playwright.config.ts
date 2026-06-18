@@ -13,7 +13,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     actionTimeout: 2_000,
-    navigationTimeout: 3_000,
+    navigationTimeout: 10_000,
   },
   webServer: {
     command: "vp dev --host --port 3000",

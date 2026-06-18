@@ -227,7 +227,7 @@ describe("writeImageFile", () => {
         history: ["good", "zero", "missing"],
         starred: [],
         reference: [],
-        environment: [],
+        bookImages: [],
       },
     };
 
@@ -365,7 +365,7 @@ describe("writeImageFile", () => {
               history: [],
               starred: [],
               reference: [],
-              environment: [],
+              bookImages: [],
             },
           },
         }),
@@ -414,7 +414,7 @@ describe("writeImageFile", () => {
               characters: ["hero-cast"],
               starred: ["starred-shot"],
               reference: [],
-              environment: [],
+              bookImages: [],
             },
           },
         }),

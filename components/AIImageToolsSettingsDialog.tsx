@@ -164,7 +164,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                     sx={{ width: 24, height: 24 }}
                   />
                   <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
-                    OpenRouter connection
+                    Connection to AI Image Generators
                   </Typography>
                 </Stack>
 

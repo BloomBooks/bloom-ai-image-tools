@@ -13,17 +13,27 @@ import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
   entries: ImageRecord[];
+  replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   selectedId: string | null;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
-  hasHiddenHistory: boolean;
-  onRequestHistoryAccess: () => void;
+  onOpenPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
   onRemoveFromStrip: (stripId: ThumbnailStripId, id: string) => void;
   onAddCharacterImage?: (file: File) => void;
+  onAssignReplacement?: (incomingId: string, replacementId: string | null) => void;
+  onAssignCurrent?: (incomingId: string | null, currentImageId: string) => void;
+  hasHiddenHistory: boolean;
+  onRequestHistoryAccess: () => void;
   onDropToStrip: (
     stripId: ThumbnailStripId,
     dropIndex: number,
@@ -40,18 +50,23 @@ interface ThumbnailStripsCollectionProps {
 export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
   snapshot,
   entries,
+  replacementItemsByIncomingId = {},
+  bookImagesAction,
   selectedId,
   previewModifierActive = false,
   previewSelectionImageIds = [],
   stripConfigs,
-  hasHiddenHistory,
-  onRequestHistoryAccess,
+  onOpenPreview,
   onSelect,
   onToggleStar,
   onRenameItem,
   onRemoveFromStrip,
   onAddCharacterImage,
-  onDropToStrip,
+  onAssignReplacement,
+  onAssignCurrent,
+  hasHiddenHistory,
+  onRequestHistoryAccess,
+  onDropToStrip: _onDropToStrip,
   onVisibleItemIdsChange,
   onActivateStrip,
   onTogglePin,
@@ -122,6 +137,8 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         removeDisabledReasonById={
           stripId === "history" ? historyRemoveDisabledReasonById : undefined
         }
+        replacementItemsByIncomingId={replacementItemsByIncomingId}
+        bookImagesAction={stripId === "bookImages" ? bookImagesAction : undefined}
         selectedId={selectedId}
         previewModifierActive={previewModifierActive}
         previewSelectionImageIds={previewSelectionImageIds}
@@ -133,11 +150,14 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
         onRequestHistoryAccess={stripId === "history" ? onRequestHistoryAccess : undefined}
         emptyStateMessage={emptyStateMessage}
+        onOpenPreview={onOpenPreview}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRenameItem={onRenameItem}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
         onAddCharacterImage={stripId === "characters" ? onAddCharacterImage : undefined}
+        onAssignReplacement={onAssignReplacement}
+        onAssignCurrent={onAssignCurrent}
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
       />

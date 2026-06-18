@@ -38,7 +38,7 @@ const STRIP_ICONS: Record<ThumbnailStripId, React.ComponentType<SvgIconProps>> =
   characters: Diversity3OutlinedIcon,
   starred: StarOutlineIcon,
   reference: CollectionsBookmarkIcon,
-  environment: AutoStoriesIcon,
+  bookImages: AutoStoriesIcon,
 };
 
 interface ThumbnailStripTabsProps {
@@ -191,7 +191,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
         width: railWidth,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",
+        justifyContent: "flex-start",
         gap: tabGap,
         marginLeft: "-1px", // cover up this bit of the border of the box we're next to so that it looks seamless
       }}

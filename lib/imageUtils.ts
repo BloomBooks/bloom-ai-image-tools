@@ -37,6 +37,26 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+/**
+ * Returns a base64 `data:` URL for the given image source. If the source is
+ * already a data URL it is returned unchanged; otherwise it is fetched and
+ * converted. Book images supplied by the Bloom host arrive as plain http(s)
+ * URLs, which the OpenRouter client cannot consume directly — it requires
+ * base64 — so any image used as a tool source must be normalized first.
+ */
+export const ensureDataUrl = async (source: string): Promise<string> => {
+  if (!source || source.startsWith("data:")) {
+    return source;
+  }
+
+  const response = await fetch(source);
+  if (!response.ok) {
+    throw new Error(`Failed to load image for editing (${response.status}).`);
+  }
+  const blob = await response.blob();
+  return blobToBase64(blob);
+};
+
 export const getMimeTypeFromUrl = (dataUrl: string | null | undefined): string | null => {
   if (!dataUrl) return null;
   const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);

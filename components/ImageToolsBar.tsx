@@ -113,6 +113,26 @@ const parsePanelDrop = (
   return null;
 };
 
+const parseBookImageReplacementDrop = (id: unknown): { incomingId: string } | null => {
+  const raw = String(id);
+  if (!raw.startsWith("bookImageReplacement:")) {
+    return null;
+  }
+
+  const incomingId = raw.slice("bookImageReplacement:".length);
+  return incomingId ? { incomingId } : null;
+};
+
+const parseBookImageCurrentDrop = (id: unknown): { incomingId: string | null } | null => {
+  const raw = String(id);
+  if (!raw.startsWith("bookImageCurrent:")) {
+    return null;
+  }
+
+  const incomingId = raw.slice("bookImageCurrent:".length);
+  return { incomingId: incomingId === "new" ? null : incomingId || null };
+};
+
 const getDragPreviewMode = (): DragPreviewMode => {
   if (typeof window === "undefined") {
     return "image";
@@ -374,7 +394,7 @@ const DragOverlayLayer: React.FC<{
   });
 
   return (
-    <DragOverlay modifiers={[alignDragPreviewToCursor]}>
+    <DragOverlay modifiers={[alignDragPreviewToCursor]} dropAnimation={null}>
       {activeDragPreview ? (
         <DragPreview
           preview={activeDragPreview}
@@ -398,11 +418,17 @@ interface ImageToolsPanelBar {
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
   resultImages?: ImageRecord[];
+  replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   activeToolId: string | null;
   toolParams: ToolParamsById;
   historyItems: ImageRecord[];
-  hasHiddenHistory: boolean;
-  onRequestHistoryAccess: () => void;
+  onOpenStripPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   thumbnailStrips: ThumbnailStripsSnapshot;
   thumbnailStripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
   onStripItemDrop: (
@@ -412,6 +438,8 @@ interface ImageToolsPanelBar {
     event?: React.DragEvent | null,
   ) => void;
   onStripRemoveItem: (stripId: ThumbnailStripId, id: string) => void;
+  onAssignReplacement: (incomingId: string, replacementId: string | null) => void;
+  onAssignCurrent: (incomingId: string | null, currentImageId: string) => void;
   onStripPinToggle: (stripId: ThumbnailStripId) => void;
   onStripActivate: (stripId: ThumbnailStripId) => void;
   onStripDragActivate: (stripId: ThumbnailStripId) => void;
@@ -432,11 +460,16 @@ interface ImageToolsPanelBar {
   onClearTarget: () => void;
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
+  onUseCurrentResult: () => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
   onRenameHistoryItem: (id: string, name: string) => void;
   onAddCharacterImage: (file: File) => void;
+  hasHiddenHistory: boolean;
+  onRequestHistoryAccess: () => void;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   onDismissError: () => void;
@@ -453,15 +486,18 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   referenceImages,
   rightImage,
   resultImages = [],
+  replacementItemsByIncomingId = {},
+  bookImagesAction,
   activeToolId,
   toolParams,
   historyItems,
-  hasHiddenHistory,
-  onRequestHistoryAccess,
+  onOpenStripPreview,
   thumbnailStrips,
   thumbnailStripConfigs,
   onStripItemDrop,
   onStripRemoveItem,
+  onAssignReplacement,
+  onAssignCurrent,
   onStripPinToggle,
   onStripActivate,
   onStripDragActivate,
@@ -482,11 +518,16 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onClearTarget,
   onClearRight,
   onUploadRight,
+  onUseCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
   generationProgress,
   onSelectHistoryItem,
   onToggleHistoryStar,
   onRenameHistoryItem,
   onAddCharacterImage,
+  hasHiddenHistory,
+  onRequestHistoryAccess,
   previewModifierActive = false,
   previewSelectionImageIds = [],
   onDismissError,
@@ -584,6 +625,9 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
       : imageId
         ? [imageId]
         : [];
+    const activeSource = (event.active.data.current as any)?.source as
+      | { type?: string; incomingId?: string }
+      | undefined;
     if (!imageIds.length) return;
 
     const overId = event.over?.id;
@@ -607,6 +651,26 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
         }
         return;
       }
+    }
+
+    const replacementSlot = parseBookImageReplacementDrop(overId);
+    if (replacementSlot) {
+      const draggedReplacementIncomingId =
+        activeSource?.type === "book-image-replacement" ? activeSource.incomingId || null : null;
+      if (draggedReplacementIncomingId === replacementSlot.incomingId) {
+        return;
+      }
+      onAssignReplacement(replacementSlot.incomingId, imageIds[0]);
+      if (draggedReplacementIncomingId) {
+        onAssignReplacement(draggedReplacementIncomingId, null);
+      }
+      return;
+    }
+
+    const currentSlot = parseBookImageCurrentDrop(overId);
+    if (currentSlot) {
+      onAssignCurrent(currentSlot.incomingId, imageIds[0]);
+      return;
     }
 
     const overStripItem = parseStripItem(overId);
@@ -809,6 +873,9 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onClearTarget={onClearTarget}
               onClearRight={onClearRight}
               onUploadRight={onUploadRight}
+              onUseCurrentResult={onUseCurrentResult}
+              currentResultActionLabel={currentResultActionLabel}
+              currentResultActionTestId={currentResultActionTestId}
               isProcessing={appState.isProcessing}
               generationProgress={generationProgress}
               activeToolId={activeToolId}
@@ -818,17 +885,22 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             <ThumbnailStripsCollection
               snapshot={thumbnailStrips}
               entries={historyItems}
+              replacementItemsByIncomingId={replacementItemsByIncomingId}
+              bookImagesAction={bookImagesAction}
               selectedId={appState.rightPanelImageId}
               previewModifierActive={previewModifierActive}
               previewSelectionImageIds={previewSelectionImageIds}
               stripConfigs={thumbnailStripConfigs}
-              hasHiddenHistory={hasHiddenHistory}
-              onRequestHistoryAccess={onRequestHistoryAccess}
+              onOpenPreview={onOpenStripPreview}
               onSelect={onSelectHistoryItem}
               onToggleStar={onToggleHistoryStar}
               onRenameItem={onRenameHistoryItem}
               onRemoveFromStrip={onStripRemoveItem}
               onAddCharacterImage={onAddCharacterImage}
+              onAssignReplacement={onAssignReplacement}
+              onAssignCurrent={onAssignCurrent}
+              hasHiddenHistory={hasHiddenHistory}
+              onRequestHistoryAccess={onRequestHistoryAccess}
               onDropToStrip={onStripItemDrop}
               onVisibleItemIdsChange={onVisibleStripItemIdsChange}
               onActivateStrip={onStripActivate}

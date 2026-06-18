@@ -159,6 +159,7 @@ export interface EthnicityCategory {
 export interface ImageRecordData {
   id: string;
   parentId: string | null;
+  incomingSlotId?: string;
   imageData: string; // Base64
   imageFileName?: string | null;
   /**
@@ -186,13 +187,23 @@ export interface ImageRecordData {
   sourceSummary?: string | null;
   resolution?: { width: number; height: number };
   isStarred?: boolean;
-  origin?: "generated" | "uploaded" | "environment";
+  origin?: "generated" | "uploaded" | "bookImages";
 }
 
 /** @deprecated Use ImageRecordData. */
 export type ImageEntry = ImageRecordData;
 
 export type ImageRecord = ImageRecordData;
+
+/**
+ * Per-image history metadata persisted alongside the image bytes as a
+ * `history/<id>.json` sidecar (Bloom-host path). It is everything in an
+ * {@link ImageRecordData} except the image bytes themselves — those live in
+ * the sibling `history/<id>.png` and are referenced by URL at runtime. The
+ * folder is the source of truth: the host enumerates it and supplies each
+ * image with its parsed sidecar (see `IBloomHostHistoryImage`).
+ */
+export type HistoryImageSidecar = Omit<ImageRecordData, "imageData">;
 
 /** @deprecated Use ImageRecord. */
 export type HistoryItem = ImageRecord;
@@ -229,7 +240,7 @@ export interface GenerationTimingState {
   toolDurationsByKey: Record<string, number>;
 }
 
-export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "environment";
+export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "bookImages";
 
 export interface ThumbnailStripsSnapshot {
   activeStripId: ThumbnailStripId;
@@ -254,6 +265,7 @@ export interface PersistedAppState {
 export interface PersistedImageToolsState {
   version: number;
   appState: PersistedAppState;
+  replacementImageIdByIncomingId?: Record<string, string | null>;
   paramsByTool: ToolParamsById;
   activeToolId: string | null;
   /** toolId -> chosen model id (per-tool model selection). */

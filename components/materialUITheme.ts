@@ -1,5 +1,5 @@
-import { createTheme, Theme } from "@mui/material/styles";
-import { theme as appTheme } from "../themes";
+import { createTheme } from "@mui/material/styles";
+import { getHighContrastScrollbarStyles, theme as appTheme } from "../themes";
 //import "./bloomWebFonts.less";
 
 export const kBloomToolboxWhite = "#ffffff88"; //See @bloom-toolboxWhite
@@ -29,6 +29,7 @@ export const kVerticalSpacingBetweenDialogSections = "20px";
 export const kBorderRadiusForSpecialBlocks = "3px";
 export const kBloomBuff = "#d2d2d2";
 export const kWarningColor = "#d65649";
+const highContrastScrollbarStyleOverrides = getHighContrastScrollbarStyles("*");
 // css we want to apply to each MuiSelect to get the look we like.
 export const kSelectCss = `
     background-color: white;
@@ -63,7 +64,7 @@ export const lightTheme = createTheme({
   // would be spacing{unit:23} but that gives an error saying to use a number
   //spacing: 23,
   palette: {
-    primary: { main: kPrimary },
+    primary: { main: kPrimary, contrastText: appTheme.colors.textOnAccent },
     secondary: { main: kBloomPurple },
     warning: { main: kBloomGold },
     text: { disabled: kBloomDisabledText },
@@ -145,7 +146,7 @@ export const lightTheme = createTheme({
 export const darkTheme = createTheme(lightTheme, {
   palette: {
     mode: "dark",
-    primary: { main: kPrimary },
+    primary: { main: kPrimary, contrastText: appTheme.colors.textOnAccent },
     secondary: { main: kBloomPurple },
     background: {
       default: appTheme.colors.appBackground,
@@ -171,6 +172,9 @@ export const darkTheme = createTheme(lightTheme, {
           boxShadow: appTheme.colors.panelShadow,
         },
       },
+    },
+    MuiCssBaseline: {
+      styleOverrides: highContrastScrollbarStyleOverrides,
     },
     MuiButton: {
       styleOverrides: {
@@ -227,6 +231,9 @@ export const toolboxTheme = createTheme({
     fontFamily: kUiFontStack,
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: highContrastScrollbarStyleOverrides,
+    },
     MuiLink: {
       variants: [
         {

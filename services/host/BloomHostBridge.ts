@@ -16,7 +16,7 @@
  *   on the channel "bloom-ai-image-tools". That is `createIframeBloomHostBridge()`.
  *
  *   Bytes never travel over postMessage. Control messages (init / ready / commit /
- *   cancel / log / open-external / ack) go over the channel; image and JSON file
+ *   cancel / log / open-external / saveCredentials / ack) go over the channel; image and JSON file
  *   contents move over plain HTTP to Bloom's local server via getFile/putFile/
  *   deleteFile, using `httpBase` + `sessionToken` from the init payload. This keeps
  *   large images off the message bus and lets the host fetch result bytes from the
@@ -134,6 +134,15 @@ export interface IBloomHostControl {
    *  identity; the resulting code is retrieved out-of-band via the localhost
    *  callback + `pollOAuthCodeFromBloomHost`. */
   openExternalUrl: (url: string) => void;
+  /** Hand newly obtained OpenRouter credentials up to the host to persist. Bloom owns
+   *  the key: it stores it per-user and re-supplies it in `init.apiKey` on each launch,
+   *  so the editor must NOT persist it itself (it would otherwise travel with the book).
+   *  A null apiKey clears the host's stored credentials (sign-out). */
+  saveCredentials: (creds: {
+    apiKey: string | null;
+    authMethod: "oauth" | "manual" | null;
+    openRouterUser?: string | null;
+  }) => void;
 }
 
 /** File store for the book's .ai-image-editor/ folder (HTTP-backed in the iframe
@@ -189,6 +198,15 @@ type IframeMessage =
       channel: "bloom-ai-image-tools";
       type: "open-external";
       payload: { url: string };
+    }
+  | {
+      channel: "bloom-ai-image-tools";
+      type: "saveCredentials";
+      payload: {
+        apiKey: string | null;
+        authMethod: "oauth" | "manual" | null;
+        openRouterUser?: string | null;
+      };
     };
 
 const uuid = () => Math.random().toString(36).slice(2, 10);
@@ -384,6 +402,17 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
     openExternalUrl(url) {
       postToParent({ channel: iframeChannel, type: "open-external", payload: { url } });
     },
+    saveCredentials(creds) {
+      postToParent({
+        channel: iframeChannel,
+        type: "saveCredentials",
+        payload: {
+          apiKey: creds.apiKey,
+          authMethod: creds.authMethod,
+          openRouterUser: creds.openRouterUser ?? null,
+        },
+      });
+    },
     async getFile(name) {
       if (!httpBase || !sessionToken) {
         throw new Error("Bloom host bridge is not initialized.");
@@ -486,6 +515,10 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
       if (typeof window !== "undefined") {
         window.open(url, "_blank", "noopener,noreferrer");
       }
+    },
+    saveCredentials() {
+      // No real host to persist to in standalone/harness mode; the editor keeps the
+      // key in its own state (and localStorage) as usual.
     },
     async getFile(name) {
       return fileStore.get(name) ?? null;

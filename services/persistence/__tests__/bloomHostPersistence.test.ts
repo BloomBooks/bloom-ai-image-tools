@@ -63,6 +63,7 @@ const createBridge = () => {
     cancel() {},
     log() {},
     openExternalUrl() {},
+    saveCredentials() {},
     async getFile(name) {
       return fileStore.get(name) ?? null;
     },
@@ -259,7 +260,7 @@ describe("createBloomHostPersistence", () => {
     expect(fileStore.has("history/keep.json")).toBe(true);
   });
 
-  it("persists apiKey to connection.json and loads it back", async () => {
+  it("never writes the apiKey into the book folder (Bloom owns it)", async () => {
     const { bridge, fileStore } = createBridge();
     const historyImages: IBloomHostHistoryImage[] = [
       { id: "edit-1", url: "https://host/history/edit-1.png", metadata: makeSidecar("edit-1") },
@@ -268,28 +269,37 @@ describe("createBloomHostPersistence", () => {
 
     await persistence.save(makeUiState({ auth: { apiKey: "sk-test-key", authMethod: "manual" } }));
 
-    const connection = JSON.parse(fileStore.get("connection.json")!);
-    expect(connection.apiKey).toBe("sk-test-key");
+    // The key must not land in connection.json...
+    expect(fileStore.has("connection.json")).toBe(false);
+    // ...nor in state.json (auth.apiKey is nulled before writing).
+    const savedState = JSON.parse(fileStore.get("state.json")!) as PersistedImageToolsState;
+    expect(savedState.auth.apiKey).toBeNull();
+    expect(fileStore.get("state.json")).not.toContain("sk-test-key");
 
+    // And load never sources a key from the book folder.
     const restored = await persistence.load();
-    expect(restored?.auth.apiKey).toBe("sk-test-key");
+    expect(restored?.auth.apiKey).toBeNull();
   });
 
-  it("connection.json apiKey takes precedence over state.json auth on load", async () => {
+  it("ignores and scrubs a legacy connection.json on load", async () => {
     const { bridge, fileStore } = createBridge();
     const historyImages: IBloomHostHistoryImage[] = [
       { id: "edit-1", url: "https://host/history/edit-1.png", metadata: makeSidecar("edit-1") },
     ];
-    const persistence = createBloomHostPersistence(bridge, { historyImages });
-    await persistence.save(makeUiState({ auth: { apiKey: "from-state", authMethod: "manual" } }));
-
+    // Simulate an older build that stored the key alongside the book.
+    fileStore.set("state.json", JSON.stringify(makeUiState({ activeToolId: "edit-image" })));
     fileStore.set(
       "connection.json",
-      JSON.stringify({ apiKey: "from-connection", authMethod: "manual" }),
+      JSON.stringify({ apiKey: "legacy-key", authMethod: "manual" }),
     );
+    const persistence = createBloomHostPersistence(bridge, { historyImages });
 
     const restored = await persistence.load();
-    expect(restored?.auth.apiKey).toBe("from-connection");
+
+    // The key is never sourced from the book folder...
+    expect(restored?.auth.apiKey).toBeNull();
+    // ...and the legacy file is scrubbed from disk.
+    expect(fileStore.has("connection.json")).toBe(false);
   });
 
   it("clears state.json, connection.json, and history images + sidecars", async () => {

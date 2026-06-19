@@ -434,6 +434,13 @@ export interface ImageToolsWorkspaceProps {
     openExternalUrl?: (url: string) => void;
   } | null;
   onReplacementsChange?: (map: Record<string, ImageRecord | null>) => void;
+  /** Called when the user signs in, pastes a key, or signs out, so a host (Bloom) can
+   *  persist the credentials. The editor does not persist the key itself when hosted. */
+  onCredentialsChange?: (creds: {
+    apiKey: string | null;
+    authMethod: "oauth" | "manual" | null;
+    openRouterUser?: string | null;
+  }) => void;
   onCommitCurrentResult?: (item: ImageRecord) => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
@@ -454,6 +461,7 @@ export function ImageToolsWorkspace({
   bookImagesStripMode = "host",
   oauthHost = null,
   onReplacementsChange,
+  onCredentialsChange,
   onCommitCurrentResult,
   currentResultActionLabel,
   currentResultActionTestId,
@@ -2972,6 +2980,21 @@ export function ImageToolsWorkspace({
     handleUploadRight,
   ]);
 
+  // Open an external URL in the user's real default browser. Hosted in Bloom, a plain
+  // <a target="_blank"> would open in the WebView's own (separate-profile) browser, so
+  // route through the host's openExternal bridge (Bloom restricts it to openrouter.ai).
+  // Standalone falls back to a normal new tab.
+  const openExternalLink = useCallback(
+    (url: string) => {
+      if (oauthHost?.openExternalUrl) {
+        oauthHost.openExternalUrl(url);
+      } else if (typeof window !== "undefined") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    [oauthHost],
+  );
+
   const handleConnect = async () => {
     try {
       setAuthLoading(true);
@@ -3004,6 +3027,8 @@ export function ImageToolsWorkspace({
         const key = await exchangeCodeForApiKey(code);
         setApiKey(key);
         setAuthMethod("oauth");
+        // Bloom owns the key: hand it up to the host to persist per-user.
+        onCredentialsChange?.({ apiKey: key, authMethod: "oauth", openRouterUser: null });
         setState((prev) => ({ ...prev, isAuthenticated: true }));
         setAuthLoading(false);
         oauthPollAbortControllerRef.current = null;
@@ -3031,6 +3056,8 @@ export function ImageToolsWorkspace({
   const handleDisconnect = () => {
     setApiKey(null);
     setAuthMethod(null);
+    // Clear the host's stored credentials too (sign-out).
+    onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
     setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
   };
 
@@ -3039,11 +3066,14 @@ export function ImageToolsWorkspace({
     if (!trimmed) {
       setApiKey(null);
       setAuthMethod(null);
+      onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
       setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
       return;
     }
     setApiKey(trimmed);
     setAuthMethod("manual");
+    // Bloom owns the key: hand it up to the host to persist per-user.
+    onCredentialsChange?.({ apiKey: trimmed, authMethod: "manual", openRouterUser: null });
     setState((prev) => ({ ...prev, isAuthenticated: true }));
   };
 
@@ -3587,6 +3617,14 @@ export function ImageToolsWorkspace({
       : theme.colors.accent;
 
   const shouldShowConnectToOpenRouterCTA = !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
+  // A null limit means the connected key has no per-key spending cap; warn near the meter.
+  const creditsKeyHasNoLimit = !!(
+    effectiveApiKey &&
+    credits &&
+    !creditsLoading &&
+    !creditsError &&
+    credits.limit === null
+  );
   const prototypeNoticeColor = theme.colors.accent;
 
   const hasUnresolvedFolderBackedHistory = useMemo(
@@ -3709,6 +3747,8 @@ export function ImageToolsWorkspace({
                 creditsTooltipLines={creditsTooltipLines}
                 creditsProgressFraction={creditsProgressFraction}
                 creditsProgressAriaProps={creditsProgressAriaProps}
+                showNoLimitWarning={creditsKeyHasNoLimit}
+                onOpenExternalUrl={openExternalLink}
                 creditsLabelColor={creditsLabelColor}
                 progressBorderColor={progressBorderColor}
                 progressTrackBackground={progressTrackBackground}
@@ -3894,6 +3934,7 @@ export function ImageToolsWorkspace({
             onConnect: handleConnect,
             onDisconnect: handleDisconnect,
             onProvideKey: handleProvideKey,
+            onOpenExternalUrl: openExternalLink,
           }}
           history={{
             isSupported: fsSupported,

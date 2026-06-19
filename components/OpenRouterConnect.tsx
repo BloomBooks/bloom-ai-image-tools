@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import { theme } from "../themes";
 import { fetchOpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
+import { NoSpendingLimitWarning } from "./NoSpendingLimitWarning";
 
 type ConnectionMode = "disconnected" | "apiKey" | "oauth";
 
@@ -27,6 +28,7 @@ interface OpenRouterConnectProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
+  onOpenExternalUrl: (url: string) => void;
 }
 
 export function OpenRouterConnect({
@@ -38,15 +40,19 @@ export function OpenRouterConnect({
   onConnect,
   onDisconnect,
   onProvideKey,
+  onOpenExternalUrl,
 }: OpenRouterConnectProps) {
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
+  // True when the last successful test found the key has no per-key spending limit set.
+  const [keyHasNoLimit, setKeyHasNoLimit] = useState(false);
 
   useEffect(() => {
     setKeyValue(apiKeyPreview ?? "");
     setTestState("idle");
     setTestMessage("");
+    setKeyHasNoLimit(false);
   }, [apiKeyPreview]);
 
   const hasOAuthConnection = authMethod === "oauth" && isAuthenticated;
@@ -73,6 +79,7 @@ export function OpenRouterConnect({
         setKeyValue(trimmed);
         setTestState("idle");
         setTestMessage("");
+        setKeyHasNoLimit(false);
         onProvideKey(trimmed);
       }
     } catch {
@@ -85,6 +92,7 @@ export function OpenRouterConnect({
     if (!key) return;
     setTestState("testing");
     setTestMessage("");
+    setKeyHasNoLimit(false);
     try {
       const status = await fetchOpenRouterKeyStatus(key);
       const remaining = status.limitRemaining ?? status.accountRemainingCredits;
@@ -94,6 +102,8 @@ export function OpenRouterConnect({
           : "";
       setTestState("success");
       setTestMessage(`Key verified${balancePart}`);
+      // A null limit means there's no per-key spending cap; warn so the user can set one.
+      setKeyHasNoLimit(status.limit === null);
     } catch (err) {
       setTestState("error");
       setTestMessage(err instanceof Error ? err.message : "Key verification failed");
@@ -277,6 +287,7 @@ export function OpenRouterConnect({
               setKeyValue(e.target.value);
               setTestState("idle");
               setTestMessage("");
+              setKeyHasNoLimit(false);
             }}
             onBlur={handleKeyBlur}
             placeholder="Paste OpenRouter key"
@@ -355,6 +366,10 @@ export function OpenRouterConnect({
             >
               {testState === "success" ? `✔ ${testMessage}` : `✘ ${testMessage}`}
             </Typography>
+          )}
+
+          {testState === "success" && keyHasNoLimit && (
+            <NoSpendingLimitWarning onOpenExternalUrl={onOpenExternalUrl} />
           )}
 
           {usingEnvKey && (

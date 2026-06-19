@@ -29,6 +29,7 @@ interface OpenRouterSectionProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
+  onOpenExternalUrl: (url: string) => void;
 }
 
 interface HistorySectionProps {
@@ -179,6 +180,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       onConnect={openRouter.onConnect}
                       onDisconnect={openRouter.onDisconnect}
                       onProvideKey={openRouter.onProvideKey}
+                      onOpenExternalUrl={openRouter.onOpenExternalUrl}
                     />
                     {openRouter.usingEnvKey && (
                       <Typography variant="caption" color="text.secondary">

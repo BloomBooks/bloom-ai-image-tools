@@ -9,13 +9,18 @@
  * Used by BloomHostedImageEditor; the browser/localStorage variant is used standalone.
  *
  * The split that makes this work:
- *   - state.json        UI-only state (selection, params, auth pointer). History is
- *                       blanked out here — the folder, not state.json, is the source
- *                       of truth for history.
+ *   - state.json        UI-only state (selection, params). History is blanked out here
+ *                       — the folder, not state.json, is the source of truth for history.
+ *                       The API key is NOT stored here: Bloom owns it (see below).
  *   - history/<id>.png  the image bytes (written only when freshly generated; URL-
  *                       backed images already live on disk).
  *   - history/<id>.json a per-image "sidecar" of the record minus its bytes.
- *   - connection.json   the API key / auth method (C3), kept out of state.json.
+ *
+ * THE API KEY IS NOT PERSISTED HERE. Bloom owns the OpenRouter key: it stores it
+ * per-user and supplies it back in the init payload (envApiKey) on each launch, and the
+ * editor hands any newly obtained key up via bridge.saveCredentials. The key must never
+ * land in the per-book folder, which travels with shared/uploaded books. (An older build
+ * wrote it to connection.json; that file is now scrubbed on load.)
  *
  * `load` rebuilds history from the host-enumerated folder list (`options.historyImages`),
  * recovering sidecar-less files with sane defaults. `save` diffs against last-written
@@ -27,12 +32,6 @@ import { ImageRecord, ImageToolsStatePersistence, PersistedImageToolsState } fro
 import { IMAGE_TOOLS_STATE_VERSION } from "./constants";
 import { prepareStateForPersistence, restoreStateFromPersistence } from "./stateTransforms";
 import { IBloomHostFiles, IBloomHostHistoryImage } from "../host/BloomHostBridge";
-
-interface ConnectionJson {
-  apiKey: string | null;
-  authMethod: "oauth" | "manual" | null;
-  openRouterUser?: string | null;
-}
 
 export interface BloomHostPersistenceOptions {
   /** History enumerated by the host from `.ai-image-editor/history/`. The folder
@@ -141,29 +140,15 @@ export const createBloomHostPersistence = (
       }
 
       const resolved = base ?? createEmptyUiState();
-      let result: PersistedImageToolsState = {
+      // Bloom owns the API key (persisted per-user by the host, supplied via envApiKey),
+      // so the editor never sources it from the per-book folder. Drop any apiKey a legacy
+      // state.json may still hold, and scrub any legacy connection.json on disk.
+      const result: PersistedImageToolsState = {
         ...resolved,
         appState: { ...resolved.appState, history },
+        auth: { apiKey: null, authMethod: resolved.auth?.authMethod ?? null },
       };
-
-      // C3: override auth from connection.json if present.
-      const connectionRaw = await bridge.getFile("connection.json");
-      if (connectionRaw) {
-        try {
-          const connection = JSON.parse(connectionRaw) as ConnectionJson;
-          if (connection.apiKey != null) {
-            result = {
-              ...result,
-              auth: {
-                apiKey: connection.apiKey,
-                authMethod: connection.authMethod ?? result.auth?.authMethod ?? null,
-              },
-            };
-          }
-        } catch (error) {
-          console.warn("Ignoring malformed connection.json", error);
-        }
-      }
+      await bridge.deleteFile("connection.json").catch(() => {});
 
       return result;
     } catch (error) {
@@ -192,9 +177,12 @@ export const createBloomHostPersistence = (
       });
 
       // state.json keeps only UI state; the folder is the source of truth for history.
+      // The API key is owned by the host (saved per-user) and must never be written into
+      // the per-book folder, which travels with shared/uploaded books — so null it here.
       const uiOnlyState: PersistedImageToolsState = {
         ...prepared,
         appState: { ...prepared.appState, history: [] },
+        auth: { apiKey: null, authMethod: prepared.auth?.authMethod ?? null },
       };
 
       const writeOps: Array<Promise<unknown>> = [
@@ -223,15 +211,6 @@ export const createBloomHostPersistence = (
           writeOps.push(bridge.deleteFile(historySidecarFile(id)));
         }
       });
-
-      // C3: persist API key to connection.json.
-      if (state.auth) {
-        const connection: ConnectionJson = {
-          apiKey: state.auth.apiKey,
-          authMethod: state.auth.authMethod,
-        };
-        writeOps.push(bridge.putFile("connection.json", JSON.stringify(connection)));
-      }
 
       await Promise.all(writeOps);
 

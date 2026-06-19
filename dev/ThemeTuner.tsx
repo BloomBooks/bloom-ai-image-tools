@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ButtonBase from "@mui/material/ButtonBase";
 import {
   defaultBrand,
   defaultThemeColors,
@@ -222,7 +223,7 @@ function ColorRow({
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
       {/* swatch (checkerboard behind so alpha reads correctly) */}
-      <button
+      <ButtonBase
         type="button"
         title="Open color picker"
         onClick={() => colorInputRef.current?.click()}
@@ -242,7 +243,7 @@ function ColorRow({
         }}
       >
         <span style={{ position: "absolute", inset: 0, borderRadius: 3, background: value }} />
-      </button>
+      </ButtonBase>
 
       <input
         ref={colorInputRef}
@@ -270,7 +271,7 @@ function ColorRow({
       />
 
       {eyeDropperSupported() && (
-        <button
+        <ButtonBase
           type="button"
           title="Eyedropper — pick a color from anywhere on screen"
           onClick={async () => {
@@ -280,10 +281,10 @@ function ColorRow({
           style={iconBtnStyle}
         >
           💧
-        </button>
+        </ButtonBase>
       )}
 
-      <button
+      <ButtonBase
         type="button"
         title={isOverridden ? "Reset to default" : "Unchanged"}
         disabled={!isOverridden}
@@ -291,7 +292,7 @@ function ColorRow({
         style={{ ...iconBtnStyle, opacity: isOverridden ? 1 : 0.3 }}
       >
         ↺
-      </button>
+      </ButtonBase>
     </div>
   );
 }
@@ -481,14 +482,14 @@ export default function ThemeTuner() {
         <strong style={{ flex: "1 1 auto", fontSize: 12, letterSpacing: 0.3 }}>
           🎨 Theme Tuner{overrideCount > 0 ? ` (${overrideCount})` : ""}
         </strong>
-        <button
+        <ButtonBase
           type="button"
           title={open ? "Collapse" : "Expand"}
           onClick={() => setOpen((o) => !o)}
           style={iconBtnStyle}
         >
           {open ? "–" : "+"}
-        </button>
+        </ButtonBase>
       </div>
 
       {open && (
@@ -517,7 +518,7 @@ export default function ThemeTuner() {
                 Brand color
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <button
+                <ButtonBase
                   type="button"
                   title="Open brand color picker"
                   onClick={() => brandInputRef.current?.click()}
@@ -549,7 +550,7 @@ export default function ThemeTuner() {
                   {brand}
                 </span>
                 {eyeDropperSupported() && (
-                  <button
+                  <ButtonBase
                     type="button"
                     title="Eyedropper — pick a brand color from anywhere on screen"
                     onClick={async () => {
@@ -559,12 +560,12 @@ export default function ThemeTuner() {
                     style={iconBtnStyle}
                   >
                     💧
-                  </button>
+                  </ButtonBase>
                 )}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                 {BRAND_PRESETS.map((preset) => (
-                  <button
+                  <ButtonBase
                     key={preset.name}
                     type="button"
                     onClick={() => handleBrandChange(preset.color)}
@@ -592,7 +593,7 @@ export default function ThemeTuner() {
                       }}
                     />
                     {preset.name}
-                  </button>
+                  </ButtonBase>
                 ))}
               </div>
               <div style={{ color: ui.textDim, fontSize: 10, marginTop: 6 }}>
@@ -679,17 +680,17 @@ export default function ThemeTuner() {
               borderTop: `1px solid ${ui.border}`,
             }}
           >
-            <button type="button" onClick={copyAsTs} style={footerBtnStyle}>
+            <ButtonBase type="button" onClick={copyAsTs} style={footerBtnStyle}>
               {copied ? "Copied!" : "Copy as TS"}
-            </button>
-            <button
+            </ButtonBase>
+            <ButtonBase
               type="button"
               onClick={resetAll}
               disabled={overrideCount === 0}
               style={{ ...footerBtnStyle, opacity: overrideCount === 0 ? 0.4 : 1 }}
             >
               Reset all
-            </button>
+            </ButtonBase>
           </div>
         </>
       )}

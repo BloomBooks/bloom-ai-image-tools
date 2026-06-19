@@ -851,7 +851,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
     const submitDisabledReason = needsTarget
-      ? "Add an image to edit -->"
+      ? "Add an image to edit"
       : needsReference
         ? "Add reference image"
         : requiresDescriptionOrReference
@@ -996,61 +996,86 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               })()}
 
               <Stack spacing={1.5}>
-                <Button
-                  // Always a plain button — never a native submit. If this were
-                  // type="submit", clicking it to cancel would flip isProcessing
-                  // to false, re-render this same element back to a submit
-                  // button mid-click, and the click's default action would then
-                  // submit the form — immediately starting a brand-new
-                  // generation. Instead we submit the form ourselves below.
-                  type="button"
-                  variant={isProcessing ? "outlined" : "contained"}
-                  color={isProcessing ? "inherit" : "primary"}
-                  fullWidth
-                  disabled={isProcessing ? false : isSubmitDisabled}
-                  title={isProcessing ? undefined : submitDisabledReason}
-                  onClick={(event) => {
-                    if (isProcessing) {
-                      onCancelProcessing();
-                      return;
-                    }
-                    event.currentTarget.closest("form")?.requestSubmit();
-                  }}
-                  sx={{
-                    minHeight: 44,
-                    fontWeight: 400,
-                    gap: 1,
-                    "&.Mui-disabled": {
-                      backgroundColor: theme.colors.surfaceRaised,
-                      color: theme.colors.textSecondary,
-                    },
-                  }}
-                >
-                  {isProcessing ? (
-                    <>
-                      <CircularProgress size={18} color="inherit" />
-                      Click to Cancel
-                    </>
-                  ) : (
-                    <>
-                      <span>
-                        {tool.actionButtonLabel ||
-                          (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
-                      </span>
-                      <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
-                    </>
-                  )}
-                </Button>
-                {submitDisabledReason && !isProcessing && (
+                {needsTarget && !isProcessing ? (
+                  // When there's no image to edit yet, replace the action
+                  // button entirely with the prompt (and a real arrow pointing
+                  // at the image panel) rather than showing a disabled button.
                   <FormHelperText
+                    component="div"
                     sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 0.75,
+                      m: 0,
+                      minHeight: 44,
                       textAlign: "center",
                       fontSize: "1rem",
                       color: muiTheme.palette.error.main,
                     }}
                   >
-                    {submitDisabledReason}
+                    <span>{submitDisabledReason}</span>
+                    <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                   </FormHelperText>
+                ) : (
+                  <>
+                    <Button
+                      // Always a plain button — never a native submit. If this were
+                      // type="submit", clicking it to cancel would flip isProcessing
+                      // to false, re-render this same element back to a submit
+                      // button mid-click, and the click's default action would then
+                      // submit the form — immediately starting a brand-new
+                      // generation. Instead we submit the form ourselves below.
+                      type="button"
+                      variant={isProcessing ? "outlined" : "contained"}
+                      color={isProcessing ? "inherit" : "primary"}
+                      fullWidth
+                      disabled={isProcessing ? false : isSubmitDisabled}
+                      title={isProcessing ? undefined : submitDisabledReason}
+                      onClick={(event) => {
+                        if (isProcessing) {
+                          onCancelProcessing();
+                          return;
+                        }
+                        event.currentTarget.closest("form")?.requestSubmit();
+                      }}
+                      sx={{
+                        minHeight: 44,
+                        fontWeight: 400,
+                        gap: 1,
+                        "&.Mui-disabled": {
+                          backgroundColor: theme.colors.surfaceRaised,
+                          color: theme.colors.textSecondary,
+                        },
+                      }}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <CircularProgress size={18} color="inherit" />
+                          Click to Cancel
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            {tool.actionButtonLabel ||
+                              (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
+                          </span>
+                          <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
+                        </>
+                      )}
+                    </Button>
+                    {submitDisabledReason && !isProcessing && (
+                      <FormHelperText
+                        sx={{
+                          textAlign: "center",
+                          fontSize: "1rem",
+                          color: muiTheme.palette.error.main,
+                        }}
+                      >
+                        {submitDisabledReason}
+                      </FormHelperText>
+                    )}
+                  </>
                 )}
               </Stack>
             </Stack>

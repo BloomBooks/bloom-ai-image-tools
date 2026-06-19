@@ -55,6 +55,7 @@ import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { ImagePreviewDialog, ImagePreviewDialogItem } from "./ImagePreviewDialog";
+import { TextFieldContextMenu } from "./TextFieldContextMenu";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
 import imagePlaceholder from "../assets/image_placeholder.svg";
@@ -421,11 +422,17 @@ const buildRecoveredHistoryEntry = (entry: {
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
+  /** Demo context (e.g. a Bloom Playground/template book): the user may use an
+   *  already-supplied key but must not set, change, or clear OpenRouter credentials. */
+  demoOnly?: boolean;
   bookImageUrls?: string[];
   bookImages?: Array<{ id: string; src: string; isPlaceholder?: boolean }>;
   /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
   selectedBookImageId?: string;
   bookImagesStripMode?: "host" | "editable";
+  /** When true, the host (Bloom) supplies the history/persistence mechanism, so the
+   *  editor's own "History storage" (link-a-folder) UI is hidden from settings. */
+  hostManagesHistory?: boolean;
   oauthHost?: {
     httpBase: string;
     sessionToken: string;
@@ -455,10 +462,12 @@ export interface ImageToolsWorkspaceProps {
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
+  demoOnly = false,
   bookImageUrls = [],
   bookImages = [],
   selectedBookImageId,
   bookImagesStripMode = "host",
+  hostManagesHistory = false,
   oauthHost = null,
   onReplacementsChange,
   onCredentialsChange,
@@ -633,8 +642,14 @@ export function ImageToolsWorkspace({
   const historyStatusLabel = isFolderPersistenceActive
     ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
     : "History stored in browser only";
-  const settingsButtonTitle = `${openRouterStatusLabel}. ${historyStatusLabel}.`;
-  const settingsButtonLabel = `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
+  // When the host (Bloom) manages history, the editor's folder-linking status is
+  // meaningless, so it's left out of the settings button's tooltip/label.
+  const settingsButtonTitle = hostManagesHistory
+    ? `${openRouterStatusLabel}.`
+    : `${openRouterStatusLabel}. ${historyStatusLabel}.`;
+  const settingsButtonLabel = hostManagesHistory
+    ? `Settings • ${openRouterStatusLabel}`
+    : `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
 
   const persistHistoryImage = useCallback(
     async (
@@ -3000,6 +3015,8 @@ export function ImageToolsWorkspace({
   );
 
   const handleConnect = async () => {
+    // Demo context (e.g. Bloom Playground book): credentials must not be changed.
+    if (demoOnly) return;
     try {
       setAuthLoading(true);
       setState((prev) => ({ ...prev, error: null }));
@@ -3058,6 +3075,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleDisconnect = () => {
+    if (demoOnly) return;
     setApiKey(null);
     setAuthMethod(null);
     // Clear the host's stored credentials too (sign-out).
@@ -3066,6 +3084,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleProvideKey = (key: string) => {
+    if (demoOnly) return;
     const trimmed = key.trim();
     if (!trimmed) {
       setApiKey(null);
@@ -3629,8 +3648,6 @@ export function ImageToolsWorkspace({
     !creditsError &&
     credits.limit === null
   );
-  const prototypeNoticeColor = theme.colors.accent;
-
   const hasUnresolvedFolderBackedHistory = useMemo(
     () => state.history.some((item) => !item.imageData && !!item.imageFileName),
     [state.history],
@@ -3677,24 +3694,6 @@ export function ImageToolsWorkspace({
             <Typography variant="h6" component="h1" fontWeight={700}>
               Bloom AI Image Tools
             </Typography>
-            <Stack
-              direction="row"
-              spacing={0.75}
-              alignItems="center"
-              sx={{ color: prototypeNoticeColor, minWidth: 0 }}
-            >
-              <Icon path={Icons.Info} width={16} height={16} />
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "inherit",
-                  fontWeight: 400,
-                  lineHeight: 1.4,
-                }}
-              >
-                This is prototype. It is useful, but it has rough edges!
-              </Typography>
-            </Stack>
             {showReconnectHistoryFolderButton && (
               <Button
                 type="button"
@@ -3765,9 +3764,6 @@ export function ImageToolsWorkspace({
                 aria-label={settingsButtonLabel}
                 sx={{
                   position: "relative",
-                  border: `1px solid ${theme.colors.border}`,
-                  bgcolor: theme.colors.surfaceAlt,
-                  boxShadow: theme.colors.panelShadow,
                   color: theme.colors.textPrimary,
                   transition: "opacity 150ms ease",
                   "&:hover": { opacity: 0.85 },
@@ -3939,22 +3935,31 @@ export function ImageToolsWorkspace({
             onDisconnect: handleDisconnect,
             onProvideKey: handleProvideKey,
             onOpenExternalUrl: openExternalLink,
+            demoOnly,
           }}
-          history={{
-            isSupported: fsSupported,
-            isLoading: fsLoading,
-            isFolderPersistenceActive,
-            directoryName: fsBinding?.directoryName ?? null,
-            error: fsError,
-            onEnableFolder: () => {
-              void handleEnableFolderStorage();
-            },
-            onDisableFolder: () => {
-              void handleDisableFolderStorage();
-            },
-          }}
+          history={
+            // When hosted in Bloom, the host supplies the history mechanism (the
+            // per-book .ai-image-editor/ folder), so the editor's own folder-linking
+            // UI is irrelevant and hidden.
+            hostManagesHistory
+              ? undefined
+              : {
+                  isSupported: fsSupported,
+                  isLoading: fsLoading,
+                  isFolderPersistenceActive,
+                  directoryName: fsBinding?.directoryName ?? null,
+                  error: fsError,
+                  onEnableFolder: () => {
+                    void handleEnableFolderStorage();
+                  },
+                  onDisableFolder: () => {
+                    void handleDisableFolderStorage();
+                  },
+                }
+          }
         />
       </Box>
+      <TextFieldContextMenu />
     </ThemeProvider>
   );
 }

@@ -12,7 +12,10 @@ export interface ThumbnailStripConfig {
   hidden?: boolean;
 }
 
-export const STRIP_DESCRIPTIONS: Record<
+// A short tip describing what each strip is for. Rendered in a single, consistent
+// location (the lower-right corner of the strip) by ThumbnailStrip, which supplies
+// the 💡 marker — so the text here must not include its own emoji prefix.
+export const STRIP_TIPS: Record<
   ThumbnailStripId,
   string | ((config: ThumbnailStripConfig) => string)
 > = {
@@ -20,7 +23,7 @@ export const STRIP_DESCRIPTIONS: Record<
   characters: "Use this area to keep your cast of characters.",
   starred: "Star images to keep them handy.",
   reference:
-    "Use this area to keep reference images that you use in more that one book. E.g. how people dress, what trees look like.",
+    "Use this area to keep reference images that you use in more than one book. E.g. how people dress, what trees look like.",
   bookImages: "Book images supplied by the current book.",
 };
 

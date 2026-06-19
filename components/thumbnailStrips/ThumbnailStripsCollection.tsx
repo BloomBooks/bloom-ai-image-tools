@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   getOtherStripsContainingItem,
-  STRIP_DESCRIPTIONS,
+  STRIP_TIPS,
   THUMBNAIL_STRIP_ORDER,
   ThumbnailStripConfig,
   THUMBNAIL_STRIP_CONFIGS,
@@ -131,8 +131,8 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   const renderStrip = (stripId: ThumbnailStripId, activeOverride?: boolean) => {
     const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
-    const description = STRIP_DESCRIPTIONS[stripId];
-    const emptyStateMessage = typeof description === "function" ? description(config) : description;
+    const tipSource = STRIP_TIPS[stripId];
+    const tip = typeof tipSource === "function" ? tipSource(config) : tipSource;
 
     return (
       <ThumbnailStrip
@@ -155,7 +155,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         isActive={activeOverride ?? snapshot.activeStripId === stripId}
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
         onRequestHistoryAccess={stripId === "history" ? onRequestHistoryAccess : undefined}
-        emptyStateMessage={emptyStateMessage}
+        tip={tip}
         onOpenPreview={onOpenPreview}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
@@ -180,6 +180,12 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   const stripColumnStyles: React.CSSProperties = {
     flex: 1,
     minWidth: 0,
+    // Lay the column out as a flex column so the active panel can grow to fill
+    // the row's height. The row stretches to the tab rail (which is naturally
+    // as tall as all its tabs combined), and the panel follows — no height math.
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
   };
 
   return (
@@ -210,16 +216,21 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
       {activeUnpinnedStripId && (
         <div style={rowShellStyles}>
           <div style={stripColumnStyles}>
-            {unpinnedStripIds.map((stripId) => (
-              <div
-                key={`unpinned-${stripId}`}
-                style={{
-                  display: stripId === activeUnpinnedStripId ? "block" : "none",
-                }}
-              >
-                {renderStrip(stripId, stripId === activeUnpinnedStripId)}
-              </div>
-            ))}
+            {unpinnedStripIds.map((stripId) => {
+              const isActive = stripId === activeUnpinnedStripId;
+              return (
+                <div
+                  key={`unpinned-${stripId}`}
+                  style={
+                    isActive
+                      ? { display: "flex", flexDirection: "column", flex: 1 }
+                      : { display: "none" }
+                  }
+                >
+                  {renderStrip(stripId, isActive)}
+                </div>
+              );
+            })}
           </div>
           <ThumbnailStripTabs
             snapshot={snapshot}

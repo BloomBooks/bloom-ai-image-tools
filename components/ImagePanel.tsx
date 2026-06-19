@@ -8,9 +8,16 @@ import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 
-const editImagePulse = keyframes`
-  0%, 100% { background-color: transparent; }
-  50% { background-color: color-mix(in srgb, ${theme.colors.focus} 10%, transparent); }
+// "Marching ants": four dashed edges built from repeating gradients whose
+// background-position scrolls, so the dashes appear to march around the slot.
+const marchingAnts = keyframes`
+  to {
+    background-position:
+      var(--ants) 0,
+      calc(-1 * var(--ants)) 100%,
+      0 calc(-1 * var(--ants)),
+      100% var(--ants);
+  }
 `;
 
 export type ImagePanelSlot = {
@@ -263,7 +270,16 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
             cursor: showUploadControls ? "pointer" : "default",
             borderRadius: "24px",
             ...(needsImage && {
-              animation: `${editImagePulse} 2.8s ease-in-out infinite`,
+              "--ants": "16px",
+              backgroundImage: `
+                repeating-linear-gradient(90deg, ${theme.colors.focus} 0 8px, transparent 8px 16px),
+                repeating-linear-gradient(90deg, ${theme.colors.focus} 0 8px, transparent 8px 16px),
+                repeating-linear-gradient(0deg, ${theme.colors.focus} 0 8px, transparent 8px 16px),
+                repeating-linear-gradient(0deg, ${theme.colors.focus} 0 8px, transparent 8px 16px)`,
+              backgroundRepeat: "repeat-x, repeat-x, repeat-y, repeat-y",
+              backgroundSize: "16px 2px, 16px 2px, 2px 16px, 2px 16px",
+              backgroundPosition: "0 0, 0 100%, 0 0, 100% 0",
+              animation: `${marchingAnts} 0.6s linear infinite`,
             }),
           }}
         >

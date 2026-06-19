@@ -1,5 +1,5 @@
 import React from "react";
-import { IconButton, Tooltip } from "@mui/material";
+import { Button, IconButton, Tooltip } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { ImageRecord } from "../types";
 import { TOOLS } from "./tools/tools-registry";
@@ -257,23 +257,22 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           <span style={{ display: "block" }}>Full Prompt:</span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             {isPromptLong && (
-              <button
-                type="button"
+              <Button
+                variant="text"
                 onClick={() => setPromptExpanded((prev) => !prev)}
                 data-testid="toggle-full-prompt"
                 aria-expanded={promptExpanded}
-                style={{
-                  background: "none",
-                  border: "none",
+                sx={{
+                  minWidth: 0,
                   padding: 0,
-                  cursor: "pointer",
                   color: theme.colors.textSecondary,
                   fontSize: "11px",
+                  fontWeight: 400,
                   textDecoration: "underline",
                 }}
               >
                 {promptExpanded ? "Show less" : "Show more"}
-              </button>
+              </Button>
             )}
             <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
               <IconButton

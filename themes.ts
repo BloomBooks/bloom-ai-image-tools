@@ -13,8 +13,8 @@ export const defaultThemeColors = {
   surface: "#0f172a",
   surfaceAlt: "#111827",
   surfaceRaised: "#1e293b",
-  border: "#52463f",
-  borderMuted: "#3f352f",
+  border: "#415e62",
+  borderMuted: "#30484b",
   panelBorder: "rgba(29, 148, 164, 0.34)",
   textPrimary: "#e2e8f0",
   textSecondary: "#bdd8db",
@@ -38,7 +38,7 @@ export const defaultThemeColors = {
   panelShadow: "0 20px 45px rgba(0, 0, 0, 0.45)",
   insetShadow: "0 10px 20px rgba(0, 0, 0, 0.35)",
   scrollbarTrack: "#1f2937",
-  scrollbarThumb: "#ad9a81",
+  scrollbarThumb: "#74a1aa",
   scrollbarThumbHover: "#ffffff",
 };
 
@@ -175,7 +175,11 @@ export function readableTextOn(hex: string): string {
 /**
  * Derive the accent-family theme colors (and brand-tinted text) from a single
  * brand color. Returns a partial map keyed by ThemeColorKey. textPrimary,
- * backgrounds, borders, and status colors are intentionally left untouched.
+ * backgrounds, and status colors are intentionally left untouched.
+ *
+ * Borders and the scrollbar thumb share the brand hue (heavily desaturated and
+ * darkened) so they read as quiet variations of the brand rather than a leftover
+ * warm/neutral tone.
  */
 export function deriveBrandColors(brand: string): Partial<Record<ThemeColorKey, string>> {
   const { h, s, l } = hexToHsl(brand);
@@ -194,5 +198,9 @@ export function deriveBrandColors(brand: string): Partial<Record<ThemeColorKey, 
     dropZone: hexWithAlpha(brand, 0.18),
     dropZoneBorder: brand,
     accentShadow: `0 10px 25px ${hexWithAlpha(accentHover, 0.28)}`,
+    // Quiet borders + scrollbar thumb, tinted toward the brand hue.
+    border: hslToHex(h, 20, 32),
+    borderMuted: hslToHex(h, 22, 24),
+    scrollbarThumb: hslToHex(h, 24, 56),
   };
 }

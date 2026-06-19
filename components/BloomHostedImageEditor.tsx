@@ -266,15 +266,13 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       >
         <Button
           data-testid="bloom-host-cancel"
-          variant="outlined"
+          variant="contained"
           onClick={handleCancel}
           sx={{
-            backgroundColor: "rgba(15, 23, 42, 0.76)",
+            backgroundColor: theme.colors.accent,
             color: "#fff",
-            borderColor: "rgba(255, 255, 255, 0.25)",
             "&:hover": {
-              backgroundColor: "rgba(15, 23, 42, 0.9)",
-              borderColor: "rgba(255, 255, 255, 0.4)",
+              backgroundColor: theme.colors.accentHover,
             },
           }}
         >
@@ -284,10 +282,12 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       <ImageToolsWorkspace
         persistence={persistence}
         envApiKey={initPayload.apiKey || ""}
+        demoOnly={initPayload.demoOnly ?? false}
         onCredentialsChange={(creds) => bridge.saveCredentials(creds)}
         bookImages={hostBookImages}
         bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"
+        hostManagesHistory
         selectedBookImageId={initPayload.selectedBookImageId}
         oauthHost={{
           httpBase: initPayload.httpBase,

@@ -84,6 +84,9 @@ export interface IBloomHostInitPayload {
   references: IBloomHostReferenceImage[];
   apiKey?: string | null;
   openRouterUser?: string | null;
+  /** When true (a Bloom Playground/template book), the editor opens in a shared
+   *  "demo" context and must disable its OpenRouter credential-setting UI. */
+  demoOnly?: boolean;
   /** Root of Bloom's local AI-image-editor HTTP API, e.g.
    *  `http://localhost:8089/bloom/api/aiImageEditor`. The port is whatever Bloom's
    *  server actually bound (8089 is only its default), so this is always supplied by

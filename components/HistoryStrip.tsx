@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { ButtonBase, IconButton } from "@mui/material";
 import { HistoryItem } from "../types";
 import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
@@ -69,20 +70,22 @@ const HistoryCard: React.FC<{
           </div>
 
           {/* Remove Button - inside thumbnail bounds to avoid clipping */}
-          <button
+          <IconButton
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
             }}
-            className="absolute top-1 right-1 backdrop-blur-sm p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
-            style={{
+            className="absolute top-1 right-1 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            sx={{
+              padding: "4px",
+              borderRadius: "4px",
               backgroundColor: theme.colors.overlay,
               color: theme.colors.textPrimary,
             }}
             title="Remove from history"
           >
             <Icon path={Icons.X} className="w-3 h-3" />
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -137,19 +140,19 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
       }}
     >
       <div className="px-4 py-1 flex items-center justify-end relative z-0">
-        <button
-          type="button"
-          className="p-1 rounded-full border text-xs hover:opacity-80 transition-opacity"
-          style={{
+        <IconButton
+          className="hover:opacity-80 transition-opacity"
+          sx={{
+            padding: "4px",
+            border: `1px solid ${theme.colors.border}`,
             color: theme.colors.textMuted,
-            borderColor: theme.colors.border,
             backgroundColor: "transparent",
           }}
           title="You can drag these items to the above panels."
           aria-label="History strip drag instructions"
         >
           <Icon path={Icons.Info} className="w-4 h-4" />
-        </button>
+        </IconButton>
       </div>
       <div className="flex-1 overflow-x-auto overflow-y-clip flex items-center py-2 px-4 gap-3 custom-scrollbar relative">
         {newestFirst.map((item) => (
@@ -163,11 +166,10 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
           />
         ))}
         {hasHiddenHistory && onRequestHistoryAccess && (
-          <button
-            type="button"
+          <ButtonBase
             onClick={onRequestHistoryAccess}
             className="flex flex-col justify-between items-start flex-shrink-0 w-44 h-36 border-2 border-dashed rounded-xl p-4 text-left hover:opacity-90 transition-opacity"
-            style={{
+            sx={{
               borderColor: theme.colors.border,
               backgroundColor: theme.colors.surfaceAlt,
               color: theme.colors.textPrimary,
@@ -185,7 +187,7 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
               <Icon path={Icons.Refresh} className="w-3.5 h-3.5" />
               Reconnect folder
             </span>
-          </button>
+          </ButtonBase>
         )}
       </div>
     </div>

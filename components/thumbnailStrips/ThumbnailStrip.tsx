@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Tooltip } from "@mui/material";
+import { Button, ButtonBase, IconButton, Tooltip } from "@mui/material";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
@@ -30,7 +30,10 @@ interface ThumbnailStripProps {
   allowReorder: boolean;
   pinned: boolean;
   isActive?: boolean;
-  emptyStateMessage?: string;
+  // Short tip describing what the strip is for. Rendered in the lower-right
+  // corner (the single, consistent home for every strip's tip) while the strip
+  // has no items of its own.
+  tip?: string;
   onOpenPreview?: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
@@ -223,14 +226,16 @@ const BookImageStripLabels: React.FC = () => (
       zIndex: 1,
       width: BOOK_IMAGE_LABEL_COLUMN_WIDTH,
       flexShrink: 0,
-      marginRight: 12,
       display: "grid",
       gridTemplateRows: "1fr 1fr",
       gap: 8,
       alignSelf: "stretch",
       paddingTop: 10,
       paddingBottom: 10,
-      background: `linear-gradient(90deg, ${theme.colors.surface} 0%, ${theme.colors.surface} 85%, transparent 100%)`,
+      // Solid (not a fade-to-transparent gradient): pairs scroll left and pass
+      // *behind* this sticky column, so it must fully mask them — a translucent
+      // edge would let thumbnails bleed through to the left of the labels.
+      background: theme.colors.surface,
     }}
   >
     {(["Current", "Replacement"] as const).map((label) => (
@@ -944,6 +949,10 @@ const CharacterStackThumb: React.FC<{
   );
 
   return (
+    // Intentionally a native <button>, not MUI ButtonBase: this is a dnd-kit drag
+    // handle (setNodeRef + spread listeners/attributes). ButtonBase's built-in
+    // ripple and Space/Enter keyboard handlers conflict with dnd-kit's pointer and
+    // keyboard sensors, and MUI styling adds nothing to a grab-cursor thumbnail.
     <button
       ref={draggable.setNodeRef}
       type="button"
@@ -1087,7 +1096,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   allowReorder,
   pinned,
   isActive = false,
-  emptyStateMessage,
+  tip,
   onOpenPreview,
   onSelect,
   onToggleStar,
@@ -1102,7 +1111,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
 }) => {
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
   const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
-  const [isBookImagesActionPressed, setIsBookImagesActionPressed] = React.useState(false);
   const droppable = useDroppable({
     id: buildStripContainerId(stripId),
     data: { kind: "strip", stripId },
@@ -1266,7 +1274,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         ref={setStripContentNodeRef}
         style={{
           display: "flex",
-          alignItems: stripId === "bookImages" ? "stretch" : "center",
+          // Top-align thumbnails so the images line up regardless of whether an
+          // item carries a caption beneath it (captions grow downward).
+          alignItems: stripId === "bookImages" ? "stretch" : "flex-start",
           padding: "8px 16px",
           gap: STRIP_ITEM_GAP,
           overflowX: "auto",
@@ -1275,10 +1285,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         }}
       >
         {hasHiddenHistory && onRequestHistoryAccess && (
-          <button
-            type="button"
+          <ButtonBase
             onClick={onRequestHistoryAccess}
-            style={{
+            sx={{
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -1286,9 +1295,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               flexShrink: 0,
               width: 176,
               height: 144,
-              borderRadius: 16,
+              borderRadius: 4,
               border: `2px dashed ${theme.colors.border}`,
-              padding: 16,
+              padding: 2,
               textAlign: "left",
               backgroundColor: theme.colors.surfaceAlt,
               color: theme.colors.textPrimary,
@@ -1304,7 +1313,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               <Icon path={Icons.Refresh} width={14} height={14} />
               Reconnect folder
             </span>
-          </button>
+          </ButtonBase>
         )}
         {showCharacterStack && (
           <CharacterStackThumb
@@ -1389,40 +1398,31 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
             />
           ))
         )}
-
-        {!orderedItems.length && emptyStateMessage && !showCharacterPlaceholder && (
-          <div
-            style={{
-              width: "100%",
-              padding: "24px 16px",
-              textAlign: "left",
-              color: theme.colors.textMuted,
-            }}
-          >
-            {emptyStateMessage}
-          </div>
-        )}
       </div>
     ) : (
+      // Empty strip: just a drop target. The strip's tip (what this area is for)
+      // is rendered in the lower-right corner of the shell below, the single
+      // consistent home for every strip's tip.
       <div
         ref={droppable.setNodeRef}
         style={{
           display: "flex",
           alignItems: "center",
+          minHeight: 96,
           padding: "24px 16px",
-          color: theme.colors.textMuted,
-          fontSize: "0.9rem",
-          gap: 12,
         }}
-      >
-        <span>{emptyStateMessage || "No items yet"}</span>
-      </div>
+      />
     );
 
   return (
     <div
       style={{
         ...stripShellStyles,
+        // Grow to fill the row height set by the tab rail (which is naturally as
+        // tall as all its tabs combined), with minHeight as the floor when there
+        // are only a few tabs. Lets the border reach the bottom tab without math.
+        flexGrow: 1,
+        flexShrink: 1,
         minHeight: 168,
         boxShadow: pinned ? theme.colors.panelShadow : "none",
         borderColor: isActive ? STRIP_ACTIVE_BORDER_COLOR : STRIP_BORDER_COLOR,
@@ -1444,8 +1444,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
             display: "inline-flex",
           }}
         >
-          <button
-            type="button"
+          <IconButton
             data-testid={`thumbnail-strip-expand-${stripId}`}
             aria-label={`Expand ${stripId} strip preview`}
             disabled={!canOpenPreview}
@@ -1456,23 +1455,22 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
 
               onOpenPreview(stripId, orderedItemIds);
             }}
-            style={{
+            sx={{
               width: 32,
               height: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
               padding: 0,
-              border: 0,
               borderRadius: 999,
               backgroundColor: theme.colors.overlayStrong,
               color: theme.colors.textPrimary,
-              cursor: canOpenPreview ? "pointer" : "default",
               opacity: canOpenPreview ? 1 : 0.45,
+              "&.Mui-disabled": {
+                color: theme.colors.textPrimary,
+                opacity: 0.45,
+              },
             }}
           >
             <Icon path={Icons.Expand} width={16} height={16} />
-          </button>
+          </IconButton>
         </span>
       </Tooltip>
       <div
@@ -1497,38 +1495,62 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
             justifyContent: "flex-end",
           }}
         >
-          <button
-            type="button"
+          <Button
+            variant="text"
             data-testid={bookImagesAction.testId}
             disabled={bookImagesAction.disabled}
             onClick={bookImagesAction.onClick}
-            onMouseDown={() => {
-              if (!bookImagesAction.disabled) {
-                setIsBookImagesActionPressed(true);
-              }
-            }}
-            onMouseUp={() => setIsBookImagesActionPressed(false)}
-            onMouseLeave={() => setIsBookImagesActionPressed(false)}
-            style={{
-              border: 0,
-              borderRadius: 999,
-              padding: "10px 16px",
-              backgroundColor: bookImagesAction.disabled
-                ? "rgba(148, 163, 184, 0.35)"
-                : theme.colors.accent,
-              color: bookImagesAction.disabled ? theme.colors.textMuted : theme.colors.textOnAccent,
+            sx={{
+              minWidth: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: 0,
+              boxShadow: "none",
+              color: theme.colors.textPrimary,
               fontSize: 13,
-              fontWeight: 600,
-              lineHeight: 1.2,
-              boxShadow: theme.colors.panelShadow,
-              cursor: bookImagesAction.disabled ? "not-allowed" : "pointer",
-              transform: isBookImagesActionPressed ? "translateY(1px) scale(0.99)" : "none",
-              transition:
-                "transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, color 120ms ease",
+              fontWeight: 500,
+              lineHeight: 1.4,
+              textTransform: "none",
+              opacity: bookImagesAction.disabled ? 0.6 : 1,
+              "&.Mui-disabled": { color: theme.colors.textMuted },
             }}
           >
+            <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
+              💡
+            </span>
             {bookImagesAction.label}
-          </button>
+          </Button>
+        </div>
+      ) : null}
+      {tip && orderedItems.length === 0 && !(stripId === "bookImages" && bookImagesAction) ? (
+        <div
+          data-testid={`thumbnail-strip-tip-${stripId}`}
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 12,
+            zIndex: 3,
+            // Anchored only by `right`, so the block shrinks to fit: short tips
+            // stay tucked in the corner, while long ones expand leftward and use
+            // the full strip width before wrapping (capped to clear the padding).
+            maxWidth: "calc(100% - 24px)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6,
+            textAlign: "left",
+            color: theme.colors.textMuted,
+            fontSize: 12,
+            lineHeight: 1.4,
+            // The empty strip beneath is a drop target; let pointer events fall
+            // through so the tip never blocks a drop.
+            pointerEvents: "none",
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.2 }}>
+            💡
+          </span>
+          <span style={{ minWidth: 0 }}>{tip}</span>
         </div>
       ) : null}
     </div>

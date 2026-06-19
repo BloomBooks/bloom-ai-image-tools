@@ -1,4 +1,5 @@
 import React from "react";
+import ButtonBase from "@mui/material/ButtonBase";
 import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord, ImageSlotActionKey } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
@@ -10,7 +11,7 @@ import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";
 import { ImageSlotRolePill } from "./ImageSlotRolePill";
 import { ImageSlotDropOverlay } from "./ImageSlotDropOverlay";
 import { ImageSlotLoadingOverlay } from "./ImageSlotLoadingOverlay";
-import { ImageSlotArtStyleContextMenu } from "./ImageSlotArtStyleContextMenu";
+import { ImageSlotContextMenu } from "./ImageSlotContextMenu";
 import { ImageSlotThumbnailStatusBadge, ThumbnailStatus } from "./ImageSlotThumbnailStatusBadge";
 import { ImageSlotInfoDialog } from "./ImageSlotInfoDialog";
 import { processImageForThumbnail, saveArtStyleThumbnail } from "../lib/imageProcessing";
@@ -576,12 +577,18 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const imageArtStyleId = getArtStyleIdForImage(image);
   const hasValidArtStyle = !!imageArtStyleId;
 
+  const canContextCopy = !!image && mergedControls.copy;
+  const canContextPaste = !!onUpload && mergedControls.paste;
+
   const handleContextMenu = (event: React.MouseEvent) => {
-    // Only show context menu if we have an image with an art style in its metadata
-    if (!image || !hasValidArtStyle) return;
+    if (disabled) return;
+    // Show the menu whenever there's at least one applicable action.
+    if (!canContextCopy && !canContextPaste && !hasValidArtStyle) return;
     event.preventDefault();
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
+
+  const handleCloseContextMenu = () => setContextMenu(null);
 
   const handleSetThumbnail = async () => {
     if (!image || !hasValidArtStyle || !imageArtStyleId) return;
@@ -601,37 +608,28 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     }
   };
 
-  // Close context menu when clicking outside
-  React.useEffect(() => {
-    if (!contextMenu) return;
-    const handleClick = () => setContextMenu(null);
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [contextMenu]);
-
   const variantStyles = VARIANT_LAYOUT_STYLES[variant];
 
   // Panel slots stay transparent until hovered or dragged for a lighter touch.
   const baseBackgroundColor = variant === "panel" ? "transparent" : theme.colors.surface;
   const hoverBackgroundColor = variant === "panel" ? theme.colors.surfaceAlt : baseBackgroundColor;
 
+  const canUploadFromEmptyState = !!(mergedControls.upload && onUpload && !disabled);
   const defaultEmptyState = (
-    <button
-      type="button"
-      style={{
+    <ButtonBase
+      disableRipple={!canUploadFromEmptyState}
+      onClick={canUploadFromEmptyState ? openFilePicker : undefined}
+      sx={{
         width: "100%",
         height: "100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 8,
+        gap: 1,
         color: theme.colors.textMuted,
-        background: "none",
-        border: "none",
-        cursor: mergedControls.upload && onUpload && !disabled ? "pointer" : "default",
+        cursor: canUploadFromEmptyState ? "pointer" : "default",
       }}
-      onClick={mergedControls.upload && onUpload && !disabled ? openFilePicker : undefined}
     >
       <img
         src={imagePlaceholder}
@@ -639,7 +637,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         style={{ width: 48, height: 48, opacity: 0.3 }}
       />
       {/* Drop/upload helper text intentionally omitted for cleaner UI */}
-    </button>
+    </ButtonBase>
   );
 
   const emptyStateContent = renderEmptyState
@@ -946,8 +944,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           onChange={handleInputChange}
         />
 
-        <ImageSlotArtStyleContextMenu
+        <ImageSlotContextMenu
           contextMenu={contextMenu}
+          onClose={handleCloseContextMenu}
+          canCopy={canContextCopy}
+          canPaste={canContextPaste}
+          onCopy={handleCopy}
+          onPaste={handlePaste}
+          canSetThumbnail={hasValidArtStyle}
           onSetThumbnail={handleSetThumbnail}
         />
 

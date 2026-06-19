@@ -29,6 +29,10 @@ interface OpenRouterConnectProps {
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
   onOpenExternalUrl: (url: string) => void;
+  /** When true (e.g. a Bloom Playground/template book), the editor is opened in a
+   *  shared "demo" context: the user may use any already-supplied key but must not
+   *  set, change, or clear OpenRouter credentials, so those controls are disabled. */
+  demoOnly?: boolean;
 }
 
 export function OpenRouterConnect({
@@ -41,6 +45,7 @@ export function OpenRouterConnect({
   onDisconnect,
   onProvideKey,
   onOpenExternalUrl,
+  demoOnly = false,
 }: OpenRouterConnectProps) {
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
@@ -72,6 +77,7 @@ export function OpenRouterConnect({
   };
 
   const handlePaste = async () => {
+    if (demoOnly) return;
     try {
       const text = await navigator.clipboard.readText();
       const trimmed = text.trim();
@@ -111,7 +117,7 @@ export function OpenRouterConnect({
   };
 
   const handleKeyBlur = () => {
-    if (usingEnvKey || connectionMode === "oauth") {
+    if (usingEnvKey || connectionMode === "oauth" || demoOnly) {
       return;
     }
     const trimmed = keyValue.trim();
@@ -230,6 +236,12 @@ export function OpenRouterConnect({
         API key.
       </Typography>
 
+      {demoOnly && (
+        <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
+          This is a demo book, so the OpenRouter connection can't be changed here.
+        </Typography>
+      )}
+
       {renderOptionCard(
         "oauth",
         {
@@ -241,7 +253,7 @@ export function OpenRouterConnect({
           type="button"
           data-testid={oauthButtonTestId}
           onClick={oauthButtonAction}
-          disabled={isLoading}
+          disabled={isLoading || demoOnly}
           variant="contained"
           sx={{
             borderRadius: 2,
@@ -293,7 +305,7 @@ export function OpenRouterConnect({
             }}
             onBlur={handleKeyBlur}
             placeholder="Paste OpenRouter key"
-            disabled={usingEnvKey || connectionMode === "oauth"}
+            disabled={usingEnvKey || connectionMode === "oauth" || demoOnly}
             size="small"
             fullWidth
             sx={{
@@ -301,22 +313,25 @@ export function OpenRouterConnect({
               bgcolor: theme.colors.surface,
             }}
             InputProps={{
-              endAdornment: !usingEnvKey && connectionMode !== "oauth" && !keyValue && (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={handlePaste}
-                    aria-label="Paste API key"
-                    edge="end"
-                    sx={{
-                      color: theme.colors.textSecondary,
-                      "&:hover": { color: theme.colors.textPrimary },
-                    }}
-                  >
-                    <ContentPasteIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
+              endAdornment: !usingEnvKey &&
+                connectionMode !== "oauth" &&
+                !keyValue &&
+                !demoOnly && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={handlePaste}
+                      aria-label="Paste API key"
+                      edge="end"
+                      sx={{
+                        color: theme.colors.textSecondary,
+                        "&:hover": { color: theme.colors.textPrimary },
+                      }}
+                    >
+                      <ContentPasteIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
             }}
           />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -348,10 +363,10 @@ export function OpenRouterConnect({
                 type="button"
                 data-testid="openrouter-clear-key"
                 onClick={handleDisconnect}
-                disabled={connectionMode === "oauth"}
+                disabled={connectionMode === "oauth" || demoOnly}
                 variant="outlined"
                 size="small"
-                sx={{ opacity: connectionMode === "oauth" ? 0.5 : 1 }}
+                sx={{ opacity: connectionMode === "oauth" || demoOnly ? 0.5 : 1 }}
               >
                 Forget Key
               </Button>

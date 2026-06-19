@@ -31,7 +31,7 @@ import {
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
-import { darkTheme } from "./materialUITheme";
+import { useBrandedDarkTheme } from "./materialUITheme";
 import {
   buildOAuthAuthUrl,
   exchangeCodeForApiKey,
@@ -470,6 +470,10 @@ export function ImageToolsWorkspace({
   bookImagesActionTestId,
   thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
+  // Rebuilds the MUI theme from the current brand override (set by the dev Theme
+  // Tuner) so primary-colored UI and brand-tinted text re-skin from one color.
+  const muiTheme = useBrandedDarkTheme();
+
   const [state, setState] = useState<AppState>({
     targetImageId: null,
     referenceImageIds: [],
@@ -3635,7 +3639,7 @@ export function ImageToolsWorkspace({
     fsSupported && !fsBinding && (!!pendingFsReconnect || hasUnresolvedFolderBackedHistory);
 
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <Box
         sx={{

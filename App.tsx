@@ -22,6 +22,7 @@ import { BloomHostHarness } from "./components/BloomHostHarness";
 import { createIframeBloomHostBridge } from "./services/host/BloomHostBridge";
 import { StandaloneImageEditor } from "./components/StandaloneImageEditor";
 import { seedHistory } from "./dev/seedHistory";
+// import ThemeTuner from "./dev/ThemeTuner";
 
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
 
@@ -98,6 +99,7 @@ export default function App() {
         <StandaloneImageEditor envApiKey={envApiKey} bloomFeatures={standaloneBloomFeatures} />
       )}
       {import.meta.env.DEV && <DragTimingOverlay />}
+      {/* {import.meta.env.DEV && <ThemeTuner />} */}
     </>
   );
 }

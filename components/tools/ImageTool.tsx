@@ -868,9 +868,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       missingRequired;
 
     const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
-    const cardBorderColor = isSelected ? "#f0d59a" : "transparent";
+    const cardBorderColor = isSelected ? theme.colors.focus : "transparent";
     const cardBorderWidth = isSelected ? 2 : 0;
-    const labelColor = "#fff7ec";
+    const labelColor = theme.colors.textPrimary;
     const ToolIcon = tool.icon;
 
     return (
@@ -886,7 +886,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           borderColor: cardBorderColor,
           background: cardBackground,
           boxShadow: isSelected
-            ? "0 0 0 2px rgba(240, 213, 154, 0.42), 0 0 24px rgba(166, 128, 74, 0.18), 0 10px 24px rgba(8,10,20,0.2), inset 0 1px 0 rgba(255,255,255,0.07)"
+            ? `0 0 0 2px color-mix(in srgb, ${theme.colors.focus} 42%, transparent), 0 0 24px color-mix(in srgb, ${theme.colors.accentHover} 32%, transparent), 0 10px 24px rgba(8,10,20,0.2), inset 0 1px 0 rgba(255,255,255,0.07)`
             : "0 8px 18px rgba(8,10,20,0.16), inset 0 1px 0 rgba(255,255,255,0.04)",
           transition: "all 0.2s ease",
         }}
@@ -942,7 +942,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               {tool.title}
             </Typography>
             {isSelected && tool.description && (
-              <Typography variant="body2" sx={{ mt: 0.5, color: "rgba(255, 247, 236, 0.82)" }}>
+              <Typography variant="body2" sx={{ mt: 0.5, color: theme.colors.textSecondary }}>
                 {tool.description}
               </Typography>
             )}

@@ -266,6 +266,8 @@ export function OpenRouterConnect({
           color: theme.colors.textSecondary,
           fontSize: "0.75rem",
           letterSpacing: "0.08em",
+          // Keep the "OR" text readable but draw the lines in the muted border color.
+          "&::before, &::after": { borderColor: theme.colors.borderMuted },
         }}
       >
         OR

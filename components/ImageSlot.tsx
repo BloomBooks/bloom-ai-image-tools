@@ -3,7 +3,7 @@ import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord, ImageSlotActionKey } from "../types";
 import { MagnifiableImage } from "./MagnifiableImage";
 import { Icon, Icons } from "./Icons";
-import { kPrimary, theme } from "../themes";
+import { theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";

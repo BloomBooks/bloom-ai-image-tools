@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Button, Dialog, DialogContent, Stack, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import { darkTheme } from "./materialUITheme";
+import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme } from "../themes";
 
 interface OpenRouterWelcomeDialogProps {
@@ -15,6 +15,7 @@ export function OpenRouterWelcomeDialog({
   onConnect,
   onDismiss,
 }: OpenRouterWelcomeDialogProps) {
+  const darkTheme = useBrandedDarkTheme();
   return (
     <ThemeProvider theme={darkTheme}>
       <Dialog

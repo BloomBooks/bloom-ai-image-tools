@@ -10,7 +10,7 @@ import { ImageSlotHeader } from "./ImageSlotHeader";
 
 const editImagePulse = keyframes`
   0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(240, 213, 154, 0.10); }
+  50% { background-color: color-mix(in srgb, ${theme.colors.focus} 10%, transparent); }
 `;
 
 export type ImagePanelSlot = {

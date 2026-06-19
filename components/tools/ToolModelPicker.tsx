@@ -25,6 +25,7 @@ import {
   resolveToolModelId,
   resolveToolReasoningLevel,
 } from "../../lib/modelsCatalog";
+import { theme } from "../../themes";
 
 interface ToolModelPickerProps {
   tool: ToolDefinition;
@@ -132,11 +133,11 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
             data-testid={`tool-model-picker-${tool.id}`}
             onClick={(event) => setAnchorEl(event.currentTarget)}
             sx={{
-              color: showNotRecommended ? "warning.main" : "rgba(255, 247, 236, 0.82)",
-              "&:hover": { color: "#fff7ec" },
+              color: showNotRecommended ? "warning.main" : theme.colors.textSecondary,
+              "&:hover": { color: theme.colors.textPrimary },
               // MUI's default disabled color is near-black and vanishes on the
-              // dark tool card — keep a visible faded cream instead.
-              "&.Mui-disabled": { color: "rgba(255, 247, 236, 0.4)" },
+              // dark tool card — keep a visible faded text color instead.
+              "&.Mui-disabled": { color: theme.colors.textMuted },
             }}
           >
             <TuneOutlinedIcon fontSize="small" />

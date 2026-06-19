@@ -8,6 +8,7 @@ import paperCutCollage from "./assets/art-styles/paper-cut-collage.png";
 import cleanLineArt from "./assets/art-styles/clean-line-art.png";
 import { useLastDragDelayMs } from "./components/dndDragState";
 import { seedHistory } from "./dev/seedHistory";
+// import ThemeTuner from "./dev/ThemeTuner";
 
 const ENV_API_KEY = (process.env.E2E_OPENROUTER_API_KEY || "").trim();
 
@@ -79,6 +80,7 @@ export default function App() {
         }}
       />
       {import.meta.env.DEV && <DragTimingOverlay />}
+      {/* {import.meta.env.DEV && <ThemeTuner />} */}
     </>
   );
 }

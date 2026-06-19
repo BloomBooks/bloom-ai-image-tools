@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { createTheme, Theme } from "@mui/material/styles";
-import { theme as appTheme } from "../themes";
+import { theme as appTheme, defaultThemeColors, deriveBrandColors } from "../themes";
+import { useBrand } from "../lib/themeBrand";
 //import "./bloomWebFonts.less";
 
 export const kBloomToolboxWhite = "#ffffff88"; //See @bloom-toolboxWhite
@@ -141,71 +143,114 @@ export const lightTheme = createTheme({
   },
 });
 
-// Starting with the lightTheme, make any changes.
-export const darkTheme = createTheme(lightTheme, {
-  palette: {
-    mode: "dark",
-    primary: { main: kPrimary },
-    secondary: { main: kBloomPurple },
-    background: {
-      default: appTheme.colors.appBackground,
-      paper: appTheme.colors.surface,
+/**
+ * Build the dark MUI theme. Pass a `brand` color to re-skin the app's primary
+ * accent (the contained buttons, selected-card rings, etc.) and the brand-tinted
+ * text; everything derives from that single color. Omit it for the shipped gold.
+ *
+ * NOTE: MUI runs color math (decomposeColor/alpha) on palette values, which
+ * cannot parse `var(...)`. So palette entries use raw literal colors rather than
+ * the live `theme.colors` var references. (styleOverrides below are plain CSS
+ * and stay live-tunable.)
+ */
+export function createDarkTheme(brand?: string | null): Theme {
+  const derived = brand ? deriveBrandColors(brand) : null;
+  const primaryMain = brand || defaultThemeColors.accent;
+  const contrastText = derived?.textOnAccent ?? defaultThemeColors.textOnAccent;
+  const accentHover = derived?.accentHover ?? defaultThemeColors.accentHover;
+
+  return createTheme(lightTheme, {
+    palette: {
+      mode: "dark",
+      primary: { main: primaryMain, contrastText },
+      secondary: { main: kBloomPurple },
+      background: {
+        default: defaultThemeColors.appBackground,
+        paper: defaultThemeColors.surface,
+      },
+      text: {
+        primary: defaultThemeColors.textPrimary,
+        secondary: derived?.textSecondary ?? defaultThemeColors.textSecondary,
+        disabled: kGreyOnDarkColor,
+      },
+      divider: defaultThemeColors.borderMuted,
     },
-    text: {
-      primary: appTheme.colors.textPrimary,
-      secondary: appTheme.colors.textSecondary,
-      disabled: kGreyOnDarkColor,
+    shape: {
+      borderRadius: 5,
     },
-    divider: appTheme.colors.border,
-  },
-  shape: {
-    borderRadius: 5,
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: "none",
-          backgroundColor: appTheme.colors.surface,
-          border: `1px solid ${appTheme.colors.borderMuted}`,
-          boxShadow: appTheme.colors.panelShadow,
+    components: {
+      // Override the gold literals baked into lightTheme so links, tooltips and
+      // checkboxes follow the brand color too.
+      MuiLink: {
+        styleOverrides: { root: { color: primaryMain } },
+      },
+      MuiTooltip: {
+        styleOverrides: {
+          tooltip: { backgroundColor: accentHover },
+          arrow: { color: accentHover },
+        },
+      },
+      MuiCheckbox: {
+        styleOverrides: { root: { color: primaryMain } },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            backgroundColor: appTheme.colors.surface,
+            border: `1px solid ${appTheme.colors.borderMuted}`,
+            boxShadow: appTheme.colors.panelShadow,
+          },
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: 999,
+            textTransform: "none",
+            fontWeight: 600,
+          },
+        },
+      },
+      MuiTextField: {
+        defaultProps: {
+          variant: "outlined",
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            backgroundColor: appTheme.colors.surfaceAlt,
+            borderRadius: 12,
+          },
+          notchedOutline: {
+            borderColor: appTheme.colors.border,
+          },
+        },
+      },
+      MuiSelect: {
+        styleOverrides: {
+          icon: {
+            color: appTheme.colors.textSecondary,
+          },
         },
       },
     },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 999,
-          textTransform: "none",
-          fontWeight: 600,
-        },
-      },
-    },
-    MuiTextField: {
-      defaultProps: {
-        variant: "outlined",
-      },
-    },
-    MuiOutlinedInput: {
-      styleOverrides: {
-        root: {
-          backgroundColor: appTheme.colors.surfaceAlt,
-          borderRadius: 12,
-        },
-        notchedOutline: {
-          borderColor: appTheme.colors.border,
-        },
-      },
-    },
-    MuiSelect: {
-      styleOverrides: {
-        icon: {
-          color: appTheme.colors.textSecondary,
-        },
-      },
-    },
-  },
-});
+  });
+}
+
+/** The default (gold) dark theme. */
+export const darkTheme = createDarkTheme();
+
+/**
+ * Hook returning the dark theme rebuilt from the current brand override (set via
+ * the dev Theme Tuner). Use this instead of importing `darkTheme` directly in any
+ * component that wraps its own ThemeProvider, so it re-skins with the brand too.
+ */
+export function useBrandedDarkTheme(): Theme {
+  const brand = useBrand();
+  return useMemo(() => createDarkTheme(brand), [brand]);
+}
 
 const toolboxTextColor = "#d2d2d2";
 const kToolboxDisabledOpacity = 0.5;

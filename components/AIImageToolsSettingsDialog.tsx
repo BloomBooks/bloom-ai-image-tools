@@ -17,7 +17,7 @@ import { IMAGE_TOOLS_FS_IMAGES_DIR } from "../services/persistence/constants";
 import openRouterIcon from "../assets/openrouter.svg";
 import { Icon, Icons } from "./Icons";
 import { OpenRouterConnect } from "./OpenRouterConnect";
-import { darkTheme } from "./materialUITheme";
+import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme as appTheme } from "../themes";
 
 interface OpenRouterSectionProps {
@@ -89,6 +89,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
   openRouter,
   history,
 }) => {
+  const darkTheme = useBrandedDarkTheme();
   const folderPath = folderPathFromName(history.directoryName);
   const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
 

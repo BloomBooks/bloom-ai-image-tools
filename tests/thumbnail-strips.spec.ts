@@ -35,8 +35,10 @@ test.describe("thumbnail strips", () => {
       );
     }
 
-    await resetImageToolsPersistence(page);
-    await page.goto("/");
+    // Exercise the strips with the Bloom-specific book-images features enabled
+    // (they're hidden by default in the public standalone demo).
+    await resetImageToolsPersistence(page, "/?bloomFeatures=1");
+    await page.goto("/?bloomFeatures=1");
     await uploadSampleImageToTarget(page);
 
     if (isVerbose) {

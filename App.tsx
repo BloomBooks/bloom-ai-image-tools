@@ -75,6 +75,11 @@ export default function App() {
   const mode = searchParams?.get("mode") ?? "";
   const isBloomHarness = mode === "bloom-harness";
   const isBloomIframeHost = mode === "bloom-iframe";
+  // Opt-in flag to exercise the Bloom-specific book-images features in the plain
+  // standalone editor (dev/e2e). Off by default so the public demo stays clean.
+  const bloomFeaturesParam = searchParams?.get("bloomFeatures") ?? null;
+  const standaloneBloomFeatures =
+    bloomFeaturesParam !== null && bloomFeaturesParam !== "0" && bloomFeaturesParam !== "false";
   const bloomBridge = useMemo(
     () => (isBloomIframeHost ? createIframeBloomHostBridge() : null),
     [isBloomIframeHost],
@@ -90,7 +95,7 @@ export default function App() {
           onCommitComplete={() => bloomBridge.cancel()}
         />
       ) : (
-        <StandaloneImageEditor envApiKey={envApiKey} />
+        <StandaloneImageEditor envApiKey={envApiKey} bloomFeatures={standaloneBloomFeatures} />
       )}
       {import.meta.env.DEV && <DragTimingOverlay />}
     </>

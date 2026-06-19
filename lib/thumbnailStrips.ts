@@ -7,6 +7,9 @@ export interface ThumbnailStripConfig {
   allowReorder: boolean;
   allowDrop: boolean;
   pinByDefault?: boolean;
+  // When true, the strip and its tab are not rendered at all. Used to hide the
+  // Book Images strip outside the Bloom host (it has no book to draw from).
+  hidden?: boolean;
 }
 
 export const STRIP_DESCRIPTIONS: Record<

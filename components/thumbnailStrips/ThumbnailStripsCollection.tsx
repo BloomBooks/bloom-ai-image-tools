@@ -84,9 +84,15 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
     return map;
   }, [entries]);
 
-  const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => pinnedStripIds.has(id));
+  const isStripVisible = (stripId: ThumbnailStripId) => !resolvedStripConfigs[stripId]?.hidden;
 
-  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => !pinnedStripIds.has(id));
+  const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
+    (id) => pinnedStripIds.has(id) && isStripVisible(id),
+  );
+
+  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
+    (id) => !pinnedStripIds.has(id) && isStripVisible(id),
+  );
 
   const activeUnpinnedStripId = unpinnedStripIds.length
     ? unpinnedStripIds.includes(snapshot.activeStripId)

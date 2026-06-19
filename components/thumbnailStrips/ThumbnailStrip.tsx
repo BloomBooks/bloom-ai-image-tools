@@ -1477,8 +1477,11 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       </Tooltip>
       <div
         style={{
-          paddingTop: 30,
-          paddingBottom: stripId === "bookImages" && bookImagesAction ? 64 : 0,
+          // The book-images strip offsets its thumbnails to the right of the
+          // sticky label column, so they already clear the top-left expand
+          // button — no need for the full top band other strips require.
+          paddingTop: stripId === "bookImages" ? 8 : 30,
+          paddingBottom: stripId === "bookImages" && bookImagesAction ? 48 : 0,
         }}
       >
         {content}

@@ -26,9 +26,11 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
         width: "100%",
         borderRadius: 3,
         px: 1.5,
-        py: 1,
+        py: 0.5,
         height: "auto",
-        minHeight: 48,
+        // Tall enough to hold the 32px hover action buttons without the header
+        // (and the image below it) jumping when they appear.
+        minHeight: 40,
         gap: 1,
         bgcolor: "transparent",
         border: "none",

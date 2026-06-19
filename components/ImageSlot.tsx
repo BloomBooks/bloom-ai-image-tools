@@ -112,7 +112,8 @@ const VARIANT_LAYOUT_STYLES: Record<
       borderWidth: 1,
       borderStyle: "solid",
       padding: 16,
-      gap: 16,
+      paddingTop: 8,
+      gap: 6,
       transition: "color 150ms ease",
     },
     contentWrapper: {

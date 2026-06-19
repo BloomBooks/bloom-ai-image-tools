@@ -92,7 +92,7 @@ export function OpenRouterCreditsHeader({
           },
         }}
       >
-        Connect to OpenRouter
+        Connect to AI Image Generators
       </Button>
     );
   }
@@ -128,7 +128,7 @@ export function OpenRouterCreditsHeader({
           display: "block",
         }}
       >
-        OpenRouter Credits
+        AI image generator credits
       </Typography>
 
       <Stack spacing={0.75} alignItems="flex-end" mt={0.5}>

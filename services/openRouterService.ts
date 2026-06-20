@@ -391,9 +391,56 @@ const drawDummyFigure = (
   context.restore();
 };
 
-const createLocalDummyImage = async (aspectRatio?: string): Promise<string> => {
+const loadImageElement = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Local dummy model could not load the source image."));
+    image.src = src;
+  });
+
+// Produces a deterministic, no-network result image for local UI testing.
+// When a source image is supplied (i.e. an edit tool with a target), the result
+// is derived from that image — tinted with a "DUMMY EDIT" banner — so the output
+// is visibly a transformation of the image being edited (handy for exercising
+// the Replace buttons without spending an API call). With no source it falls
+// back to the generic three-figure cast sheet.
+const createLocalDummyImage = async (
+  aspectRatio?: string,
+  sourceImage?: string,
+): Promise<string> => {
   if (typeof document === "undefined") {
     throw new Error("Local dummy model requires a browser environment.");
+  }
+
+  if (sourceImage) {
+    const image = await loadImageElement(sourceImage);
+    const sourceWidth = image.naturalWidth || 1024;
+    const sourceHeight = image.naturalHeight || 1024;
+    const canvas = document.createElement("canvas");
+    canvas.width = sourceWidth;
+    canvas.height = sourceHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas context unavailable for local dummy model.");
+    }
+
+    context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+    // Obvious, deterministic tint so the result clearly differs from the source.
+    context.fillStyle = "rgba(11, 35, 38, 0.35)";
+    context.fillRect(0, 0, sourceWidth, sourceHeight);
+
+    // Accent banner with a label, so it reads as a deliberate (fake) edit.
+    const bannerHeight = Math.max(48, Math.round(sourceHeight * 0.12));
+    context.fillStyle = "rgba(11, 35, 38, 0.82)";
+    context.fillRect(0, sourceHeight - bannerHeight, sourceWidth, bannerHeight);
+    context.fillStyle = "#ffffff";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font = `${Math.round(bannerHeight * 0.42)}px sans-serif`;
+    context.fillText("DUMMY EDIT (no AI)", sourceWidth / 2, sourceHeight - bannerHeight / 2);
+
+    return canvas.toDataURL("image/png");
   }
 
   const { width, height } = resolveLocalDummyDimensions(aspectRatio);
@@ -496,7 +543,8 @@ export const editImage = async (
   const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   if (canUseLocalDummyModelWithoutApiKey(modelToUse)) {
-    const dummyImage = await createLocalDummyImage(options?.imageConfig?.aspectRatio);
+    const sourceImage = (base64Images || []).find((image) => !!image);
+    const dummyImage = await createLocalDummyImage(options?.imageConfig?.aspectRatio, sourceImage);
     return {
       imageData: dummyImage,
       images: [dummyImage],

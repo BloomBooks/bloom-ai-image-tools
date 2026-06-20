@@ -17,8 +17,9 @@
  *   - history/<id>.json a per-image "sidecar" of the record minus its bytes.
  *
  * THE API KEY IS NOT PERSISTED HERE. Bloom owns the OpenRouter key: it stores it
- * per-user and supplies it back in the init payload (envApiKey) on each launch, and the
- * editor hands any newly obtained key up via bridge.saveCredentials. The key must never
+ * per-user and supplies it back in the init payload (as the editable `initialApiKey`) on
+ * each launch, and the editor hands any newly obtained key up via bridge.saveCredentials.
+ * The key must never
  * land in the per-book folder, which travels with shared/uploaded books. (An older build
  * wrote it to connection.json; that file is now scrubbed on load.)
  *
@@ -140,8 +141,8 @@ export const createBloomHostPersistence = (
       }
 
       const resolved = base ?? createEmptyUiState();
-      // Bloom owns the API key (persisted per-user by the host, supplied via envApiKey),
-      // so the editor never sources it from the per-book folder. Drop any apiKey a legacy
+      // Bloom owns the API key (persisted per-user by the host, supplied via the init
+      // payload), so the editor never sources it from the per-book folder. Drop any apiKey a legacy
       // state.json may still hold, and scrub any legacy connection.json on disk.
       const result: PersistedImageToolsState = {
         ...resolved,

@@ -16,6 +16,7 @@ interface ThumbnailStripsCollectionProps {
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
   bookImagesAction?: {
     label: string;
+    tip?: string;
     testId?: string;
     disabled?: boolean;
     onClick: () => void;
@@ -26,6 +27,9 @@ interface ThumbnailStripsCollectionProps {
   stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
   onOpenPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
+  /** Overrides onSelect for the "Current" book image (sends it to the edit
+   *  target rather than the Result pane). Falls back to onSelect when absent. */
+  onSelectBookImageCurrent?: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
   onRemoveFromStrip: (stripId: ThumbnailStripId, id: string) => void;
@@ -58,6 +62,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   stripConfigs,
   onOpenPreview,
   onSelect,
+  onSelectBookImageCurrent,
   onToggleStar,
   onRenameItem,
   onRemoveFromStrip,
@@ -158,6 +163,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         tip={tip}
         onOpenPreview={onOpenPreview}
         onSelect={onSelect}
+        onSelectBookImageCurrent={onSelectBookImageCurrent}
         onToggleStar={onToggleStar}
         onRenameItem={onRenameItem}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}

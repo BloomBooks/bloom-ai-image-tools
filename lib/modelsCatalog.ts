@@ -71,6 +71,16 @@ const getAllowedModelIds = (tool: ToolDefinition): string[] => {
     seen.add(id);
     ids.push(id);
   });
+  // The dummy model is only present in the catalog on localhost (see
+  // withLocalModels). Where it exists, offer it on every tool (unless the tool
+  // explicitly disallows it) as a no-network engine for UI testing.
+  if (
+    getModelInfoById(LOCAL_DUMMY_MODEL_ID) &&
+    !disallowed.has(LOCAL_DUMMY_MODEL_ID) &&
+    !seen.has(LOCAL_DUMMY_MODEL_ID)
+  ) {
+    ids.push(LOCAL_DUMMY_MODEL_ID);
+  }
   return ids;
 };
 

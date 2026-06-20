@@ -22,7 +22,7 @@
  * talking *to* the Bloom host.
  */
 import React from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { ImageRecord } from "../types";
 import { createBloomHostPersistence } from "../services/persistence/bloomHostPersistence";
 import {
@@ -256,32 +256,9 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
           {status}
         </Typography>
       </Box>
-      <Box
-        sx={{
-          position: "fixed",
-          right: 12,
-          bottom: 12,
-          zIndex: 1200,
-        }}
-      >
-        <Button
-          data-testid="bloom-host-cancel"
-          variant="contained"
-          onClick={handleCancel}
-          sx={{
-            backgroundColor: theme.colors.accent,
-            color: "#fff",
-            "&:hover": {
-              backgroundColor: theme.colors.accentHover,
-            },
-          }}
-        >
-          Cancel
-        </Button>
-      </Box>
       <ImageToolsWorkspace
         persistence={persistence}
-        envApiKey={initPayload.apiKey || ""}
+        initialApiKey={initPayload.apiKey || ""}
         demoOnly={initPayload.demoOnly ?? false}
         onCredentialsChange={(creds) => bridge.saveCredentials(creds)}
         bookImages={hostBookImages}
@@ -296,10 +273,14 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         }}
         onReplacementsChange={setReplacementMap}
         onCommitCurrentResult={(item) => void handleCommitCurrentResult(item)}
-        currentResultActionLabel="Replace the image in book with this image"
+        currentResultActionLabel="Use this Image"
         currentResultActionTestId="bloom-host-commit-current-result"
+        onCancel={handleCancel}
+        cancelActionLabel="Cancel"
+        cancelActionTestId="bloom-host-cancel"
         onCommitBookImages={() => void handleCommitAll()}
-        bookImagesActionLabel="Replace images in your book with these images"
+        bookImagesActionLabel="Replace"
+        bookImagesActionTip="Replace images in your book with these images"
         bookImagesActionTestId="bloom-host-commit-book-images"
         thumbnailStripConfigOverrides={{
           bookImages: {

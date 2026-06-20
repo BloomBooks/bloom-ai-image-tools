@@ -28,6 +28,7 @@ import { getTypeFromFileName, handlePaste as pasteImageFromClipboard } from "../
 import { getImageFileExtensionFromMimeType, getMimeTypeFromUrl } from "../lib/imageUtils";
 import { hasImageFilePayload, getImageFileFromDataTransfer } from "../lib/dragUtils";
 import { copyImageRecordWithFeedback } from "./copyImageRecordToClipboard";
+import { TRANSPARENCY_BACKGROUND_STYLE } from "./transparencyBackground";
 import { subscribeToImageCopyFeedback } from "../lib/imageCopyFeedback";
 
 let transparentDragImage: HTMLImageElement | null = null;
@@ -211,24 +212,6 @@ const VARIANT_LAYOUT_STYLES: Record<
       boxSizing: "border-box",
     },
   },
-};
-
-const TRANSPARENCY_TILE_SIZE = 16;
-const TRANSPARENCY_BLOOM_BLUE = "rgba(29, 143, 175, 0.2)";
-const TRANSPARENCY_PATTERN_SIZE = TRANSPARENCY_TILE_SIZE * 2;
-const TRANSPARENCY_CHECKERBOARD_IMAGE = (() => {
-  const tile = TRANSPARENCY_TILE_SIZE;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${tile * 2}" height="${
-    tile * 2
-  }" shape-rendering="crispEdges"><rect width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/><rect x="${tile}" y="${tile}" width="${tile}" height="${tile}" fill="${TRANSPARENCY_BLOOM_BLUE}"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-})();
-
-const TRANSPARENCY_BACKGROUND_STYLE: React.CSSProperties = {
-  // Classic checkerboard of Bloom blue and white for transparent regions
-  backgroundColor: "#ffffff",
-  backgroundImage: TRANSPARENCY_CHECKERBOARD_IMAGE,
-  backgroundSize: `${TRANSPARENCY_PATTERN_SIZE}px ${TRANSPARENCY_PATTERN_SIZE}px`,
 };
 
 const getArtStyleIdForImage = (item?: ImageRecord | null): string | null => {
@@ -820,7 +803,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                       maxWidth: "100%",
                       objectFit: variant === "thumb" ? "cover" : "contain",
                       display: "block",
-                      ...(variant === "thumb" ? undefined : TRANSPARENCY_BACKGROUND_STYLE),
+                      ...TRANSPARENCY_BACKGROUND_STYLE,
                     }}
                     draggable={!!draggableImageId}
                     onDragStart={handleImageDragStart}

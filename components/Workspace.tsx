@@ -131,6 +131,11 @@ interface WorkspaceProps {
   onUseCurrentResult?: () => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
+  /** When provided (e.g. in Bloom host mode), a "Cancel" button is shown in the
+   *  lower-right of the Result pane, beside the "Use this Image" action. */
+  onCancel?: () => void;
+  cancelActionLabel?: string;
+  cancelActionTestId?: string;
   isProcessing: boolean;
   generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
@@ -155,6 +160,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onUseCurrentResult,
   currentResultActionLabel,
   currentResultActionTestId,
+  onCancel,
+  cancelActionLabel,
+  cancelActionTestId,
   isProcessing,
   generationProgress,
   activeToolId,
@@ -239,7 +247,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     currentResultItem?.incomingSlotId && onUseCurrentResult ? (
       <Button
         type="button"
-        variant="outlined"
+        variant="contained"
         size="small"
         data-testid={currentResultActionTestId ?? "result-use-this-button"}
         onClick={onUseCurrentResult}
@@ -250,37 +258,63 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           px: 1.5,
           py: 0.5,
           fontSize: "0.75rem",
-          backgroundColor: "rgba(15, 23, 42, 0.72)",
+          fontWeight: 600,
+          backgroundColor: theme.colors.accent,
           color: "#fff",
-          borderColor: "rgba(255, 255, 255, 0.22)",
-          backdropFilter: "blur(10px)",
           "&:hover": {
-            backgroundColor: "rgba(15, 23, 42, 0.86)",
-            borderColor: "rgba(255, 255, 255, 0.3)",
+            backgroundColor: theme.colors.accentHover,
           },
         }}
       >
         {currentResultActionLabel ?? "Use this"}
       </Button>
     ) : undefined;
-  const resultHeaderActions = resultSlots.length ? resultActionButton : undefined;
-  const resultOverlayContent =
-    !resultSlots.length && resultActionButton && currentResultItem ? (
+  const resultCancelButton = onCancel ? (
+    <Button
+      type="button"
+      variant="outlined"
+      size="small"
+      data-testid={cancelActionTestId ?? "result-cancel-button"}
+      onClick={onCancel}
+      sx={{
+        borderRadius: "999px",
+        textTransform: "none",
+        minWidth: 0,
+        px: 1.5,
+        py: 0.5,
+        fontSize: "0.75rem",
+        fontWeight: 600,
+        backgroundColor: "transparent",
+        color: theme.colors.accent,
+        borderColor: theme.colors.accent,
+        "&:hover": {
+          backgroundColor: "rgba(148, 163, 184, 0.12)",
+          borderColor: theme.colors.accentHover,
+        },
+      }}
+    >
+      {cancelActionLabel ?? "Cancel"}
+    </Button>
+  ) : undefined;
+  // The result actions ("Use this Image" then "Cancel") are pinned to the
+  // lower-right of the Result pane itself (see the result column Box below)
+  // rather than to the centered image, so they sit in the panel corner
+  // regardless of image size.
+  const resultActionOverlay =
+    resultActionButton || resultCancelButton ? (
       <Box
         sx={{
           position: "absolute",
-          right: 12,
-          bottom: 12,
+          right: 24,
+          bottom: 20,
           zIndex: 4,
           display: "flex",
-          justifyContent: "flex-end",
-          pointerEvents: "none",
-          "& > *": {
-            pointerEvents: "auto",
-          },
+          gap: 1,
+          alignItems: "center",
         }}
       >
         {resultActionButton}
+        {resultCancelButton}
       </Box>
     ) : undefined;
 
@@ -560,7 +594,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           {resultSlots.length ? (
             <ImagePanel
               label={derivedResultLabel}
-              headerActions={resultHeaderActions}
               layout="grid"
               panelTestId="result-panel"
               slots={resultSlots}
@@ -575,8 +608,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               image={rightImage}
               isAnyDndDragging={isAnyDndDragging}
               label="Result"
-              headerActions={resultHeaderActions}
-              overlayContent={resultOverlayContent}
               panelTestId="result-panel"
               onUpload={onUploadRight}
               isDropZone={true}
@@ -591,6 +622,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               onToggleStar={rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined}
             />
           )}
+          {resultActionOverlay}
         </Box>
       </Box>
     </Box>

@@ -34,6 +34,31 @@ const getEnvApiKey = (): string => {
   return window.sessionStorage?.getItem(ENV_KEY_SKIP_FLAG) === "1" ? "" : ENV_API_KEY;
 };
 
+// Which shell to render is normally taken from the `?mode=` query (see the file header).
+// But when we run from the editor's Vite dev server (Bloom's `--with` path), Vite's
+// dependency-optimization "full reload" re-navigates the iframe to its bare origin and
+// DROPS the query string. Reading mode from the URL alone would then silently fall back
+// to the standalone editor mid-session — losing the host's API key and re-showing the
+// folder-history UI. So we remember a host mode in sessionStorage (which survives a reload
+// within the same browsing context) and fall back to it when the query is gone. Only the
+// host modes are sticky; a plain standalone load (no mode, no stored mode) stays standalone.
+const HOST_MODE_STORAGE_KEY = "bloom-ai-editor-mode";
+
+const resolveMode = (searchParams: URLSearchParams | null): string => {
+  const urlMode = searchParams?.get("mode") ?? "";
+  if (typeof window === "undefined") {
+    return urlMode;
+  }
+  if (urlMode === "bloom-iframe" || urlMode === "bloom-harness") {
+    window.sessionStorage?.setItem(HOST_MODE_STORAGE_KEY, urlMode);
+    return urlMode;
+  }
+  if (!urlMode) {
+    return window.sessionStorage?.getItem(HOST_MODE_STORAGE_KEY) ?? "";
+  }
+  return urlMode;
+};
+
 function DragTimingOverlay() {
   const delayMs = useLastDragDelayMs();
   if (delayMs === null) return null;
@@ -73,7 +98,7 @@ export default function App() {
   }, []);
 
   const envApiKey = getEnvApiKey();
-  const mode = searchParams?.get("mode") ?? "";
+  const mode = resolveMode(searchParams);
   const isBloomHarness = mode === "bloom-harness";
   const isBloomIframeHost = mode === "bloom-iframe";
   // Opt-in flag to exercise the Bloom-specific book-images features in the plain

@@ -421,6 +421,7 @@ interface ImageToolsPanelBar {
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
   bookImagesAction?: {
     label: string;
+    tip?: string;
     testId?: string;
     disabled?: boolean;
     onClick: () => void;
@@ -463,8 +464,14 @@ interface ImageToolsPanelBar {
   onUseCurrentResult: () => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
+  onCancel?: () => void;
+  cancelActionLabel?: string;
+  cancelActionTestId?: string;
   generationProgress: GenerationProgressState | null;
   onSelectHistoryItem: (id: string) => void;
+  /** Clicking a "Current" book image routes here (sets the edit target) instead
+   *  of through onSelectHistoryItem (which selects into the Result pane). */
+  onSelectBookImageCurrent?: (id: string) => void;
   onToggleHistoryStar: (id: string) => void;
   onRenameHistoryItem: (id: string, name: string) => void;
   onAddCharacterImage: (file: File) => void;
@@ -521,8 +528,12 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onUseCurrentResult,
   currentResultActionLabel,
   currentResultActionTestId,
+  onCancel,
+  cancelActionLabel,
+  cancelActionTestId,
   generationProgress,
   onSelectHistoryItem,
+  onSelectBookImageCurrent,
   onToggleHistoryStar,
   onRenameHistoryItem,
   onAddCharacterImage,
@@ -876,6 +887,9 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onUseCurrentResult={onUseCurrentResult}
               currentResultActionLabel={currentResultActionLabel}
               currentResultActionTestId={currentResultActionTestId}
+              onCancel={onCancel}
+              cancelActionLabel={cancelActionLabel}
+              cancelActionTestId={cancelActionTestId}
               isProcessing={appState.isProcessing}
               generationProgress={generationProgress}
               activeToolId={activeToolId}
@@ -893,6 +907,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               stripConfigs={thumbnailStripConfigs}
               onOpenPreview={onOpenStripPreview}
               onSelect={onSelectHistoryItem}
+              onSelectBookImageCurrent={onSelectBookImageCurrent}
               onToggleStar={onToggleHistoryStar}
               onRenameItem={onRenameHistoryItem}
               onRemoveFromStrip={onStripRemoveItem}

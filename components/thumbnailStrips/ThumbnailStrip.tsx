@@ -17,6 +17,7 @@ interface ThumbnailStripProps {
   replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
   bookImagesAction?: {
     label: string;
+    tip?: string;
     testId?: string;
     disabled?: boolean;
     onClick: () => void;
@@ -36,6 +37,9 @@ interface ThumbnailStripProps {
   tip?: string;
   onOpenPreview?: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
+  /** Overrides onSelect for the "Current" book image (sends it to the edit
+   *  target rather than the Result pane). Falls back to onSelect when absent. */
+  onSelectBookImageCurrent?: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
   onRemoveItem?: (id: string) => void;
@@ -1081,6 +1085,41 @@ const CharacterPastePlaceholder: React.FC<{ onAddImage: (file: File) => void }> 
   );
 };
 
+// A short informational tip shown in the lower-right corner of a strip: a
+// lightbulb glyph followed by guidance text. Used both as the generic per-strip
+// tip and, on the book-images strip, as the prompt shown until the user has
+// assigned a replacement (at which point the "Replace" button takes its place).
+const StripTip: React.FC<{ text: string; testId?: string }> = (props) => (
+  <div
+    data-testid={props.testId}
+    style={{
+      position: "absolute",
+      right: 12,
+      bottom: 12,
+      zIndex: 3,
+      // Anchored only by `right`, so the block shrinks to fit: short tips
+      // stay tucked in the corner, while long ones expand leftward and use
+      // the full strip width before wrapping (capped to clear the padding).
+      maxWidth: "calc(100% - 24px)",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 6,
+      textAlign: "left",
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      lineHeight: 1.4,
+      // The empty strip beneath is a drop target; let pointer events fall
+      // through so the tip never blocks a drop.
+      pointerEvents: "none",
+    }}
+  >
+    <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.2 }}>
+      💡
+    </span>
+    <span style={{ minWidth: 0 }}>{props.text}</span>
+  </div>
+);
+
 export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   stripId,
   itemIds,
@@ -1099,6 +1138,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   tip,
   onOpenPreview,
   onSelect,
+  onSelectBookImageCurrent,
   onToggleStar,
   onRenameItem,
   onRemoveItem,
@@ -1342,7 +1382,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 allowRemove={allowRemove}
                 removeDisabledReason={removeDisabledReasonById?.[item.id]}
                 isAnyDndDragging={isAnyDndDragging}
-                onSelect={() => onSelect(item.id)}
+                onSelect={() => (onSelectBookImageCurrent ?? onSelect)(item.id)}
                 onSelectReplacement={() => {
                   const replacement = replacementItemsByIncomingId[item.id];
                   if (replacement) {
@@ -1485,73 +1525,48 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         {content}
       </div>
       {stripId === "bookImages" && bookImagesAction ? (
-        <div
-          style={{
-            position: "absolute",
-            right: 12,
-            bottom: 12,
-            zIndex: 3,
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <Button
-            variant="text"
-            data-testid={bookImagesAction.testId}
-            disabled={bookImagesAction.disabled}
-            onClick={bookImagesAction.onClick}
-            sx={{
-              minWidth: 0,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: 0,
-              boxShadow: "none",
-              color: theme.colors.textPrimary,
-              fontSize: 13,
-              fontWeight: 500,
-              lineHeight: 1.4,
-              textTransform: "none",
-              opacity: bookImagesAction.disabled ? 0.6 : 1,
-              "&.Mui-disabled": { color: theme.colors.textMuted },
+        // The book-images strip shows the "Replace" button once the user has
+        // assigned at least one replacement; until then it shows a tip telling
+        // them what the button will do. One or the other, never both.
+        bookImagesAction.disabled ? (
+          <StripTip
+            testId={bookImagesAction.testId ? `${bookImagesAction.testId}-tip` : undefined}
+            text={bookImagesAction.tip ?? bookImagesAction.label}
+          />
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              right: 12,
+              bottom: 12,
+              zIndex: 3,
+              display: "flex",
+              justifyContent: "flex-end",
             }}
           >
-            <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
-              💡
-            </span>
-            {bookImagesAction.label}
-          </Button>
-        </div>
+            <Button
+              variant="contained"
+              data-testid={bookImagesAction.testId}
+              onClick={bookImagesAction.onClick}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 13,
+                fontWeight: 600,
+                lineHeight: 1.4,
+                textTransform: "none",
+                backgroundColor: theme.colors.accent,
+                color: "#fff",
+                "&:hover": { backgroundColor: theme.colors.accentHover },
+              }}
+            >
+              {bookImagesAction.label}
+            </Button>
+          </div>
+        )
       ) : null}
       {tip && orderedItems.length === 0 && !(stripId === "bookImages" && bookImagesAction) ? (
-        <div
-          data-testid={`thumbnail-strip-tip-${stripId}`}
-          style={{
-            position: "absolute",
-            right: 12,
-            bottom: 12,
-            zIndex: 3,
-            // Anchored only by `right`, so the block shrinks to fit: short tips
-            // stay tucked in the corner, while long ones expand leftward and use
-            // the full strip width before wrapping (capped to clear the padding).
-            maxWidth: "calc(100% - 24px)",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 6,
-            textAlign: "left",
-            color: theme.colors.textMuted,
-            fontSize: 12,
-            lineHeight: 1.4,
-            // The empty strip beneath is a drop target; let pointer events fall
-            // through so the tip never blocks a drop.
-            pointerEvents: "none",
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.2 }}>
-            💡
-          </span>
-          <span style={{ minWidth: 0 }}>{tip}</span>
-        </div>
+        <StripTip testId={`thumbnail-strip-tip-${stripId}`} text={tip} />
       ) : null}
     </div>
   );

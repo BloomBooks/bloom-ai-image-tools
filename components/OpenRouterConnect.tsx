@@ -200,15 +200,10 @@ export function OpenRouterConnect({
     </Box>
   );
 
-  const apiKeyDescriptions: OptionText = usingEnvKey
-    ? {
-        active: "An environment variable is supplying the OpenRouter key.",
-        inactive: "This environment already provides an OpenRouter key.",
-      }
-    : {
-        active: "",
-        inactive: "",
-      };
+  const apiKeyDescriptions: OptionText = {
+    active: "",
+    inactive: "",
+  };
 
   return (
     <Stack
@@ -326,12 +321,6 @@ export function OpenRouterConnect({
 
           {testState === "success" && keyHasNoLimit && (
             <NoSpendingLimitWarning onOpenExternalUrl={onOpenExternalUrl} />
-          )}
-
-          {usingEnvKey && (
-            <Typography variant="caption" color="text.secondary">
-              This key is provided by the environment and cannot be changed in this interface.
-            </Typography>
           )}
         </Stack>,
         "openrouter-option-api-key",

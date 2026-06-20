@@ -421,7 +421,14 @@ const buildRecoveredHistoryEntry = (entry: {
 });
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
+  /** A non-editable key injected by the environment (the E2E `E2E_OPENROUTER_API_KEY`
+   *  used by the standalone test build). Not used by the Bloom host — see initialApiKey. */
   envApiKey?: string | null;
+  /** A starting API key supplied by the host (Bloom) for this launch. Unlike envApiKey
+   *  it is fully editable: it seeds the editable key field, and the user may change or
+   *  clear it. Changes are reported via onCredentialsChange so the host can persist them
+   *  (the editor itself never persists the key when hosted). */
+  initialApiKey?: string | null;
   /** Demo context (e.g. a Bloom Playground/template book): the user may use an
    *  already-supplied key but must not set, change, or clear OpenRouter credentials. */
   demoOnly?: boolean;
@@ -451,8 +458,14 @@ export interface ImageToolsWorkspaceProps {
   onCommitCurrentResult?: (item: ImageRecord) => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
+  /** When provided (e.g. in Bloom host mode), shows a "Cancel" button beside the
+   *  "Use this Image" action in the lower-right of the Result pane. */
+  onCancel?: () => void;
+  cancelActionLabel?: string;
+  cancelActionTestId?: string;
   onCommitBookImages?: () => void;
   bookImagesActionLabel?: string;
+  bookImagesActionTip?: string;
   bookImagesActionTestId?: string;
   thumbnailStripConfigOverrides?: Partial<
     Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
@@ -462,6 +475,7 @@ export interface ImageToolsWorkspaceProps {
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
+  initialApiKey: initialApiKeyProp = "",
   demoOnly = false,
   bookImageUrls = [],
   bookImages = [],
@@ -474,8 +488,12 @@ export function ImageToolsWorkspace({
   onCommitCurrentResult,
   currentResultActionLabel,
   currentResultActionTestId,
+  onCancel,
+  cancelActionLabel,
+  cancelActionTestId,
   onCommitBookImages,
   bookImagesActionLabel,
+  bookImagesActionTip,
   bookImagesActionTestId,
   thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
@@ -563,6 +581,7 @@ export function ImageToolsWorkspace({
   const oauthPollAbortControllerRef = useRef<AbortController | null>(null);
   const pendingPreviewImageIdsRef = useRef<string[]>([]);
   const envApiKey = envApiKeyProp?.trim() || "";
+  const initialApiKey = initialApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
   // The active tool's resolved model decides whether we can run without an API
   // key (only the localhost dummy model qualifies).
@@ -1273,6 +1292,9 @@ export function ImageToolsWorkspace({
           setState((prev) => ({
             ...prev,
             ...sanitized,
+            // In host (Bloom) mode each launch starts fresh: the Result pane
+            // begins empty rather than restoring the previous session's result.
+            ...(bookImagesStripMode === "host" ? { rightPanelImageId: null } : {}),
             isProcessing: false,
             error: null,
           }));
@@ -1338,7 +1360,18 @@ export function ImageToolsWorkspace({
             setApiKey(persisted.auth.apiKey);
             setAuthMethod(persisted.auth.authMethod ?? null);
             setState((prev) => ({ ...prev, isAuthenticated: true }));
+          } else if (initialApiKey) {
+            // The host (Bloom) supplied a key for this launch. Seed it as the editable
+            // manual key so the user can view/change/clear it; edits flow back to the
+            // host via onCredentialsChange. (The editor never persists it itself.)
+            setApiKey(initialApiKey);
+            setAuthMethod("manual");
+            setState((prev) => ({ ...prev, isAuthenticated: true }));
           }
+        } else if (initialApiKey) {
+          setApiKey(initialApiKey);
+          setAuthMethod("manual");
+          setState((prev) => ({ ...prev, isAuthenticated: true }));
         } else if (envApiKey) {
           setState((prev) => ({ ...prev, isAuthenticated: true }));
         }
@@ -1352,7 +1385,7 @@ export function ImageToolsWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [isFsBindingRestoreReady, persistence, envApiKey, updateAllArtStyleParams]);
+  }, [isFsBindingRestoreReady, persistence, envApiKey, initialApiKey, updateAllArtStyleParams]);
 
   useEffect(() => {
     if (!isHydrated || apiKey || typeof window === "undefined") {
@@ -3306,6 +3339,25 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
+  // Clicking a "Current" book image copies it into the "Image to Edit" target
+  // (so the user can immediately apply a tool to it) rather than into the Result
+  // pane, and clears whatever was in the Result pane. Ctrl-click still adds it to
+  // the full-screen comparison selection.
+  const handleSelectBookImageCurrent = (id: string) => {
+    if (isPreviewModifierActive) {
+      queuePreviewImage(id);
+      return;
+    }
+
+    setResultImageIds([]);
+    setState((prev) => ({
+      ...prev,
+      targetImageId: id,
+      referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
+      rightPanelImageId: null,
+    }));
+  };
+
   const handleRenameImage = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
     setState((prev) => {
@@ -3825,7 +3877,8 @@ export function ImageToolsWorkspace({
             bookImagesAction={
               onCommitBookImages
                 ? {
-                    label: bookImagesActionLabel ?? "Replace images in your book with these images",
+                    label: bookImagesActionLabel ?? "Replace",
+                    tip: bookImagesActionTip ?? "Replace images in your book with these images",
                     testId: bookImagesActionTestId,
                     disabled: !hasBookImageReplacement,
                     onClick: onCommitBookImages,
@@ -3865,7 +3918,11 @@ export function ImageToolsWorkspace({
             onUseCurrentResult={handleUseCurrentResult}
             currentResultActionLabel={currentResultActionLabel}
             currentResultActionTestId={currentResultActionTestId}
+            onCancel={onCancel}
+            cancelActionLabel={cancelActionLabel}
+            cancelActionTestId={cancelActionTestId}
             onSelectHistoryItem={handleSelectHistoryItem}
+            onSelectBookImageCurrent={handleSelectBookImageCurrent}
             onToggleHistoryStar={handleToggleHistoryStar}
             onRenameHistoryItem={handleRenameImage}
             onAddCharacterImage={handleAddCharacterImage}

@@ -188,12 +188,6 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       onOpenExternalUrl={openRouter.onOpenExternalUrl}
                       demoOnly={openRouter.demoOnly}
                     />
-                    {openRouter.usingEnvKey && (
-                      <Typography variant="caption" color="text.secondary">
-                        This environment-provided key cannot be edited here. Restart the session to
-                        switch accounts.
-                      </Typography>
-                    )}
                   </Stack>
                 </Box>
               </Stack>

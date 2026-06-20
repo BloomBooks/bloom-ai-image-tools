@@ -12,6 +12,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { ImageRecord } from "../types";
 import { getHighContrastScrollbarStyles } from "../themes";
+import { TRANSPARENCY_BACKGROUND_STYLE } from "./transparencyBackground";
 
 export interface ImagePreviewDialogItem {
   id: string;
@@ -69,6 +70,7 @@ const PreviewImage: React.FC<{
             maxWidth: "min(100%, calc(100vw - 220px))",
             maxHeight,
             objectFit: "contain",
+            ...TRANSPARENCY_BACKGROUND_STYLE,
           }}
         />
       </Box>

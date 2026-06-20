@@ -9,7 +9,7 @@ import { API_KEY_STORAGE_KEY, AUTH_METHOD_STORAGE_KEY } from "../lib/authStorage
 // whereas google/gemini-2.5-flash only supports text output.
 export const inexpensive_model_for_testing = "google/gemini-2.5-flash-image";
 
-export const resetImageToolsPersistence = async (page: Page) => {
+export const resetImageToolsPersistence = async (page: Page, route = "/") => {
   await page.addInitScript(
     ({
       flag,
@@ -77,7 +77,7 @@ export const resetImageToolsPersistence = async (page: Page) => {
     },
   );
 
-  await page.goto("/");
+  await page.goto(route);
   await page.evaluate(() => (window as any).__imageToolsResetPromise);
   await page.reload();
   await dismissWelcomeDialogIfPresent(page);

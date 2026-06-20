@@ -29,6 +29,9 @@ interface OpenRouterSectionProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
+  onOpenExternalUrl: (url: string) => void;
+  /** Demo context (e.g. Bloom Playground book): credential-setting UI is disabled. */
+  demoOnly?: boolean;
 }
 
 interface HistorySectionProps {
@@ -45,7 +48,9 @@ interface AIImageToolsSettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   openRouter: OpenRouterSectionProps;
-  history: HistorySectionProps;
+  /** History-storage section config. Omitted when the host (e.g. Bloom) supplies its
+   *  own history mechanism, in which case the section is not shown at all. */
+  history?: HistorySectionProps;
 }
 
 const folderPathFromName = (name: string | null) => {
@@ -90,8 +95,8 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
   history,
 }) => {
   const darkTheme = useBrandedDarkTheme();
-  const folderPath = folderPathFromName(history.directoryName);
-  const historyLoadingLabel = history.isLoading ? "Working..." : undefined;
+  const folderPath = history ? folderPathFromName(history.directoryName) : null;
+  const historyLoadingLabel = history?.isLoading ? "Working..." : undefined;
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -165,7 +170,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                     sx={{ width: 24, height: 24 }}
                   />
                   <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
-                    OpenRouter connection
+                    Connection to AI Image Generators
                   </Typography>
                 </Stack>
 
@@ -180,6 +185,8 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       onConnect={openRouter.onConnect}
                       onDisconnect={openRouter.onDisconnect}
                       onProvideKey={openRouter.onProvideKey}
+                      onOpenExternalUrl={openRouter.onOpenExternalUrl}
+                      demoOnly={openRouter.demoOnly}
                     />
                     {openRouter.usingEnvKey && (
                       <Typography variant="caption" color="text.secondary">
@@ -192,96 +199,98 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
               </Stack>
             </Paper>
 
-            <Paper
-              elevation={0}
-              square
-              sx={sectionCardStyles}
-              aria-labelledby="history-section-title"
-            >
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={2} alignItems="flex-start">
-                  <Icon path={Icons.History} width={20} height={20} />
-                  <Box>
-                    <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
-                      History storage
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Link a folder on your computer to save your full history.
-                    </Typography>
-                  </Box>
+            {history && (
+              <Paper
+                elevation={0}
+                square
+                sx={sectionCardStyles}
+                aria-labelledby="history-section-title"
+              >
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={2} alignItems="flex-start">
+                    <Icon path={Icons.History} width={20} height={20} />
+                    <Box>
+                      <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
+                        History storage
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Link a folder on your computer to save your full history.
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  {!history.isSupported && (
+                    <Alert
+                      severity="warning"
+                      icon={
+                        <Box component="span" sx={{ display: "inline-flex" }}>
+                          <Icon path={Icons.AlertTriangle} width={20} height={20} />
+                        </Box>
+                      }
+                    >
+                      <Typography variant="body2" fontWeight={600}>
+                        Local folders need Chromium-based browsers
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed
+                        history.
+                      </Typography>
+                    </Alert>
+                  )}
+
+                  {history.isFolderPersistenceActive ? (
+                    <Box sx={nestedCardStyles}>
+                      <Typography variant="body2" color="text.secondary">
+                        Images are written to{" "}
+                        <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {folderPath || "your folder"}
+                        </Box>
+                        .
+                      </Typography>
+                      <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => history.onDisableFolder()}
+                          disabled={history.isLoading}
+                          sx={{
+                            borderRadius: 999,
+                            fontWeight: 600,
+                            px: 3,
+                            backgroundColor: appTheme.colors.surfaceAlt,
+                            color: appTheme.colors.textPrimary,
+                            "&:hover": {
+                              backgroundColor: appTheme.colors.surface,
+                            },
+                          }}
+                        >
+                          {historyLoadingLabel || "Stop storing history in folder"}
+                        </Button>
+                      </Stack>
+                    </Box>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={() => history.onEnableFolder()}
+                      disabled={history.isLoading || !history.isSupported}
+                      sx={{
+                        ...primaryContainedButtonStyles,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      {historyLoadingLabel || "Choose folder"}
+                    </Button>
+                  )}
+
+                  {history.error && (
+                    <Alert severity="error" sx={{ mt: 1 }}>
+                      {history.error}
+                    </Alert>
+                  )}
                 </Stack>
-
-                {!history.isSupported && (
-                  <Alert
-                    severity="warning"
-                    icon={
-                      <Box component="span" sx={{ display: "inline-flex" }}>
-                        <Icon path={Icons.AlertTriangle} width={20} height={20} />
-                      </Box>
-                    }
-                  >
-                    <Typography variant="body2" fontWeight={600}>
-                      Local folders need Chromium-based browsers
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed
-                      history.
-                    </Typography>
-                  </Alert>
-                )}
-
-                {history.isFolderPersistenceActive ? (
-                  <Box sx={nestedCardStyles}>
-                    <Typography variant="body2" color="text.secondary">
-                      Images are written to{" "}
-                      <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                        {folderPath || "your folder"}
-                      </Box>
-                      .
-                    </Typography>
-                    <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => history.onDisableFolder()}
-                        disabled={history.isLoading}
-                        sx={{
-                          borderRadius: 999,
-                          fontWeight: 600,
-                          px: 3,
-                          backgroundColor: appTheme.colors.surfaceAlt,
-                          color: appTheme.colors.textPrimary,
-                          "&:hover": {
-                            backgroundColor: appTheme.colors.surface,
-                          },
-                        }}
-                      >
-                        {historyLoadingLabel || "Stop storing history in folder"}
-                      </Button>
-                    </Stack>
-                  </Box>
-                ) : (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => history.onEnableFolder()}
-                    disabled={history.isLoading || !history.isSupported}
-                    sx={{
-                      ...primaryContainedButtonStyles,
-                      alignSelf: "flex-start",
-                    }}
-                  >
-                    {historyLoadingLabel || "Choose folder"}
-                  </Button>
-                )}
-
-                {history.error && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
-                    {history.error}
-                  </Alert>
-                )}
-              </Stack>
-            </Paper>
+              </Paper>
+            )}
           </Stack>
         </DialogContent>
 

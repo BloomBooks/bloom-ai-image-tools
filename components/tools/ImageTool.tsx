@@ -39,7 +39,7 @@ import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHe
 import { getModelInfoById, resolveToolModelId } from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
 import { ToolModelPicker } from "./ToolModelPicker";
-import { theme } from "../../themes";
+import { getHighContrastScrollbarStyles, theme } from "../../themes";
 
 // Must match the catalog id in data/models-registry.json5, which is the
 // "-preview" key while OpenRouter only exposes the preview. Keep in sync if the
@@ -51,15 +51,6 @@ const LOCALIZE_TOOL_ORDER = [
   "ethnicity",
   "apply_localized_characters",
 ] as const;
-const ADVANCED_TOOL_IDS = new Set([
-  "generate_image",
-  "change_style",
-  "custom",
-  "improve_drawing",
-  "generate_pallet",
-  "game_theme_generator",
-]);
-
 const isGamesTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "games");
 
@@ -458,6 +449,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const handleToolSelect = (toolId: string) => {
     const timingLabel = `tool-panel-open:${toolId}`;
+    if (selectionTimingRef.current && selectionTimingRef.current !== timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(selectionTimingRef.current);
+      }
+      selectionTimingRef.current = null;
+    }
+
+    if (selectionTimingRef.current === timingLabel) {
+      if (typeof console !== "undefined" && console.timeEnd) {
+        console.timeEnd(timingLabel);
+      }
+      selectionTimingRef.current = null;
+    }
+
     selectionTimingRef.current = timingLabel;
     if (typeof console !== "undefined" && console.time) {
       console.time(timingLabel);
@@ -846,7 +851,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
     const submitDisabledReason = needsTarget
-      ? "Add an image to edit -->"
+      ? "Add an image to edit"
       : needsReference
         ? "Add reference image"
         : requiresDescriptionOrReference
@@ -991,61 +996,86 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               })()}
 
               <Stack spacing={1.5}>
-                <Button
-                  // Always a plain button — never a native submit. If this were
-                  // type="submit", clicking it to cancel would flip isProcessing
-                  // to false, re-render this same element back to a submit
-                  // button mid-click, and the click's default action would then
-                  // submit the form — immediately starting a brand-new
-                  // generation. Instead we submit the form ourselves below.
-                  type="button"
-                  variant={isProcessing ? "outlined" : "contained"}
-                  color={isProcessing ? "inherit" : "primary"}
-                  fullWidth
-                  disabled={isProcessing ? false : isSubmitDisabled}
-                  title={isProcessing ? undefined : submitDisabledReason}
-                  onClick={(event) => {
-                    if (isProcessing) {
-                      onCancelProcessing();
-                      return;
-                    }
-                    event.currentTarget.closest("form")?.requestSubmit();
-                  }}
-                  sx={{
-                    minHeight: 44,
-                    fontWeight: 400,
-                    gap: 1,
-                    "&.Mui-disabled": {
-                      backgroundColor: theme.colors.surfaceRaised,
-                      color: theme.colors.textSecondary,
-                    },
-                  }}
-                >
-                  {isProcessing ? (
-                    <>
-                      <CircularProgress size={18} color="inherit" />
-                      Click to Cancel
-                    </>
-                  ) : (
-                    <>
-                      <span>
-                        {tool.actionButtonLabel ||
-                          (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
-                      </span>
-                      <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
-                    </>
-                  )}
-                </Button>
-                {submitDisabledReason && !isProcessing && (
+                {needsTarget && !isProcessing ? (
+                  // When there's no image to edit yet, replace the action
+                  // button entirely with the prompt (and a real arrow pointing
+                  // at the image panel) rather than showing a disabled button.
                   <FormHelperText
+                    component="div"
                     sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 0.75,
+                      m: 0,
+                      minHeight: 44,
                       textAlign: "center",
                       fontSize: "1rem",
                       color: muiTheme.palette.error.main,
                     }}
                   >
-                    {submitDisabledReason}
+                    <span>{submitDisabledReason}</span>
+                    <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                   </FormHelperText>
+                ) : (
+                  <>
+                    <Button
+                      // Always a plain button — never a native submit. If this were
+                      // type="submit", clicking it to cancel would flip isProcessing
+                      // to false, re-render this same element back to a submit
+                      // button mid-click, and the click's default action would then
+                      // submit the form — immediately starting a brand-new
+                      // generation. Instead we submit the form ourselves below.
+                      type="button"
+                      variant={isProcessing ? "outlined" : "contained"}
+                      color={isProcessing ? "inherit" : "primary"}
+                      fullWidth
+                      disabled={isProcessing ? false : isSubmitDisabled}
+                      title={isProcessing ? undefined : submitDisabledReason}
+                      onClick={(event) => {
+                        if (isProcessing) {
+                          onCancelProcessing();
+                          return;
+                        }
+                        event.currentTarget.closest("form")?.requestSubmit();
+                      }}
+                      sx={{
+                        minHeight: 44,
+                        fontWeight: 400,
+                        gap: 1,
+                        "&.Mui-disabled": {
+                          backgroundColor: theme.colors.surfaceRaised,
+                          color: theme.colors.textSecondary,
+                        },
+                      }}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <CircularProgress size={18} color="inherit" />
+                          Click to Cancel
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            {tool.actionButtonLabel ||
+                              (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
+                          </span>
+                          <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
+                        </>
+                      )}
+                    </Button>
+                    {submitDisabledReason && !isProcessing && (
+                      <FormHelperText
+                        sx={{
+                          textAlign: "center",
+                          fontSize: "1rem",
+                          color: muiTheme.palette.error.main,
+                        }}
+                      >
+                        {submitDisabledReason}
+                      </FormHelperText>
+                    )}
+                  </>
                 )}
               </Stack>
             </Stack>
@@ -1077,14 +1107,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           display: "flex",
           flexDirection: "column",
           gap: 2,
-          "&::-webkit-scrollbar": { width: 8 },
-          "&::-webkit-scrollbar-thumb": {
-            backgroundColor: alpha(muiTheme.palette.text.primary, 0.2),
-            borderRadius: 999,
-          },
-          "&::-webkit-scrollbar-track": {
-            backgroundColor: alpha(muiTheme.palette.background.paper, 0.4),
-          },
+          ...getHighContrastScrollbarStyles(),
         }}
       >
         {defaultTools.map(renderToolCard)}

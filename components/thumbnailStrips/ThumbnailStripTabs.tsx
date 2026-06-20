@@ -1,4 +1,5 @@
 import React from "react";
+import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Box from "@mui/material/Box";
@@ -38,7 +39,7 @@ const STRIP_ICONS: Record<ThumbnailStripId, React.ComponentType<SvgIconProps>> =
   characters: Diversity3OutlinedIcon,
   starred: StarOutlineIcon,
   reference: CollectionsBookmarkIcon,
-  environment: AutoStoriesIcon,
+  bookImages: AutoStoriesIcon,
 };
 
 interface ThumbnailStripTabsProps {
@@ -120,27 +121,23 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
               : {}),
           }}
         >
-          <button
-            type="button"
+          <ButtonBase
             id={tabId}
             data-testid={tabId}
             onClick={() => onActivate(stripId)}
             onDragEnter={(event) => handleDragEnter(event, stripId)}
-            style={{
+            sx={{
               width: "100%",
               minHeight: 42,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              padding: 8,
-              background: "none",
-              border: "none",
-              cursor: "pointer",
+              padding: 1,
               color: theme.colors.textPrimary,
             }}
           >
             <IconComponent fontSize="medium" />
-          </button>
+          </ButtonBase>
           <Box
             sx={{
               display: "flex",
@@ -191,7 +188,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
         width: railWidth,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",
+        justifyContent: "flex-start",
         gap: tabGap,
         marginLeft: "-1px", // cover up this bit of the border of the box we're next to so that it looks seamless
       }}

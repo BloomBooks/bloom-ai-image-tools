@@ -53,6 +53,7 @@ export const ColoringBookIcon: React.FC<SvgIconProps> = (props) => (
 
 export const Icons = {
   History: "M3 3v5h5 M3.05 13A9 9 0 1 0 6 5.3L3 8",
+  Expand: "M15 3h6v6 M21 3l-7 7 M9 21H3v-6 M3 21l7-7 M3 9V3h6 M3 3l7 7 M21 15v6h-6 M21 21l-7-7",
   Save: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z M17 21v-8H7v8 M7 3v5h8",
   Copy: "M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.24a2 2 0 0 0-.6-.16l-3.5-3.5a2 2 0 0 0-1.4-.6H10a2 2 0 0 0-2 2z M16 4v4h4 M4 8v12a2 2 0 0 0 2 2h8",
   Upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
@@ -73,4 +74,7 @@ export const Icons = {
   More: "M6 12h.01 M12 12h.01 M18 12h.01",
   Trash:
     "M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M10 11v6 M14 11v6",
+  Cut: "M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M20 4L8.12 15.88 M14.47 14.48L20 20 M8.12 8.12L12 12",
+  SelectAll:
+    "M3 8V5a2 2 0 0 1 2-2h3 M16 3h3a2 2 0 0 1 2 2v3 M21 16v3a2 2 0 0 1-2 2h-3 M8 21H5a2 2 0 0 1-2-2v-3",
 };

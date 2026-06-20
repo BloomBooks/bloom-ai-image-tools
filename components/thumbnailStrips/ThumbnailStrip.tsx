@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { Button, ButtonBase, IconButton, Tooltip } from "@mui/material";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
@@ -13,6 +14,13 @@ interface ThumbnailStripProps {
   stripId: ThumbnailStripId;
   itemIds: string[];
   itemsById: Record<string, ImageRecord>;
+  replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   removeDisabledReasonById?: Partial<Record<string, string>>;
   selectedId: string | null;
   previewModifierActive?: boolean;
@@ -22,9 +30,11 @@ interface ThumbnailStripProps {
   allowReorder: boolean;
   pinned: boolean;
   isActive?: boolean;
-  hasHiddenHistory?: boolean;
-  onRequestHistoryAccess?: () => void;
-  emptyStateMessage?: string;
+  // Short tip describing what the strip is for. Rendered in the lower-right
+  // corner (the single, consistent home for every strip's tip) while the strip
+  // has no items of its own.
+  tip?: string;
+  onOpenPreview?: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
@@ -32,6 +42,10 @@ interface ThumbnailStripProps {
   // When provided on the "characters" strip, renders a paste/upload placeholder
   // that adds a pasted (or picked) image as a new character.
   onAddCharacterImage?: (file: File) => void;
+  onAssignReplacement?: (incomingId: string, replacementId: string | null) => void;
+  onAssignCurrent?: (incomingId: string | null, currentImageId: string) => void;
+  hasHiddenHistory?: boolean;
+  onRequestHistoryAccess?: () => void;
   onVisibleItemIdsChange?: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   isAnyDndDragging?: boolean;
 }
@@ -46,6 +60,8 @@ const stripShellStyles: React.CSSProperties = {
 };
 
 const THUMB_WIDTH = 112;
+const BOOK_IMAGE_PAIR_WIDTH = THUMB_WIDTH;
+const BOOK_IMAGE_LABEL_COLUMN_WIDTH = 72;
 const STRIP_ITEM_GAP = 12;
 const STRIP_HORIZONTAL_PADDING = 16;
 const STRIP_VISIBILITY_OVERSCAN_ITEMS = 2;
@@ -55,6 +71,273 @@ const buildStripItemId = (stripId: ThumbnailStripId, imageId: string) =>
 
 const buildStripContainerId = (stripId: ThumbnailStripId) => `strip:${stripId}`;
 const buildStripStackId = (stripId: ThumbnailStripId) => `stripStack:${stripId}`;
+const buildBookImageReplacementSlotId = (incomingId: string) =>
+  `bookImageReplacement:${incomingId}`;
+const buildBookImageCurrentSlotId = (incomingId: string | null) =>
+  `bookImageCurrent:${incomingId ?? "new"}`;
+
+const BOOK_IMAGE_PAIR_RADIUS = 0;
+
+const ASPECT_RATIO_TOLERANCE = 0.05;
+
+const formatResolution = (resolution: { width: number; height: number }) =>
+  `${resolution.width}x${resolution.height}`;
+
+const gcd = (left: number, right: number): number => {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+  while (b) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a || 1;
+};
+
+const formatAspectRatio = (resolution: { width: number; height: number }) => {
+  const divisor = gcd(resolution.width, resolution.height);
+  return `${resolution.width / divisor}:${resolution.height / divisor}`;
+};
+
+const formatRatioComparison = (
+  current: { width: number; height: number },
+  replacement: { width: number; height: number },
+) => {
+  const useWidthScale = current.width >= current.height;
+  if (useWidthScale) {
+    const scaledReplacementHeight = Math.round(
+      (current.width * replacement.height) / replacement.width,
+    );
+    return `${current.width}:${current.height} to ${current.width}:${scaledReplacementHeight} (${formatAspectRatio(replacement)})`;
+  }
+
+  const scaledReplacementWidth = Math.round(
+    (current.height * replacement.width) / replacement.height,
+  );
+  return `${current.width}:${current.height} to ${scaledReplacementWidth}:${current.height} (${formatAspectRatio(replacement)})`;
+};
+
+type CompatibilityIndicator = {
+  kind: "aspect" | "resolution";
+  level: "info" | "warning";
+  message: string;
+};
+
+const CompatibilityBadgeGlyph: React.FC<{
+  kind: CompatibilityIndicator["kind"];
+}> = ({ kind }) => {
+  if (kind === "aspect") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        aria-hidden="true"
+        style={{ display: "block" }}
+      >
+        <rect
+          x="4"
+          y="6"
+          width="8"
+          height="12"
+          rx="1"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+        <rect
+          x="13"
+          y="9"
+          width="7"
+          height="8"
+          rx="1"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style={{ display: "block" }}>
+      <rect x="4" y="4" width="4" height="4" fill="currentColor" />
+      <rect x="10" y="4" width="4" height="4" fill="currentColor" opacity="0.8" />
+      <rect x="16" y="4" width="4" height="4" fill="currentColor" opacity="0.6" />
+      <rect x="4" y="10" width="4" height="4" fill="currentColor" opacity="0.8" />
+      <rect x="10" y="10" width="4" height="4" fill="currentColor" />
+      <rect x="16" y="10" width="4" height="4" fill="currentColor" opacity="0.8" />
+      <rect x="4" y="16" width="4" height="4" fill="currentColor" opacity="0.6" />
+      <rect x="10" y="16" width="4" height="4" fill="currentColor" opacity="0.8" />
+      <rect x="16" y="16" width="4" height="4" fill="currentColor" />
+    </svg>
+  );
+};
+
+const getReplacementCompatibilityIndicators = (
+  current: ImageRecord,
+  replacement: ImageRecord | null,
+): CompatibilityIndicator[] => {
+  if (!replacement?.resolution || !current.resolution) {
+    return [];
+  }
+
+  const currentAspect = current.resolution.width / current.resolution.height;
+  const replacementAspect = replacement.resolution.width / replacement.resolution.height;
+  const aspectDelta =
+    Math.max(currentAspect, replacementAspect) / Math.min(currentAspect, replacementAspect) - 1;
+  const sameAspect = aspectDelta <= ASPECT_RATIO_TOLERANCE;
+  const currentPixels = current.resolution.width * current.resolution.height;
+  const replacementPixels = replacement.resolution.width * replacement.resolution.height;
+  const indicators: CompatibilityIndicator[] = [];
+
+  if (!sameAspect) {
+    indicators.push({
+      kind: "aspect",
+      level: "warning",
+      message: `Aspect ratio changed from ${formatRatioComparison(current.resolution, replacement.resolution)}.`,
+    });
+  }
+
+  if (replacementPixels < currentPixels) {
+    indicators.push({
+      kind: "resolution",
+      level: "warning",
+      message: `Resolution decreased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)}.`,
+    });
+  }
+
+  if (!indicators.length && sameAspect && replacementPixels > currentPixels) {
+    indicators.push({
+      kind: "resolution",
+      level: "info",
+      message: `Resolution increased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)} while keeping the same aspect ratio (${formatAspectRatio(current.resolution)}).`,
+    });
+  }
+
+  return indicators;
+};
+
+const BookImageStripLabels: React.FC = () => (
+  <div
+    style={{
+      position: "sticky",
+      left: 0,
+      zIndex: 1,
+      width: BOOK_IMAGE_LABEL_COLUMN_WIDTH,
+      flexShrink: 0,
+      display: "grid",
+      gridTemplateRows: "1fr 1fr",
+      gap: 8,
+      alignSelf: "stretch",
+      paddingTop: 10,
+      paddingBottom: 10,
+      // Solid (not a fade-to-transparent gradient): pairs scroll left and pass
+      // *behind* this sticky column, so it must fully mask them — a translucent
+      // edge would let thumbnails bleed through to the left of the labels.
+      background: theme.colors.surface,
+    }}
+  >
+    {(["Current", "Replacement"] as const).map((label) => (
+      <div
+        key={label}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          color: theme.colors.textMuted,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          textAlign: "left",
+        }}
+      >
+        {label}
+      </div>
+    ))}
+  </div>
+);
+
+const EditableBookImageEmptyPair: React.FC<{
+  isAnyDndDragging?: boolean;
+}> = ({ isAnyDndDragging = false }) => {
+  const currentDroppable = useDroppable({
+    id: buildBookImageCurrentSlotId(null),
+    data: {
+      kind: "book-image-current",
+      incomingId: null,
+    },
+  });
+
+  return (
+    <div
+      data-testid="thumbnail-strip-item-bookImages-empty"
+      style={{
+        width: BOOK_IMAGE_PAIR_WIDTH,
+        flexShrink: 0,
+        display: "flex",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+          borderRadius: BOOK_IMAGE_PAIR_RADIUS,
+          overflow: "hidden",
+          border: `1px solid ${theme.colors.border}`,
+          backgroundColor: theme.colors.surface,
+          boxShadow: theme.colors.panelShadow,
+        }}
+      >
+        <div
+          ref={currentDroppable.setNodeRef}
+          data-testid="book-image-current-slot-new"
+          style={{
+            padding: 6,
+            backgroundColor: currentDroppable.isOver ? theme.colors.dropZone : theme.colors.surface,
+          }}
+        >
+          <ImageSlot
+            image={null}
+            variant="thumb"
+            isAnyDndDragging={isAnyDndDragging}
+            controls={{
+              upload: false,
+              paste: false,
+              copy: false,
+              download: false,
+              remove: false,
+            }}
+            renderEmptyState={() => <div style={{ width: "100%", height: "100%" }} />}
+          />
+        </div>
+        <div
+          style={{
+            padding: 6,
+            borderTop: `1px solid ${theme.colors.border}`,
+            backgroundColor: theme.colors.surfaceAlt,
+          }}
+        >
+          <ImageSlot
+            image={null}
+            variant="thumb"
+            isAnyDndDragging={isAnyDndDragging}
+            controls={{
+              upload: false,
+              paste: false,
+              copy: false,
+              download: false,
+              remove: false,
+            }}
+            renderEmptyState={() => <div style={{ width: "100%", height: "100%" }} />}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const createCharacterStackSvgDataUrl = (frontImageData: string | null) => {
   const frontImageMarkup = frontImageData
@@ -401,6 +684,250 @@ const DraggableStripThumb: React.FC<{
   );
 };
 
+const BookImagePairThumb: React.FC<{
+  stripId: ThumbnailStripId;
+  item: ImageRecord;
+  replacement: ImageRecord | null;
+  isSelected: boolean;
+  isReplacementSelected: boolean;
+  isPreviewSelected: boolean;
+  previewModifierActive: boolean;
+  allowRemove: boolean;
+  removeDisabledReason?: string;
+  isAnyDndDragging?: boolean;
+  onSelect: () => void;
+  onSelectReplacement: () => void;
+  onToggleStar: () => void;
+  onRemove?: () => void;
+  onClearReplacement: () => void;
+}> = ({
+  stripId,
+  item,
+  replacement,
+  isSelected,
+  isReplacementSelected,
+  isPreviewSelected,
+  previewModifierActive,
+  allowRemove,
+  removeDisabledReason: _removeDisabledReason,
+  isAnyDndDragging = false,
+  onSelect,
+  onSelectReplacement,
+  onRemove,
+  onClearReplacement,
+}) => {
+  const currentDroppable = useDroppable({
+    id: buildBookImageCurrentSlotId(item.id),
+    data: {
+      kind: "book-image-current",
+      incomingId: item.id,
+    },
+    disabled: !allowRemove,
+  });
+  const currentDraggable = useDraggable({
+    id: `bookImageCurrentItem:${item.id}`,
+    data: {
+      kind: "image",
+      imageId: item.id,
+      source: { type: "book-image-current", incomingId: item.id },
+    },
+  });
+  const outgoingDroppable = useDroppable({
+    id: buildBookImageReplacementSlotId(item.id),
+    data: {
+      kind: "book-image-replacement",
+      incomingId: item.id,
+    },
+  });
+  const outgoingDraggable = useDraggable({
+    id: `bookImageReplacementItem:${item.id}`,
+    disabled: !replacement,
+    data: replacement
+      ? {
+          kind: "image",
+          imageId: replacement.id,
+          source: { type: "book-image-replacement", incomingId: item.id },
+        }
+      : undefined,
+  });
+
+  const setOutgoingNodeRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      outgoingDroppable.setNodeRef(node);
+      outgoingDraggable.setNodeRef(node);
+    },
+    [outgoingDraggable, outgoingDroppable],
+  );
+
+  const setCurrentNodeRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      currentDroppable.setNodeRef(node);
+      currentDraggable.setNodeRef(node);
+    },
+    [currentDraggable, currentDroppable],
+  );
+
+  return (
+    <div
+      data-testid={`thumbnail-strip-item-${stripId}`}
+      data-strip-item-id={item.id}
+      style={{
+        width: BOOK_IMAGE_PAIR_WIDTH,
+        flexShrink: 0,
+        display: "flex",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: BOOK_IMAGE_PAIR_RADIUS,
+          overflow: "hidden",
+          border: `1px solid ${theme.colors.border}`,
+          backgroundColor: theme.colors.surface,
+          boxShadow: theme.colors.panelShadow,
+        }}
+      >
+        <div
+          ref={setCurrentNodeRef}
+          data-testid={`book-image-current-slot-${item.id}`}
+          {...currentDraggable.attributes}
+          {...currentDraggable.listeners}
+          style={{
+            padding: 6,
+            backgroundColor: currentDroppable.isOver
+              ? theme.colors.dropZone
+              : isSelected
+                ? theme.colors.accentSubtle
+                : theme.colors.surface,
+            cursor: "grab",
+            opacity: currentDraggable.isDragging ? 0.35 : 1,
+          }}
+        >
+          <ImageSlot
+            image={item}
+            variant="thumb"
+            borderless
+            isAnyDndDragging={isAnyDndDragging}
+            previewModifierActive={previewModifierActive}
+            previewSelected={isPreviewSelected}
+            dataTestId="history-card"
+            onClick={onSelect}
+            isSelected={isSelected}
+            draggableImageId={undefined}
+            controls={{
+              upload: false,
+              paste: false,
+              copy: true,
+              download: true,
+              remove: allowRemove,
+            }}
+            onRemove={allowRemove ? onRemove : undefined}
+          />
+        </div>
+        <div
+          data-testid={`book-image-outgoing-slot-${item.id}`}
+          ref={setOutgoingNodeRef}
+          {...outgoingDraggable.attributes}
+          {...outgoingDraggable.listeners}
+          style={{
+            position: "relative",
+            padding: 6,
+            backgroundColor: outgoingDroppable.isOver
+              ? theme.colors.dropZone
+              : theme.colors.surfaceAlt,
+            cursor: replacement ? "grab" : "default",
+            opacity: outgoingDraggable.isDragging ? 0.35 : 1,
+          }}
+        >
+          {(() => {
+            const indicators = getReplacementCompatibilityIndicators(item, replacement);
+            if (!indicators.length) {
+              return null;
+            }
+
+            return (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 12,
+                  right: 12,
+                  zIndex: 2,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: 6,
+                }}
+              >
+                {indicators.map((indicator) => {
+                  const badgeColor =
+                    indicator.level === "warning" ? theme.colors.danger : theme.colors.accent;
+
+                  return (
+                    <Tooltip
+                      key={`${indicator.kind}-${indicator.level}`}
+                      title={indicator.message}
+                      arrow
+                      placement="top"
+                    >
+                      <div
+                        data-testid={`book-image-replacement-compatibility-${item.id}-${indicator.kind}`}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: badgeColor,
+                          backgroundColor: theme.colors.overlayStrong,
+                          boxShadow: theme.colors.insetShadow,
+                          pointerEvents: "auto",
+                        }}
+                      >
+                        <CompatibilityBadgeGlyph kind={indicator.kind} />
+                      </div>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          <ImageSlot
+            image={replacement}
+            variant="thumb"
+            borderless={!!replacement}
+            isAnyDndDragging={isAnyDndDragging}
+            previewModifierActive={false}
+            previewSelected={false}
+            dataTestId={replacement ? "history-card" : undefined}
+            onClick={replacement ? onSelectReplacement : undefined}
+            isSelected={isReplacementSelected}
+            draggableImageId={undefined}
+            onRemove={replacement ? onClearReplacement : undefined}
+            controls={{
+              upload: false,
+              paste: false,
+              copy: !!replacement,
+              download: !!replacement,
+              remove: !!replacement,
+            }}
+            renderEmptyState={() => (
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "block",
+                }}
+              />
+            )}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CharacterStackThumb: React.FC<{
   stripId: ThumbnailStripId;
   imageIds: string[];
@@ -422,6 +949,10 @@ const CharacterStackThumb: React.FC<{
   );
 
   return (
+    // Intentionally a native <button>, not MUI ButtonBase: this is a dnd-kit drag
+    // handle (setNodeRef + spread listeners/attributes). ButtonBase's built-in
+    // ripple and Space/Enter keyboard handlers conflict with dnd-kit's pointer and
+    // keyboard sensors, and MUI styling adds nothing to a grab-cursor thumbnail.
     <button
       ref={draggable.setNodeRef}
       type="button"
@@ -554,6 +1085,8 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   stripId,
   itemIds,
   itemsById,
+  replacementItemsByIncomingId = {},
+  bookImagesAction,
   removeDisabledReasonById,
   selectedId,
   previewModifierActive = false,
@@ -563,18 +1096,21 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   allowReorder,
   pinned,
   isActive = false,
-  hasHiddenHistory = false,
-  onRequestHistoryAccess,
-  emptyStateMessage,
+  tip,
+  onOpenPreview,
   onSelect,
   onToggleStar,
   onRenameItem,
   onRemoveItem,
   onAddCharacterImage,
+  onAssignReplacement,
+  hasHiddenHistory = false,
+  onRequestHistoryAccess,
   onVisibleItemIdsChange,
   isAnyDndDragging = false,
 }) => {
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
+  const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
   const droppable = useDroppable({
     id: buildStripContainerId(stripId),
     data: { kind: "strip", stripId },
@@ -640,12 +1176,38 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
     );
   }, [orderedItemIds, stripId]);
 
+  const canOpenPreview = orderedItemIds.length > 0 && !!onOpenPreview;
+
+  const publishVisibleItemIds = React.useCallback(
+    (visibleItemIds: string[]) => {
+      if (!onVisibleItemIdsChange) {
+        return;
+      }
+
+      const deduped = visibleItemIds.filter((id, index, ids) => ids.indexOf(id) === index);
+      const lastPublished = lastPublishedVisibleIdsRef.current;
+      const isUnchanged =
+        !!lastPublished &&
+        lastPublished.length === deduped.length &&
+        lastPublished.every((id, index) => id === deduped[index]);
+
+      if (isUnchanged) {
+        return;
+      }
+
+      lastPublishedVisibleIdsRef.current = deduped;
+      onVisibleItemIdsChange(stripId, deduped);
+    },
+    [onVisibleItemIdsChange, stripId],
+  );
+
   React.useEffect(() => {
     if (!onVisibleItemIdsChange) {
       return;
     }
 
     return () => {
+      lastPublishedVisibleIdsRef.current = null;
       onVisibleItemIdsChange(stripId, []);
     };
   }, [onVisibleItemIdsChange, stripId]);
@@ -657,18 +1219,19 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
 
     const node = stripContentRef.current;
     if (!node) {
-      onVisibleItemIdsChange(stripId, orderedItemIds);
+      publishVisibleItemIds(orderedItemIds);
       return;
     }
 
     const publishVisibleIds = () => {
       if (orderedItemIds.length === 0) {
-        onVisibleItemIdsChange(stripId, []);
+        publishVisibleItemIds([]);
         return;
       }
 
-      const stride = THUMB_WIDTH + STRIP_ITEM_GAP;
-      const visibleWidth = Math.max(THUMB_WIDTH, node.clientWidth - STRIP_HORIZONTAL_PADDING * 2);
+      const itemWidth = stripId === "bookImages" ? BOOK_IMAGE_PAIR_WIDTH : THUMB_WIDTH;
+      const stride = itemWidth + STRIP_ITEM_GAP;
+      const visibleWidth = Math.max(itemWidth, node.clientWidth - STRIP_HORIZONTAL_PADDING * 2);
       const startIndex = Math.max(
         0,
         Math.floor(node.scrollLeft / stride) - STRIP_VISIBILITY_OVERSCAN_ITEMS,
@@ -678,7 +1241,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         Math.ceil(visibleWidth / stride) + STRIP_VISIBILITY_OVERSCAN_ITEMS * 2,
       );
       const endIndex = Math.min(orderedItemIds.length, startIndex + visibleCount);
-      onVisibleItemIdsChange(stripId, orderedItemIds.slice(startIndex, endIndex));
+      publishVisibleItemIds(orderedItemIds.slice(startIndex, endIndex));
     };
 
     publishVisibleIds();
@@ -703,7 +1266,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       window.removeEventListener("resize", handleResize);
       resizeObserver?.disconnect();
     };
-  }, [onVisibleItemIdsChange, orderedItemIds, stripId]);
+  }, [onVisibleItemIdsChange, orderedItemIds, publishVisibleItemIds, stripId]);
 
   const content =
     orderedItems.length || showCharacterPlaceholder ? (
@@ -711,7 +1274,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         ref={setStripContentNodeRef}
         style={{
           display: "flex",
-          alignItems: "center",
+          // Top-align thumbnails so the images line up regardless of whether an
+          // item carries a caption beneath it (captions grow downward).
+          alignItems: stripId === "bookImages" ? "stretch" : "flex-start",
           padding: "8px 16px",
           gap: STRIP_ITEM_GAP,
           overflowX: "auto",
@@ -720,10 +1285,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         }}
       >
         {hasHiddenHistory && onRequestHistoryAccess && (
-          <button
-            type="button"
+          <ButtonBase
             onClick={onRequestHistoryAccess}
-            style={{
+            sx={{
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
@@ -731,9 +1295,9 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               flexShrink: 0,
               width: 176,
               height: 144,
-              borderRadius: 16,
+              borderRadius: 4,
               border: `2px dashed ${theme.colors.border}`,
-              padding: 16,
+              padding: 2,
               textAlign: "left",
               backgroundColor: theme.colors.surfaceAlt,
               color: theme.colors.textPrimary,
@@ -749,7 +1313,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               <Icon path={Icons.Refresh} width={14} height={14} />
               Reconnect folder
             </span>
-          </button>
+          </ButtonBase>
         )}
         {showCharacterStack && (
           <CharacterStackThumb
@@ -762,7 +1326,37 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         {showCharacterPlaceholder && onAddCharacterImage && (
           <CharacterPastePlaceholder onAddImage={onAddCharacterImage} />
         )}
-        {allowReorder ? (
+        {stripId === "bookImages" ? (
+          <>
+            <BookImageStripLabels />
+            {orderedItems.map((item) => (
+              <BookImagePairThumb
+                key={`${stripId}-${item.id}`}
+                stripId={stripId}
+                item={item}
+                replacement={replacementItemsByIncomingId[item.id] || null}
+                isSelected={item.id === selectedId}
+                isReplacementSelected={replacementItemsByIncomingId[item.id]?.id === selectedId}
+                isPreviewSelected={previewSelectionIdSet.has(item.id)}
+                previewModifierActive={previewModifierActive}
+                allowRemove={allowRemove}
+                removeDisabledReason={removeDisabledReasonById?.[item.id]}
+                isAnyDndDragging={isAnyDndDragging}
+                onSelect={() => onSelect(item.id)}
+                onSelectReplacement={() => {
+                  const replacement = replacementItemsByIncomingId[item.id];
+                  if (replacement) {
+                    onSelect(replacement.id);
+                  }
+                }}
+                onToggleStar={() => onToggleStar(item.id)}
+                onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
+                onClearReplacement={() => onAssignReplacement?.(item.id, null)}
+              />
+            ))}
+            {allowDrop ? <EditableBookImageEmptyPair isAnyDndDragging={isAnyDndDragging} /> : null}
+          </>
+        ) : allowReorder ? (
           <SortableContext
             items={orderedItems.map((item) => buildStripItemId(stripId, item.id))}
             strategy={horizontalListSortingStrategy}
@@ -804,40 +1398,31 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
             />
           ))
         )}
-
-        {!orderedItems.length && emptyStateMessage && !showCharacterPlaceholder && (
-          <div
-            style={{
-              width: "100%",
-              padding: "24px 16px",
-              textAlign: "left",
-              color: theme.colors.textMuted,
-            }}
-          >
-            {emptyStateMessage}
-          </div>
-        )}
       </div>
     ) : (
+      // Empty strip: just a drop target. The strip's tip (what this area is for)
+      // is rendered in the lower-right corner of the shell below, the single
+      // consistent home for every strip's tip.
       <div
         ref={droppable.setNodeRef}
         style={{
           display: "flex",
           alignItems: "center",
+          minHeight: 96,
           padding: "24px 16px",
-          color: theme.colors.textMuted,
-          fontSize: "0.9rem",
-          gap: 12,
         }}
-      >
-        <span>{emptyStateMessage || "No items yet"}</span>
-      </div>
+      />
     );
 
   return (
     <div
       style={{
         ...stripShellStyles,
+        // Grow to fill the row height set by the tab rail (which is naturally as
+        // tall as all its tabs combined), with minHeight as the floor when there
+        // are only a few tabs. Lets the border reach the bottom tab without math.
+        flexGrow: 1,
+        flexShrink: 1,
         minHeight: 168,
         boxShadow: pinned ? theme.colors.panelShadow : "none",
         borderColor: isActive ? STRIP_ACTIVE_BORDER_COLOR : STRIP_BORDER_COLOR,
@@ -849,7 +1434,125 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       data-active={isActive ? "true" : "false"}
       data-pinned={pinned ? "true" : "false"}
     >
-      {content}
+      <Tooltip title="Show in full-screen gallery" arrow>
+        <span
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            zIndex: 2,
+            display: "inline-flex",
+          }}
+        >
+          <IconButton
+            data-testid={`thumbnail-strip-expand-${stripId}`}
+            aria-label={`Expand ${stripId} strip preview`}
+            disabled={!canOpenPreview}
+            onClick={() => {
+              if (!canOpenPreview) {
+                return;
+              }
+
+              onOpenPreview(stripId, orderedItemIds);
+            }}
+            sx={{
+              width: 32,
+              height: 32,
+              padding: 0,
+              borderRadius: 999,
+              backgroundColor: theme.colors.overlayStrong,
+              color: theme.colors.textPrimary,
+              opacity: canOpenPreview ? 1 : 0.45,
+              "&.Mui-disabled": {
+                color: theme.colors.textPrimary,
+                opacity: 0.45,
+              },
+            }}
+          >
+            <Icon path={Icons.Expand} width={16} height={16} />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <div
+        style={{
+          // The book-images strip offsets its thumbnails to the right of the
+          // sticky label column, so they already clear the top-left expand
+          // button — no need for the full top band other strips require.
+          paddingTop: stripId === "bookImages" ? 8 : 30,
+          paddingBottom: stripId === "bookImages" && bookImagesAction ? 48 : 0,
+        }}
+      >
+        {content}
+      </div>
+      {stripId === "bookImages" && bookImagesAction ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 12,
+            zIndex: 3,
+            display: "flex",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Button
+            variant="text"
+            data-testid={bookImagesAction.testId}
+            disabled={bookImagesAction.disabled}
+            onClick={bookImagesAction.onClick}
+            sx={{
+              minWidth: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: 0,
+              boxShadow: "none",
+              color: theme.colors.textPrimary,
+              fontSize: 13,
+              fontWeight: 500,
+              lineHeight: 1.4,
+              textTransform: "none",
+              opacity: bookImagesAction.disabled ? 0.6 : 1,
+              "&.Mui-disabled": { color: theme.colors.textMuted },
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>
+              💡
+            </span>
+            {bookImagesAction.label}
+          </Button>
+        </div>
+      ) : null}
+      {tip && orderedItems.length === 0 && !(stripId === "bookImages" && bookImagesAction) ? (
+        <div
+          data-testid={`thumbnail-strip-tip-${stripId}`}
+          style={{
+            position: "absolute",
+            right: 12,
+            bottom: 12,
+            zIndex: 3,
+            // Anchored only by `right`, so the block shrinks to fit: short tips
+            // stay tucked in the corner, while long ones expand leftward and use
+            // the full strip width before wrapping (capped to clear the padding).
+            maxWidth: "calc(100% - 24px)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6,
+            textAlign: "left",
+            color: theme.colors.textMuted,
+            fontSize: 12,
+            lineHeight: 1.4,
+            // The empty strip beneath is a drop target; let pointer events fall
+            // through so the tip never blocks a drop.
+            pointerEvents: "none",
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.2 }}>
+            💡
+          </span>
+          <span style={{ minWidth: 0 }}>{tip}</span>
+        </div>
+      ) : null}
     </div>
   );
 };

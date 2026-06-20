@@ -1,4 +1,5 @@
 import React from "react";
+import IconButton from "@mui/material/IconButton";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { theme } from "../themes";
@@ -25,24 +26,19 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
   if (!isVisible) return null;
 
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={(event) => {
         event.stopPropagation();
         onToggle();
       }}
       aria-pressed={isStarred}
       title={isStarred ? "Unstar image" : "Star image"}
-      style={{
+      sx={{
         position: "absolute",
         top: cornerOffset,
         left: cornerOffset,
-        padding: buttonPadding,
+        padding: `${buttonPadding}px`,
         borderRadius: 999,
-        border: "none",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
         backgroundColor: isStarred ? theme.colors.accent : theme.colors.overlay,
         color: isStarred ? theme.colors.textOnAccent : theme.colors.textPrimary,
         opacity: isStarred ? 1 : isHovered ? 1 : 0,
@@ -64,6 +60,6 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
       ) : (
         <StarBorderIcon sx={{ fontSize: 16 }} />
       )}
-    </button>
+    </IconButton>
   );
 };

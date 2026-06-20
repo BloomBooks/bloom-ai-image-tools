@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Stack, Tooltip, Typography } from "@mui/material";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { keyframes } from "@emotion/react";
+import { NoSpendingLimitWarning, OPENROUTER_ACCOUNT_URL } from "./NoSpendingLimitWarning";
 
 const OPENROUTER_CREDITS_URL = "https://openrouter.ai/settings/credits";
 const wiggle = keyframes`
@@ -31,6 +33,13 @@ export type OpenRouterCreditsHeaderProps = {
   creditsProgressFraction: number | null;
   creditsProgressAriaProps: React.HTMLAttributes<HTMLElement>;
 
+  // When true, the connected key has no per-key spending limit; show a warning that links
+  // to OpenRouter's key settings so a lost key can't run up unbounded charges.
+  showNoLimitWarning?: boolean;
+  // Opens an OpenRouter link in the user's real default browser (via the host when
+  // embedded in Bloom) instead of the WebView's own separate-profile browser.
+  onOpenExternalUrl?: (url: string) => void;
+
   // Styling tokens (kept here so ImageToolsWorkspace remains the source of truth)
   creditsLabelColor: string;
   progressBorderColor: string;
@@ -46,6 +55,7 @@ export type OpenRouterCreditsHeaderProps = {
     border: string;
     panelShadow: string;
     textPrimary: string;
+    danger: string;
   };
 };
 
@@ -56,13 +66,15 @@ export function OpenRouterCreditsHeader({
   creditsTooltipLines,
   creditsProgressFraction,
   creditsProgressAriaProps,
+  showNoLimitWarning,
+  onOpenExternalUrl,
   creditsLabelColor,
   progressBorderColor,
   progressTrackBackground,
   progressFillColor,
   appColors,
 }: OpenRouterCreditsHeaderProps) {
-  const [isWiggling, setIsWiggling] = useState(false);
+  const [isWiggling] = useState(false);
 
   if (shouldShowConnectToOpenRouterCTA) {
     return (
@@ -98,90 +110,121 @@ export function OpenRouterCreditsHeader({
   }
 
   return (
-    <Box
-      component="a"
-      href={OPENROUTER_CREDITS_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      tabIndex={0}
-      aria-label={creditsTooltipLabel}
-      sx={{
-        position: "relative",
-        textAlign: "right",
-        lineHeight: 1.2,
-        cursor: "pointer",
-        outline: "none",
-        textDecoration: "none",
-        color: "inherit",
-        "&:hover [data-role='credits-tooltip'], &:focus-within [data-role='credits-tooltip']": {
-          opacity: 1,
-        },
-      }}
-    >
-      <Typography
-        variant="caption"
+    <Stack direction="row" spacing={1} alignItems="center">
+      {showNoLimitWarning && (
+        <Tooltip title={<NoSpendingLimitWarning onOpenExternalUrl={onOpenExternalUrl} />}>
+          <Box
+            component="a"
+            href={OPENROUTER_ACCOUNT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="OpenRouter spending-limit warning"
+            onClick={(e) => {
+              if (!onOpenExternalUrl) return;
+              e.preventDefault();
+              onOpenExternalUrl(OPENROUTER_ACCOUNT_URL);
+            }}
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              color: appColors.danger,
+              textDecoration: "none",
+            }}
+          >
+            <WarningAmberIcon fontSize="small" />
+          </Box>
+        </Tooltip>
+      )}
+      <Box
+        component="a"
+        href={OPENROUTER_CREDITS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        tabIndex={0}
+        aria-label={creditsTooltipLabel}
+        onClick={(e) => {
+          if (!onOpenExternalUrl) return;
+          e.preventDefault();
+          onOpenExternalUrl(OPENROUTER_CREDITS_URL);
+        }}
         sx={{
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: creditsLabelColor,
-          display: "block",
+          position: "relative",
+          textAlign: "right",
+          lineHeight: 1.2,
+          cursor: "pointer",
+          outline: "none",
+          textDecoration: "none",
+          color: "inherit",
+          "&:hover [data-role='credits-tooltip'], &:focus-within [data-role='credits-tooltip']": {
+            opacity: 1,
+          },
         }}
       >
-        AI image generator credits
-      </Typography>
-
-      <Stack spacing={0.75} alignItems="flex-end" mt={0.5}>
-        <Box
+        <Typography
+          variant="caption"
           sx={{
-            width: 160,
-            height: 10,
-            borderRadius: 999,
-            overflow: "hidden",
-            border: `1px solid ${progressBorderColor}`,
-            backgroundColor: progressTrackBackground,
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: creditsLabelColor,
+            display: "block",
           }}
-          {...creditsProgressAriaProps}
         >
+          AI image generator credits
+        </Typography>
+
+        <Stack spacing={0.75} alignItems="flex-end" mt={0.5}>
           <Box
             sx={{
-              height: "100%",
+              width: 160,
+              height: 10,
               borderRadius: 999,
-              transition: "width 200ms ease",
-              backgroundColor: progressFillColor,
-              width: `${Math.max(0, Math.min(100, (creditsProgressFraction ?? 0) * 100))}%`,
-              opacity: creditsProgressFraction !== null ? 1 : 0.35,
+              overflow: "hidden",
+              border: `1px solid ${progressBorderColor}`,
+              backgroundColor: progressTrackBackground,
             }}
-          />
-        </Box>
-      </Stack>
+            {...creditsProgressAriaProps}
+          >
+            <Box
+              sx={{
+                height: "100%",
+                borderRadius: 999,
+                transition: "width 200ms ease",
+                backgroundColor: progressFillColor,
+                width: `${Math.max(0, Math.min(100, (creditsProgressFraction ?? 0) * 100))}%`,
+                opacity: creditsProgressFraction !== null ? 1 : 0.35,
+              }}
+            />
+          </Box>
+        </Stack>
 
-      {creditsTooltipLines.length > 0 && (
-        <Box
-          data-role="credits-tooltip"
-          sx={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            right: 0,
-            px: 1.25,
-            py: 1,
-            borderRadius: 1,
-            fontSize: "0.75rem",
-            boxShadow: appColors.panelShadow,
-            whiteSpace: "nowrap",
-            transition: "opacity 150ms ease",
-            opacity: 0,
-            pointerEvents: "none",
-            border: `1px solid ${progressBorderColor}`,
-            backgroundColor: appColors.surface,
-            color: appColors.textPrimary,
-          }}
-        >
-          {creditsTooltipLines.map((line, index) => (
-            <div key={`credits-tooltip-${index}`}>{line}</div>
-          ))}
-        </Box>
-      )}
-    </Box>
+        {creditsTooltipLines.length > 0 && (
+          <Box
+            data-role="credits-tooltip"
+            sx={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 0,
+              px: 1.25,
+              py: 1,
+              borderRadius: 1,
+              fontSize: "0.75rem",
+              boxShadow: appColors.panelShadow,
+              whiteSpace: "nowrap",
+              transition: "opacity 150ms ease",
+              opacity: 0,
+              pointerEvents: "none",
+              border: `1px solid ${progressBorderColor}`,
+              backgroundColor: appColors.surface,
+              color: appColors.textPrimary,
+            }}
+          >
+            {creditsTooltipLines.map((line, index) => (
+              <div key={`credits-tooltip-${index}`}>{line}</div>
+            ))}
+          </Box>
+        )}
+      </Box>
+    </Stack>
   );
 }

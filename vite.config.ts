@@ -173,6 +173,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Scan only the app's real entry. Without this, the dep scanner globs
+    // **/*.html and follows the `BloomEditor` symlink into the Bloom repo,
+    // failing on that repo's component-tester harness (component-harness.tsx,
+    // @playwright/test) which has nothing to do with this app.
+    entries: ["index.html"],
     exclude: ["rembg-webgpu"],
   },
   build: {

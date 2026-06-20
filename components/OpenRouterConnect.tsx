@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { theme } from "../themes";
 import { fetchOpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
+import { NoSpendingLimitWarning } from "./NoSpendingLimitWarning";
 
 // NOTE: We previously also supported connecting to OpenRouter via OAuth login.
 // That option has been removed from the UI (the underlying OAuth code in
@@ -33,6 +34,11 @@ interface OpenRouterConnectProps {
   onConnect?: () => void;
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
+  onOpenExternalUrl: (url: string) => void;
+  /** When true (e.g. a Bloom Playground/template book), the editor is opened in a
+   *  shared "demo" context: the user may use any already-supplied key but must not
+   *  set, change, or clear OpenRouter credentials, so those controls are disabled. */
+  demoOnly?: boolean;
 }
 
 export function OpenRouterConnect({
@@ -40,15 +46,20 @@ export function OpenRouterConnect({
   apiKeyPreview,
   onDisconnect,
   onProvideKey,
+  onOpenExternalUrl,
+  demoOnly = false,
 }: OpenRouterConnectProps) {
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
+  // True when the last successful test found the key has no per-key spending limit set.
+  const [keyHasNoLimit, setKeyHasNoLimit] = useState(false);
 
   useEffect(() => {
     setKeyValue(apiKeyPreview ?? "");
     setTestState("idle");
     setTestMessage("");
+    setKeyHasNoLimit(false);
   }, [apiKeyPreview]);
 
   const hasManualKey = Boolean(apiKeyPreview) && !usingEnvKey;
@@ -63,6 +74,7 @@ export function OpenRouterConnect({
   };
 
   const handlePaste = async () => {
+    if (demoOnly) return;
     try {
       const text = await navigator.clipboard.readText();
       const trimmed = text.trim();
@@ -70,6 +82,7 @@ export function OpenRouterConnect({
         setKeyValue(trimmed);
         setTestState("idle");
         setTestMessage("");
+        setKeyHasNoLimit(false);
         onProvideKey(trimmed);
       }
     } catch {
@@ -82,6 +95,7 @@ export function OpenRouterConnect({
     if (!key) return;
     setTestState("testing");
     setTestMessage("");
+    setKeyHasNoLimit(false);
     try {
       const status = await fetchOpenRouterKeyStatus(key);
       const remaining = status.limitRemaining ?? status.accountRemainingCredits;
@@ -91,6 +105,8 @@ export function OpenRouterConnect({
           : "";
       setTestState("success");
       setTestMessage(`Key verified${balancePart}`);
+      // A null limit means there's no per-key spending cap; warn so the user can set one.
+      setKeyHasNoLimit(status.limit === null);
     } catch (err) {
       setTestState("error");
       setTestMessage(err instanceof Error ? err.message : "Key verification failed");
@@ -98,7 +114,7 @@ export function OpenRouterConnect({
   };
 
   const handleKeyBlur = () => {
-    if (usingEnvKey) {
+    if (usingEnvKey || demoOnly) {
       return;
     }
     const trimmed = keyValue.trim();
@@ -206,6 +222,12 @@ export function OpenRouterConnect({
         Once you have an OpenRouter account, paste in an API key below.
       </Typography>
 
+      {demoOnly && (
+        <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
+          This is a demo book, so the OpenRouter connection can't be changed here.
+        </Typography>
+      )}
+
       {renderOptionCard(
         "apiKey",
         {
@@ -222,10 +244,11 @@ export function OpenRouterConnect({
               setKeyValue(e.target.value);
               setTestState("idle");
               setTestMessage("");
+              setKeyHasNoLimit(false);
             }}
             onBlur={handleKeyBlur}
             placeholder="Paste OpenRouter key"
-            disabled={usingEnvKey}
+            disabled={usingEnvKey || demoOnly}
             size="small"
             fullWidth
             sx={{
@@ -233,7 +256,7 @@ export function OpenRouterConnect({
               bgcolor: theme.colors.surface,
             }}
             InputProps={{
-              endAdornment: !usingEnvKey && !keyValue && (
+              endAdornment: !usingEnvKey && !keyValue && !demoOnly && (
                 <InputAdornment position="end">
                   <IconButton
                     size="small"
@@ -252,7 +275,7 @@ export function OpenRouterConnect({
             }}
           />
           <Stack direction="row" spacing={1} justifyContent="flex-end">
-            {(hasManualKey || hasEnvKey) && (
+            {(hasManualKey || hasEnvKey || Boolean(keyValue.trim())) && (
               <Button
                 type="button"
                 data-testid="openrouter-test-key"
@@ -279,8 +302,10 @@ export function OpenRouterConnect({
                 type="button"
                 data-testid="openrouter-clear-key"
                 onClick={handleDisconnect}
+                disabled={demoOnly}
                 variant="outlined"
                 size="small"
+                sx={{ opacity: demoOnly ? 0.5 : 1 }}
               >
                 Forget Key
               </Button>
@@ -297,6 +322,10 @@ export function OpenRouterConnect({
             >
               {testState === "success" ? `✔ ${testMessage}` : `✘ ${testMessage}`}
             </Typography>
+          )}
+
+          {testState === "success" && keyHasNoLimit && (
+            <NoSpendingLimitWarning onOpenExternalUrl={onOpenExternalUrl} />
           )}
 
           {usingEnvKey && (

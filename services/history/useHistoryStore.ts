@@ -14,7 +14,7 @@ import { supportsFolderStorage } from "./folder/FolderHistoryBackend";
 const DEFAULT_STRIPS: ThumbnailStripsSnapshot = {
   activeStripId: "history",
   pinnedStripIds: [],
-  itemIdsByStrip: { history: [], starred: [], reference: [], environment: [], characters: [] },
+  itemIdsByStrip: { history: [], starred: [], reference: [], bookImages: [], characters: [] },
 };
 
 export const historyEntryToImageRecord = (
@@ -23,6 +23,7 @@ export const historyEntryToImageRecord = (
 ): ImageRecord => ({
   id: entry.id,
   parentId: entry.parentId ?? null,
+  incomingSlotId: entry.incomingSlotId,
   imageData: dataUrl ?? "",
   imageFileName: imageFileNameForEntry(entry),
   toolId: entry.toolId,
@@ -44,6 +45,7 @@ export const historyEntryToImageRecord = (
 export const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): HistoryEntry => ({
   id: record.id,
   parentId: record.parentId ?? null,
+  incomingSlotId: record.incomingSlotId,
   toolId: record.toolId,
   parameters: record.parameters ?? {},
   promptUsed: record.promptUsed ?? "",
@@ -137,7 +139,7 @@ export const useHistoryStore = (): UseHistoryStoreResult => {
     const toLoad = snapshot.entries.filter((entry) => !bytesById[entry.id]);
     if (toLoad.length === 0) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const updates: Record<string, string> = {};
       for (const entry of toLoad) {
         const url = await store.loadDataUrl(entry.id);

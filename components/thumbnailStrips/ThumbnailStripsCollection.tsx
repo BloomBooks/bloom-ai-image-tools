@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   getOtherStripsContainingItem,
-  STRIP_DESCRIPTIONS,
+  STRIP_TIPS,
   THUMBNAIL_STRIP_ORDER,
   ThumbnailStripConfig,
   THUMBNAIL_STRIP_CONFIGS,
@@ -13,17 +13,27 @@ import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 interface ThumbnailStripsCollectionProps {
   snapshot: ThumbnailStripsSnapshot;
   entries: ImageRecord[];
+  replacementItemsByIncomingId?: Record<string, ImageRecord | null>;
+  bookImagesAction?: {
+    label: string;
+    testId?: string;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   selectedId: string | null;
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
-  hasHiddenHistory: boolean;
-  onRequestHistoryAccess: () => void;
+  onOpenPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
   onRemoveFromStrip: (stripId: ThumbnailStripId, id: string) => void;
   onAddCharacterImage?: (file: File) => void;
+  onAssignReplacement?: (incomingId: string, replacementId: string | null) => void;
+  onAssignCurrent?: (incomingId: string | null, currentImageId: string) => void;
+  hasHiddenHistory: boolean;
+  onRequestHistoryAccess: () => void;
   onDropToStrip: (
     stripId: ThumbnailStripId,
     dropIndex: number,
@@ -40,18 +50,23 @@ interface ThumbnailStripsCollectionProps {
 export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
   snapshot,
   entries,
+  replacementItemsByIncomingId = {},
+  bookImagesAction,
   selectedId,
   previewModifierActive = false,
   previewSelectionImageIds = [],
   stripConfigs,
-  hasHiddenHistory,
-  onRequestHistoryAccess,
+  onOpenPreview,
   onSelect,
   onToggleStar,
   onRenameItem,
   onRemoveFromStrip,
   onAddCharacterImage,
-  onDropToStrip,
+  onAssignReplacement,
+  onAssignCurrent,
+  hasHiddenHistory,
+  onRequestHistoryAccess,
+  onDropToStrip: _onDropToStrip,
   onVisibleItemIdsChange,
   onActivateStrip,
   onTogglePin,
@@ -69,9 +84,15 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
     return map;
   }, [entries]);
 
-  const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => pinnedStripIds.has(id));
+  const isStripVisible = (stripId: ThumbnailStripId) => !resolvedStripConfigs[stripId]?.hidden;
 
-  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter((id) => !pinnedStripIds.has(id));
+  const visiblePinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
+    (id) => pinnedStripIds.has(id) && isStripVisible(id),
+  );
+
+  const unpinnedStripIds = THUMBNAIL_STRIP_ORDER.filter(
+    (id) => !pinnedStripIds.has(id) && isStripVisible(id),
+  );
 
   const activeUnpinnedStripId = unpinnedStripIds.length
     ? unpinnedStripIds.includes(snapshot.activeStripId)
@@ -110,8 +131,8 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   const renderStrip = (stripId: ThumbnailStripId, activeOverride?: boolean) => {
     const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
-    const description = STRIP_DESCRIPTIONS[stripId];
-    const emptyStateMessage = typeof description === "function" ? description(config) : description;
+    const tipSource = STRIP_TIPS[stripId];
+    const tip = typeof tipSource === "function" ? tipSource(config) : tipSource;
 
     return (
       <ThumbnailStrip
@@ -122,6 +143,8 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         removeDisabledReasonById={
           stripId === "history" ? historyRemoveDisabledReasonById : undefined
         }
+        replacementItemsByIncomingId={replacementItemsByIncomingId}
+        bookImagesAction={stripId === "bookImages" ? bookImagesAction : undefined}
         selectedId={selectedId}
         previewModifierActive={previewModifierActive}
         previewSelectionImageIds={previewSelectionImageIds}
@@ -132,12 +155,15 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         isActive={activeOverride ?? snapshot.activeStripId === stripId}
         hasHiddenHistory={stripId === "history" && hasHiddenHistory}
         onRequestHistoryAccess={stripId === "history" ? onRequestHistoryAccess : undefined}
-        emptyStateMessage={emptyStateMessage}
+        tip={tip}
+        onOpenPreview={onOpenPreview}
         onSelect={onSelect}
         onToggleStar={onToggleStar}
         onRenameItem={onRenameItem}
         onRemoveItem={(id) => onRemoveFromStrip(stripId, id)}
         onAddCharacterImage={stripId === "characters" ? onAddCharacterImage : undefined}
+        onAssignReplacement={onAssignReplacement}
+        onAssignCurrent={onAssignCurrent}
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
       />
@@ -154,6 +180,12 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   const stripColumnStyles: React.CSSProperties = {
     flex: 1,
     minWidth: 0,
+    // Lay the column out as a flex column so the active panel can grow to fill
+    // the row's height. The row stretches to the tab rail (which is naturally
+    // as tall as all its tabs combined), and the panel follows — no height math.
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
   };
 
   return (
@@ -184,16 +216,21 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
       {activeUnpinnedStripId && (
         <div style={rowShellStyles}>
           <div style={stripColumnStyles}>
-            {unpinnedStripIds.map((stripId) => (
-              <div
-                key={`unpinned-${stripId}`}
-                style={{
-                  display: stripId === activeUnpinnedStripId ? "block" : "none",
-                }}
-              >
-                {renderStrip(stripId, stripId === activeUnpinnedStripId)}
-              </div>
-            ))}
+            {unpinnedStripIds.map((stripId) => {
+              const isActive = stripId === activeUnpinnedStripId;
+              return (
+                <div
+                  key={`unpinned-${stripId}`}
+                  style={
+                    isActive
+                      ? { display: "flex", flexDirection: "column", flex: 1 }
+                      : { display: "none" }
+                  }
+                >
+                  {renderStrip(stripId, isActive)}
+                </div>
+              );
+            })}
           </div>
           <ThumbnailStripTabs
             snapshot={snapshot}

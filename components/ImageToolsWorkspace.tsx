@@ -33,9 +33,12 @@ import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import {
+  buildOAuthAuthUrl,
+  exchangeCodeForApiKey,
   getOAuthCodeFromUrl,
   handleOAuthCallback,
   initiateOAuthFlow,
+  pollOAuthCodeFromBloomHost,
 } from "../lib/openRouterOAuth";
 import { canUseLocalDummyModelWithoutApiKey } from "../lib/localModels";
 import {
@@ -51,9 +54,11 @@ import { pickSizeTokenForLongEdge } from "../lib/imageSizes";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
-import { ImagePreviewDialog } from "./ImagePreviewDialog";
+import { ImagePreviewDialog, ImagePreviewDialogItem } from "./ImagePreviewDialog";
+import { TextFieldContextMenu } from "./TextFieldContextMenu";
 import { Icon, Icons } from "./Icons";
 import bloomLogo from "../assets/bloom.svg";
+import imagePlaceholder from "../assets/image_placeholder.svg";
 import { createToolParamDefaults, mergeParamsWithDefaults } from "./tools/toolParams";
 import { copyImageRecordWithFeedback } from "./copyImageRecordToClipboard";
 import { API_KEY_STORAGE_KEY, AUTH_METHOD_STORAGE_KEY } from "../lib/authStorage";
@@ -71,6 +76,7 @@ import {
   listHistoryImageFiles,
   readFolderPersistedState,
   readImageFile,
+  reconnectFileSystemImageBinding,
   requestFileSystemImageBinding,
   restoreFileSystemImageBinding,
   supportsFileSystemAccess,
@@ -83,7 +89,12 @@ import {
   getAspectRatioPromptHint,
   resolveAspectRatioValue,
 } from "../lib/aspectRatios";
-import { getImageDimensions, getMimeTypeFromUrl, prepareImageBlob } from "../lib/imageUtils";
+import {
+  ensureDataUrl,
+  getImageDimensions,
+  getMimeTypeFromUrl,
+  prepareImageBlob,
+} from "../lib/imageUtils";
 import {
   getRequestedAspectRatioValue,
   getReferenceConstraints,
@@ -352,24 +363,39 @@ const normalizeMeasuredStatsByKey = (value: unknown): Record<string, MeasuredSta
   return normalized;
 };
 
-const buildEnvironmentEntry = (url: string, index: number): ImageRecord => ({
+const buildBookImageEntry = (url: string, index: number): ImageRecord => ({
   id: `env-${index}-${hashString(url)}`,
   parentId: null,
   imageData: url,
   imageFileName: null,
-  toolId: "environment",
+  toolId: "bookImages",
   parameters: {},
   sourceStyleId: null,
   durationMs: 0,
   cost: 0,
   model: "",
   timestamp: 0,
-  promptUsed: "Environment Image",
-  sourceSummary: "Environment",
+  promptUsed: "Book Image",
+  sourceSummary: "Book Image",
   resolution: undefined,
   isStarred: false,
-  origin: "environment",
+  origin: "bookImages",
 });
+
+const replaceBookImageStripItem = (
+  currentIds: string[],
+  incomingId: string | null,
+  nextImageId: string,
+): string[] => {
+  const baseIds = currentIds.filter((id) => id !== nextImageId && id !== incomingId);
+  const targetIndex = incomingId ? currentIds.indexOf(incomingId) : currentIds.length;
+  const insertIndex = targetIndex >= 0 ? Math.min(targetIndex, baseIds.length) : baseIds.length;
+  const nextIds = [...baseIds];
+  nextIds.splice(insertIndex, 0, nextImageId);
+  return nextIds;
+};
+
+type PreviewDialogLayout = "row" | "book-pairs";
 
 const buildRecoveredHistoryEntry = (entry: {
   id: string;
@@ -396,8 +422,38 @@ const buildRecoveredHistoryEntry = (entry: {
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   envApiKey?: string | null;
-  environmentImageUrls?: string[];
-  environmentStripMode?: "host" | "editable";
+  /** Demo context (e.g. a Bloom Playground/template book): the user may use an
+   *  already-supplied key but must not set, change, or clear OpenRouter credentials. */
+  demoOnly?: boolean;
+  bookImageUrls?: string[];
+  bookImages?: Array<{ id: string; src: string; isPlaceholder?: boolean }>;
+  /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
+  selectedBookImageId?: string;
+  bookImagesStripMode?: "host" | "editable";
+  /** When true, the host (Bloom) supplies the history/persistence mechanism, so the
+   *  editor's own "History storage" (link-a-folder) UI is hidden from settings. */
+  hostManagesHistory?: boolean;
+  oauthHost?: {
+    httpBase: string;
+    sessionToken: string;
+    /** Opens the OAuth URL in the user's default browser via the host.
+     *  When absent, the OAuth URL navigates the current window instead. */
+    openExternalUrl?: (url: string) => void;
+  } | null;
+  onReplacementsChange?: (map: Record<string, ImageRecord | null>) => void;
+  /** Called when the user signs in, pastes a key, or signs out, so a host (Bloom) can
+   *  persist the credentials. The editor does not persist the key itself when hosted. */
+  onCredentialsChange?: (creds: {
+    apiKey: string | null;
+    authMethod: "oauth" | "manual" | null;
+    openRouterUser?: string | null;
+  }) => void;
+  onCommitCurrentResult?: (item: ImageRecord) => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
+  onCommitBookImages?: () => void;
+  bookImagesActionLabel?: string;
+  bookImagesActionTestId?: string;
   thumbnailStripConfigOverrides?: Partial<
     Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
   >;
@@ -406,8 +462,21 @@ export interface ImageToolsWorkspaceProps {
 export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
-  environmentImageUrls = [],
-  environmentStripMode = "host",
+  demoOnly = false,
+  bookImageUrls = [],
+  bookImages = [],
+  selectedBookImageId,
+  bookImagesStripMode = "host",
+  hostManagesHistory = false,
+  oauthHost = null,
+  onReplacementsChange,
+  onCredentialsChange,
+  onCommitCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
+  onCommitBookImages,
+  bookImagesActionLabel,
+  bookImagesActionTestId,
   thumbnailStripConfigOverrides,
 }: ImageToolsWorkspaceProps) {
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
@@ -452,9 +521,13 @@ export function ImageToolsWorkspace({
     null,
   );
   const [resultImageIds, setResultImageIds] = useState<string[]>([]);
+  const [replacementImageIdByIncomingId, setReplacementImageIdByIncomingId] = useState<
+    Record<string, string | null>
+  >({});
   const [isPreviewModifierActive, setIsPreviewModifierActive] = useState(false);
   const [previewSelectionImageIds, setPreviewSelectionImageIds] = useState<string[]>([]);
-  const [previewDialogImageIds, setPreviewDialogImageIds] = useState<string[]>([]);
+  const [previewDialogLayout, setPreviewDialogLayout] = useState<PreviewDialogLayout>("row");
+  const [previewDialogImageIdGroups, setPreviewDialogImageIdGroups] = useState<string[][]>([]);
   const [visibleStripItemIdsByStrip, setVisibleStripItemIdsByStrip] = useState<
     Record<ThumbnailStripId, string[]>
   >({
@@ -462,16 +535,23 @@ export function ImageToolsWorkspace({
     characters: [],
     starred: [],
     reference: [],
-    environment: [],
+    bookImages: [],
   });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isWelcomeDialogOpen, setIsWelcomeDialogOpen] = useState(false);
   const hasShownWelcomeRef = useRef(false);
+  // Guards the one-time auto-selection of the host's current book image into the
+  // "Image to Edit" target (see the effect below).
+  const didAutoSelectBookImageTargetRef = useRef(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [credits, setCredits] = useState<OpenRouterKeyStatus | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
   const [fsBinding, setFsBinding] = useState<FileSystemImageBinding | null>(null);
+  const [pendingFsReconnect, setPendingFsReconnect] = useState<{
+    handle: FileSystemDirectoryHandle;
+    directoryName: string;
+  } | null>(null);
   const [fsLoading, setFsLoading] = useState(false);
   const [fsError, setFsError] = useState<string | null>(null);
   const [fsSupported, setFsSupported] = useState(() => supportsFileSystemAccess());
@@ -480,6 +560,7 @@ export function ImageToolsWorkspace({
   );
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
+  const oauthPollAbortControllerRef = useRef<AbortController | null>(null);
   const pendingPreviewImageIdsRef = useRef<string[]>([]);
   const envApiKey = envApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
@@ -491,12 +572,30 @@ export function ImageToolsWorkspace({
   })();
   const canUseSelectedModelWithoutApiKey = canUseLocalDummyModelWithoutApiKey(activeToolModelId);
   const usingEnvKey = !!(envApiKey && !apiKey);
-  const resolvedEnvironmentEntries = useMemo(() => {
-    return environmentImageUrls
+  const resolvedBookImageEntries = useMemo(() => {
+    if (bookImages.length) {
+      return bookImages
+        .map((image, index) => ({
+          id: image.id?.trim(),
+          url: image.src?.trim(),
+          isPlaceholder: image.isPlaceholder,
+          index,
+        }))
+        .filter(({ id, url }) => Boolean(id) && Boolean(url))
+        .map(({ id, url, isPlaceholder, index }) => ({
+          ...buildBookImageEntry(url as string, index),
+          id: id as string,
+          // Empty book slots: show our own placeholder graphic rather than the
+          // book's placeHolder.png (which isn't served as a book file).
+          ...(isPlaceholder ? { imageData: imagePlaceholder } : {}),
+        }));
+    }
+
+    return bookImageUrls
       .map((url, index) => ({ url: url?.trim(), index }))
       .filter(({ url }) => Boolean(url))
-      .map(({ url, index }) => buildEnvironmentEntry(url as string, index));
-  }, [environmentImageUrls]);
+      .map(({ url, index }) => buildBookImageEntry(url as string, index));
+  }, [bookImageUrls, bookImages]);
   const isFolderPersistenceActive = !!fsBinding;
   const historyItemsById = useMemo(() => {
     const entriesById: Record<string, ImageRecord> = {};
@@ -505,13 +604,33 @@ export function ImageToolsWorkspace({
     });
     return entriesById;
   }, [state.history]);
-  const previewDialogImages = useMemo(
+  const bookImageSlotIds = useMemo(
+    () => thumbnailStrips.itemIdsByStrip.bookImages || [],
+    [thumbnailStrips.itemIdsByStrip.bookImages],
+  );
+  const resolveIncomingSlotId = useCallback(
+    (item: ImageRecord | null | undefined): string | undefined => {
+      if (!item) {
+        return undefined;
+      }
+      if (bookImageSlotIds.includes(item.id)) {
+        return item.id;
+      }
+      return item.incomingSlotId;
+    },
+    [bookImageSlotIds],
+  );
+  const previewDialogItems = useMemo<ImagePreviewDialogItem[]>(
     () =>
-      previewDialogImageIds
-        .map((id) => historyItemsById[id])
-        .filter((item): item is ImageRecord => Boolean(item))
-        .slice(-4),
-    [historyItemsById, previewDialogImageIds],
+      previewDialogImageIdGroups
+        .map((group, index) => ({
+          id: group.join(":") || `preview-group-${index}`,
+          images: group
+            .map((id) => historyItemsById[id])
+            .filter((item): item is ImageRecord => Boolean(item)),
+        }))
+        .filter((item) => item.images.length > 0),
+    [historyItemsById, previewDialogImageIdGroups],
   );
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
@@ -523,8 +642,14 @@ export function ImageToolsWorkspace({
   const historyStatusLabel = isFolderPersistenceActive
     ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
     : "History stored in browser only";
-  const settingsButtonTitle = `${openRouterStatusLabel}. ${historyStatusLabel}.`;
-  const settingsButtonLabel = `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
+  // When the host (Bloom) manages history, the editor's folder-linking status is
+  // meaningless, so it's left out of the settings button's tooltip/label.
+  const settingsButtonTitle = hostManagesHistory
+    ? `${openRouterStatusLabel}.`
+    : `${openRouterStatusLabel}. ${historyStatusLabel}.`;
+  const settingsButtonLabel = hostManagesHistory
+    ? `Settings • ${openRouterStatusLabel}`
+    : `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
 
   const persistHistoryImage = useCallback(
     async (
@@ -536,7 +661,6 @@ export function ImageToolsWorkspace({
         return item;
       }
       try {
-        const mime = getMimeTypeFromUrl(item.imageData) ?? "image/png";
         return await writeHistoryImageRecord(bindingToUse, item);
       } catch (error) {
         const debugInfo = await collectHistoryImageDebugInfo(
@@ -667,28 +791,48 @@ export function ImageToolsWorkspace({
   }, []);
 
   useEffect(() => {
-    const resolvedIds = resolvedEnvironmentEntries.map((entry) => entry.id);
+    const resolvedIds = resolvedBookImageEntries.map((entry) => entry.id);
 
-    if (environmentStripMode === "host") {
-      if (!resolvedEnvironmentEntries.length) {
-        setThumbnailStrips((prev) => replaceStripItems(prev, "environment", []));
+    if (bookImagesStripMode === "host") {
+      // Wait for the persistence load to finish before touching the strip/history:
+      // this effect must run *after* hydration so it overwrites any stale persisted
+      // book-image records with the fresh launch, rather than racing the load (which
+      // would then clobber the fresh records with stale ones).
+      if (!isHydrated) {
+        return;
+      }
+      if (!resolvedBookImageEntries.length) {
+        setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", []));
         return;
       }
 
       setState((prev) => {
-        const existingIds = new Set(prev.history.map((item) => item.id));
-        const nextHistory = [...prev.history];
+        // The host's init is the source of truth for the book's *current* images, so
+        // refresh each book-image record from it (new src after a commit, or our
+        // placeholder graphic) rather than keeping a stale record persisted under the
+        // same slot id. Generated results (other ids) are left untouched.
+        const freshById = new Map(resolvedBookImageEntries.map((entry) => [entry.id, entry]));
         let mutated = false;
-        resolvedEnvironmentEntries.forEach((entry) => {
-          if (!existingIds.has(entry.id)) {
-            nextHistory.push(entry);
-            mutated = true;
+        const nextHistory = prev.history.map((item) => {
+          const fresh = freshById.get(item.id);
+          if (!fresh) {
+            return item;
           }
+          freshById.delete(item.id);
+          if (item.imageData !== fresh.imageData || item.origin !== fresh.origin) {
+            mutated = true;
+            return fresh;
+          }
+          return item;
+        });
+        freshById.forEach((fresh) => {
+          nextHistory.push(fresh);
+          mutated = true;
         });
         return mutated ? { ...prev, history: nextHistory } : prev;
       });
 
-      setThumbnailStrips((prev) => replaceStripItems(prev, "environment", resolvedIds));
+      setThumbnailStrips((prev) => replaceStripItems(prev, "bookImages", resolvedIds));
 
       return;
     }
@@ -699,12 +843,12 @@ export function ImageToolsWorkspace({
       return;
     }
 
-    if (resolvedEnvironmentEntries.length) {
+    if (resolvedBookImageEntries.length) {
       setState((prev) => {
         const existingIds = new Set(prev.history.map((item) => item.id));
         const nextHistory = [...prev.history];
         let mutated = false;
-        resolvedEnvironmentEntries.forEach((entry) => {
+        resolvedBookImageEntries.forEach((entry) => {
           if (!existingIds.has(entry.id)) {
             nextHistory.push(entry);
             mutated = true;
@@ -717,14 +861,104 @@ export function ImageToolsWorkspace({
     // Seed once if the strip has no items yet.
     if (resolvedIds.length) {
       setThumbnailStrips((prev) => {
-        const current = prev.itemIdsByStrip.environment || [];
+        const current = prev.itemIdsByStrip.bookImages || [];
         if (current.length) {
           return prev;
         }
-        return replaceStripItems(prev, "environment", resolvedIds);
+        return replaceStripItems(prev, "bookImages", resolvedIds);
       });
     }
-  }, [resolvedEnvironmentEntries, environmentStripMode, isHydrated]);
+  }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated]);
+
+  useEffect(() => {
+    // When the host opens the editor on a book image, drop that image straight
+    // into the "Image to Edit" target so the user can apply a tool without
+    // dragging it across first. Done once per launch.
+    if (
+      bookImagesStripMode !== "host" ||
+      !isHydrated ||
+      didAutoSelectBookImageTargetRef.current ||
+      !resolvedBookImageEntries.length
+    ) {
+      return;
+    }
+
+    didAutoSelectBookImageTargetRef.current = true;
+
+    // The specific image the user launched on, if the host told us which one.
+    const explicitId =
+      selectedBookImageId &&
+      resolvedBookImageEntries.some((entry) => entry.id === selectedBookImageId)
+        ? selectedBookImageId
+        : null;
+
+    setState((prev) => {
+      if (explicitId) {
+        // Honor the launched-on image even if a target was restored from a prior
+        // session — the user clicked that image expecting to edit it.
+        return prev.targetImageId === explicitId ? prev : { ...prev, targetImageId: explicitId };
+      }
+      // No specific image: only seed a default if nothing is already selected.
+      if (prev.targetImageId) {
+        return prev;
+      }
+      return { ...prev, targetImageId: resolvedBookImageEntries[0].id };
+    });
+  }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated, selectedBookImageId]);
+
+  useEffect(() => {
+    // If the bookImages strip is momentarily empty (e.g. during initial mount
+    // or while host-supplied images are still loading), don't garbage-collect
+    // the replacement map — its keys are book-image slot ids that will be
+    // restored on the next sync. Wiping it here is irreversible: the deleted
+    // assignments get persisted on the next save and the user loses their
+    // current/replacement pairings forever.
+    if (bookImageSlotIds.length === 0) {
+      return;
+    }
+
+    const validIncomingIds = new Set(bookImageSlotIds);
+    const validReplacementIds = new Set(state.history.map((item) => item.id));
+
+    setReplacementImageIdByIncomingId((prev) => {
+      let changed = false;
+      const next: Record<string, string | null> = {};
+
+      Object.entries(prev).forEach(([incomingId, replacementId]) => {
+        if (!validIncomingIds.has(incomingId)) {
+          changed = true;
+          return;
+        }
+
+        if (replacementId && !validReplacementIds.has(replacementId)) {
+          next[incomingId] = null;
+          changed = true;
+          return;
+        }
+
+        next[incomingId] = replacementId;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [bookImageSlotIds, state.history]);
+
+  useEffect(() => {
+    if (!onReplacementsChange) {
+      return;
+    }
+
+    onReplacementsChange(
+      Object.fromEntries(
+        bookImageSlotIds.map((incomingId) => [
+          incomingId,
+          replacementImageIdByIncomingId[incomingId]
+            ? historyItemsById[replacementImageIdByIncomingId[incomingId] as string] || null
+            : null,
+        ]),
+      ),
+    );
+  }, [bookImageSlotIds, historyItemsById, onReplacementsChange, replacementImageIdByIncomingId]);
 
   useEffect(() => {
     const referencedIds = new Set<string>();
@@ -746,7 +980,7 @@ export function ImageToolsWorkspace({
     const now = Date.now();
     const orphaned = state.history.filter(
       (entry) =>
-        entry.origin !== "environment" &&
+        entry.origin !== "bookImages" &&
         !referencedIds.has(entry.id) &&
         now - (entry.timestamp ?? 0) > PRUNE_GRACE_MS,
     );
@@ -763,7 +997,7 @@ export function ImageToolsWorkspace({
     setState((prev) => ({
       ...prev,
       history: prev.history.filter(
-        (entry) => entry.origin === "environment" || referencedIds.has(entry.id),
+        (entry) => entry.origin === "bookImages" || referencedIds.has(entry.id),
       ),
       referenceImageIds: prev.referenceImageIds.filter((id) => referencedIds.has(id)),
       targetImageId:
@@ -903,9 +1137,20 @@ export function ImageToolsWorkspace({
     Object.values(visibleStripItemIdsByStrip).forEach((visibleIds) => {
       visibleIds.forEach(addId);
     });
+    // The bookImages strip publishes its visible "current" image ids, but each
+    // visible pair also renders a replacement image below it. Those replacement
+    // ids live in history too and need hydration, or they render as broken
+    // references.
+    const visibleBookImageIds = visibleStripItemIdsByStrip.bookImages;
+    if (visibleBookImageIds) {
+      visibleBookImageIds.forEach((incomingId) => {
+        addId(replacementImageIdByIncomingId[incomingId]);
+      });
+    }
 
     return Array.from(ids);
   }, [
+    replacementImageIdByIncomingId,
     resultImageIds,
     state.referenceImageIds,
     state.rightPanelImageId,
@@ -978,13 +1223,18 @@ export function ImageToolsWorkspace({
     let cancelled = false;
     void (async () => {
       try {
-        const binding = await restoreFileSystemImageBinding();
+        const result = await restoreFileSystemImageBinding();
         if (cancelled) {
           return;
         }
 
-        if (binding) {
-          setFsBinding(binding);
+        if (result.status === "granted") {
+          setFsBinding(result.binding);
+        } else if (result.status === "needs-reconnect") {
+          setPendingFsReconnect({
+            handle: result.handle,
+            directoryName: result.directoryName,
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -1033,6 +1283,15 @@ export function ImageToolsWorkspace({
           );
           if (!cancelled) {
             setThumbnailStrips(hydratedStrips);
+            // In host (Bloom) mode each launch starts from the book's current state:
+            // outgoing replacement slots begin empty (any prior picks were either
+            // committed into the book or discarded), rather than restoring stale
+            // assignments from a previous session.
+            setReplacementImageIdByIncomingId(
+              bookImagesStripMode === "host"
+                ? {}
+                : (persisted.replacementImageIdByIncomingId ?? {}),
+            );
           }
 
           const persistedStyleId =
@@ -1140,6 +1399,7 @@ export function ImageToolsWorkspace({
   const apiKeyRef = useRef(apiKey);
   const authMethodRef = useRef(authMethod);
   const thumbnailStripsRef = useRef(thumbnailStrips);
+  const replacementImageIdByIncomingIdRef = useRef(replacementImageIdByIncomingId);
   const fsManifestHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
   const fsManifestReadyHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
@@ -1179,6 +1439,9 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     thumbnailStripsRef.current = thumbnailStrips;
   }, [thumbnailStrips]);
+  useEffect(() => {
+    replacementImageIdByIncomingIdRef.current = replacementImageIdByIncomingId;
+  }, [replacementImageIdByIncomingId]);
 
   useEffect(() => {
     if (!fsBinding) {
@@ -1342,6 +1605,7 @@ export function ImageToolsWorkspace({
           rightPanelImageId: currentState.rightPanelImageId,
           history: historyForPersistence,
         },
+        replacementImageIdByIncomingId: replacementImageIdByIncomingIdRef.current,
         paramsByTool: paramsByToolRef.current,
         activeToolId: activeToolIdRef.current,
         modelByTool: modelByToolRef.current,
@@ -1469,8 +1733,15 @@ export function ImageToolsWorkspace({
     apiKey,
     authMethod,
     thumbnailStrips,
+    replacementImageIdByIncomingId,
     debugLog,
   ]);
+
+  useEffect(() => {
+    return () => {
+      oauthPollAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1481,6 +1752,7 @@ export function ImageToolsWorkspace({
         if (!cancelled && key) {
           setApiKey(key);
           setAuthMethod("oauth");
+          setState((prev) => ({ ...prev, isAuthenticated: true }));
         }
       } catch (err) {
         console.error("OpenRouter OAuth failed", err);
@@ -1493,6 +1765,29 @@ export function ImageToolsWorkspace({
       cancelled = true;
     };
   }, []);
+
+  const handleReconnectFolder = useCallback(async () => {
+    if (!pendingFsReconnect) {
+      return;
+    }
+    setFsLoading(true);
+    setFsError(null);
+    try {
+      const binding = await reconnectFileSystemImageBinding(pendingFsReconnect.handle);
+      if (!binding) {
+        // User dismissed the prompt; leave the pending state so they can try
+        // again. Don't surface an error for a user-initiated cancel.
+        return;
+      }
+      setPendingFsReconnect(null);
+      setFsBinding(binding);
+    } catch (error) {
+      console.error("Failed to reconnect history folder", error);
+      setFsError("Could not reconnect to the history folder.");
+    } finally {
+      setFsLoading(false);
+    }
+  }, [pendingFsReconnect]);
 
   const handleEnableFolderStorage = useCallback(async () => {
     if (!fsSupported) {
@@ -1828,10 +2123,15 @@ export function ImageToolsWorkspace({
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
       const referenceImageCount = constrainedReferences.length;
       const sourceSummary = formatSourceSummary(editImageCount, referenceImageCount);
-      const sourceImages = [
-        ...(requiresEditImage && targetImage ? [targetImage.imageData] : []),
-        ...constrainedReferences.map((h) => h.imageData),
-      ];
+      // Normalize every source to a base64 data URL. Book images from the Bloom
+      // host (and anything else dragged in by URL) arrive as http(s) URLs, which
+      // the OpenRouter client and local background removal cannot consume.
+      const targetImageData =
+        requiresEditImage && targetImage ? await ensureDataUrl(targetImage.imageData) : null;
+      const referenceImageData = await Promise.all(
+        constrainedReferences.map((h) => ensureDataUrl(h.imageData)),
+      );
+      const sourceImages = [...(targetImageData ? [targetImageData] : []), ...referenceImageData];
       // Named images (e.g. characters named in the strip) get their name sent
       // alongside the pixels so the prompt can refer to them by name. Aligned
       // by index with sourceImages.
@@ -1921,7 +2221,7 @@ export function ImageToolsWorkspace({
       };
 
       if (usesLocalBackgroundRemoval) {
-        if (!targetImage) {
+        if (!targetImage || !targetImageData) {
           throw new Error("Select an image to edit before applying this tool.");
         }
 
@@ -1935,7 +2235,7 @@ export function ImageToolsWorkspace({
           ),
         });
 
-        const result = await removeBackgroundFromImage(targetImage.imageData, {
+        const result = await removeBackgroundFromImage(targetImageData, {
           signal: abortController.signal,
         });
 
@@ -2080,6 +2380,7 @@ export function ImageToolsWorkspace({
         extraFields?: Partial<ImageRecord>,
       ): Promise<ImageRecord> => {
         const resolution = await getImageDimensions(imageData);
+        const incomingSlotId = resolveIncomingSlotId(targetImage);
 
         let item: ImageRecord = {
           id: uuid(),
@@ -2089,6 +2390,7 @@ export function ImageToolsWorkspace({
               : requiresEditImage && targetImage
                 ? targetImage.id
                 : constrainedReferences[0]?.id || null,
+          incomingSlotId,
           imageData,
           toolId: tool.id,
           parameters: params,
@@ -2489,6 +2791,7 @@ export function ImageToolsWorkspace({
         let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
+          incomingSlotId: undefined,
           imageData: dataUrl,
           toolId: "original",
           parameters: {},
@@ -2608,6 +2911,7 @@ export function ImageToolsWorkspace({
         let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
+          incomingSlotId: undefined,
           imageData: dataUrl,
           toolId: "original",
           parameters: {},
@@ -2695,36 +2999,104 @@ export function ImageToolsWorkspace({
     handleUploadRight,
   ]);
 
+  // Open an external URL in the user's real default browser. Hosted in Bloom, a plain
+  // <a target="_blank"> would open in the WebView's own (separate-profile) browser, so
+  // route through the host's openExternal bridge (Bloom restricts it to openrouter.ai).
+  // Standalone falls back to a normal new tab.
+  const openExternalLink = useCallback(
+    (url: string) => {
+      if (oauthHost?.openExternalUrl) {
+        oauthHost.openExternalUrl(url);
+      } else if (typeof window !== "undefined") {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    [oauthHost],
+  );
+
   const handleConnect = async () => {
+    // Demo context (e.g. Bloom Playground book): credentials must not be changed.
+    if (demoOnly) return;
     try {
       setAuthLoading(true);
+      setState((prev) => ({ ...prev, error: null }));
+
+      if (oauthHost) {
+        const pollAbortController = new AbortController();
+        oauthPollAbortControllerRef.current?.abort();
+        oauthPollAbortControllerRef.current = pollAbortController;
+
+        // The callback URL must be STABLE across launches: OpenRouter keys an
+        // "app" record off it, so a per-launch query param (e.g. session) makes
+        // every attempt look like a new app and triggers a 409 "create or update
+        // app" conflict. The session is validated on the /oauth-result poll
+        // instead (only one editor session is ever active at a time).
+        const callbackUrl = `${oauthHost.httpBase}/oauth-callback`;
+        const authUrl = await buildOAuthAuthUrl({ callbackUrl });
+        if (oauthHost.openExternalUrl) {
+          // Open in the user's default browser (their normal OpenRouter
+          // identity) and keep this WebView alive to poll for the code.
+          oauthHost.openExternalUrl(authUrl);
+        } else {
+          window.location.href = authUrl;
+        }
+        const code = await pollOAuthCodeFromBloomHost(
+          oauthHost.httpBase,
+          oauthHost.sessionToken,
+          pollAbortController.signal,
+        );
+        const key = await exchangeCodeForApiKey(code);
+        setApiKey(key);
+        setAuthMethod("oauth");
+        // Bloom owns the key: hand it up to the host to persist per-user.
+        onCredentialsChange?.({ apiKey: key, authMethod: "oauth", openRouterUser: null });
+        setState((prev) => ({ ...prev, isAuthenticated: true }));
+        setAuthLoading(false);
+        oauthPollAbortControllerRef.current = null;
+        return;
+      }
+
       await initiateOAuthFlow();
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
       console.error("Failed to start OpenRouter OAuth", err);
       setAuthLoading(false);
       setState((prev) => ({
         ...prev,
-        error: "Could not start OpenRouter authentication. Please try again.",
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not start OpenRouter authentication. Please try again.",
       }));
+      oauthPollAbortControllerRef.current = null;
     }
   };
 
   const handleDisconnect = () => {
+    if (demoOnly) return;
     setApiKey(null);
     setAuthMethod(null);
+    // Clear the host's stored credentials too (sign-out).
+    onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
     setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
   };
 
   const handleProvideKey = (key: string) => {
+    if (demoOnly) return;
     const trimmed = key.trim();
     if (!trimmed) {
       setApiKey(null);
       setAuthMethod(null);
+      onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
       setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
       return;
     }
     setApiKey(trimmed);
     setAuthMethod("manual");
+    // Bloom owns the key: hand it up to the host to persist per-user.
+    onCredentialsChange?.({ apiKey: trimmed, authMethod: "manual", openRouterUser: null });
     setState((prev) => ({ ...prev, isAuthenticated: true }));
   };
 
@@ -2787,6 +3159,16 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
+  const handleAssignReplacement = useCallback(
+    (incomingId: string, replacementId: string | null) => {
+      setReplacementImageIdByIncomingId((prev) => ({
+        ...prev,
+        [incomingId]: replacementId,
+      }));
+    },
+    [],
+  );
+
   const handleRemoveReferenceAt = (index: number) => {
     setState((prev) => ({
       ...prev,
@@ -2803,7 +3185,7 @@ export function ImageToolsWorkspace({
     const nextIds = [
       ...pendingPreviewImageIdsRef.current.filter((existingId) => existingId !== id),
       id,
-    ].slice(-4);
+    ];
     pendingPreviewImageIdsRef.current = nextIds;
     setPreviewSelectionImageIds(nextIds);
   }, []);
@@ -2819,8 +3201,32 @@ export function ImageToolsWorkspace({
       return;
     }
 
-    setPreviewDialogImageIds(nextIds.slice(-4));
+    setPreviewDialogLayout("row");
+    setPreviewDialogImageIdGroups(nextIds.map((id) => [id]));
   }, []);
+
+  const handleOpenStripPreview = useCallback(
+    (stripId: ThumbnailStripId, itemIds: string[]) => {
+      if (!itemIds.length) {
+        return;
+      }
+
+      if (stripId === "bookImages") {
+        setPreviewDialogLayout("book-pairs");
+        setPreviewDialogImageIdGroups(
+          itemIds.map((incomingId) => {
+            const replacementId = replacementImageIdByIncomingId[incomingId];
+            return replacementId ? [incomingId, replacementId] : [incomingId];
+          }),
+        );
+        return;
+      }
+
+      setPreviewDialogLayout("row");
+      setPreviewDialogImageIdGroups(itemIds.map((id) => [id]));
+    },
+    [replacementImageIdByIncomingId],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3025,6 +3431,23 @@ export function ImageToolsWorkspace({
     [handleDeleteFromHistory, resolvedThumbnailStripConfigs],
   );
 
+  const handleAssignBookImageCurrent = useCallback(
+    (incomingId: string | null, currentImageId: string) => {
+      setThumbnailStrips((prev) => {
+        const currentIds = prev.itemIdsByStrip.bookImages || [];
+        const nextIds = replaceBookImageStripItem(currentIds, incomingId, currentImageId);
+        if (
+          nextIds.length === currentIds.length &&
+          nextIds.every((id, index) => id === currentIds[index])
+        ) {
+          return prev;
+        }
+        return replaceStripItems(prev, "bookImages", nextIds);
+      });
+    },
+    [],
+  );
+
   const handleDismissError = () => {
     setState((prev) => ({ ...prev, error: null }));
   };
@@ -3048,6 +3471,38 @@ export function ImageToolsWorkspace({
   const resultItems = resultImageIds
     .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
     .filter((item): item is ImageRecord => !!item);
+  const replacementItemsByIncomingId = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(replacementImageIdByIncomingId).map(([incomingId, replacementId]) => [
+          incomingId,
+          replacementId ? historyItemsById[replacementId] || null : null,
+        ]),
+      ) as Record<string, ImageRecord | null>,
+    [historyItemsById, replacementImageIdByIncomingId],
+  );
+  const currentResultItem = resultItems[0] || rightItem;
+  const hasBookImageReplacement = useMemo(
+    () => Object.values(replacementItemsByIncomingId).some((item) => Boolean(item?.imageData)),
+    [replacementItemsByIncomingId],
+  );
+
+  const handleUseCurrentResult = useCallback(() => {
+    if (onCommitCurrentResult) {
+      if (!currentResultItem?.incomingSlotId || !currentResultItem.imageData) {
+        return;
+      }
+
+      onCommitCurrentResult(currentResultItem);
+      return;
+    }
+
+    if (!currentResultItem?.incomingSlotId) {
+      return;
+    }
+
+    handleAssignReplacement(currentResultItem.incomingSlotId, currentResultItem.id);
+  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult]);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -3185,7 +3640,20 @@ export function ImageToolsWorkspace({
       : theme.colors.accent;
 
   const shouldShowConnectToOpenRouterCTA = !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
-  const prototypeNoticeColor = theme.colors.accent;
+  // A null limit means the connected key has no per-key spending cap; warn near the meter.
+  const creditsKeyHasNoLimit = !!(
+    effectiveApiKey &&
+    credits &&
+    !creditsLoading &&
+    !creditsError &&
+    credits.limit === null
+  );
+  const hasUnresolvedFolderBackedHistory = useMemo(
+    () => state.history.some((item) => !item.imageData && !!item.imageFileName),
+    [state.history],
+  );
+  const showReconnectHistoryFolderButton =
+    fsSupported && !fsBinding && (!!pendingFsReconnect || hasUnresolvedFolderBackedHistory);
 
   return (
     <ThemeProvider theme={muiTheme}>
@@ -3226,27 +3694,54 @@ export function ImageToolsWorkspace({
             <Typography variant="h6" component="h1" fontWeight={700}>
               Bloom AI Image Tools
             </Typography>
-            <Stack
-              direction="row"
-              spacing={0.75}
-              alignItems="center"
-              sx={{ color: prototypeNoticeColor, minWidth: 0 }}
-            >
-              <Icon path={Icons.Info} width={16} height={16} />
-              <Typography
-                variant="body2"
+            {showReconnectHistoryFolderButton && (
+              <Button
+                type="button"
+                variant="contained"
+                disableElevation
+                data-testid="reconnect-history-folder-button"
+                onClick={() => {
+                  if (pendingFsReconnect) {
+                    void handleReconnectFolder();
+                  } else {
+                    void handleEnableFolderStorage();
+                  }
+                }}
+                disabled={fsLoading}
                 sx={{
-                  color: "inherit",
+                  px: 3,
+                  py: 1.25,
+                  borderRadius: "999px",
+                  fontSize: "0.75rem",
                   fontWeight: 400,
-                  lineHeight: 1.4,
+                  letterSpacing: "0.28em",
+                  textTransform: "uppercase",
+                  backgroundColor: theme.colors.accent,
+                  color: theme.colors.surface,
+                  boxShadow: theme.colors.accentShadow,
+                  transition: "transform 150ms ease, background-color 150ms ease",
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    backgroundColor: theme.colors.accentHover,
+                  },
                 }}
               >
-                This is prototype. It is useful, but it has rough edges!
-              </Typography>
-            </Stack>
+                {pendingFsReconnect
+                  ? `Reconnect history folder${
+                      pendingFsReconnect.directoryName
+                        ? ` (${pendingFsReconnect.directoryName})`
+                        : ""
+                    }`
+                  : "Connect history folder"}
+              </Button>
+            )}
           </Stack>
 
-          <Stack spacing={1} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+          <Stack
+            spacing={1}
+            alignItems="flex-end"
+            sx={{ flexShrink: 0, pr: bookImagesStripMode === "host" ? 8 : 0 }}
+          >
             <Stack direction="row" spacing={3} alignItems="center">
               <OpenRouterCreditsHeader
                 shouldShowConnectToOpenRouterCTA={shouldShowConnectToOpenRouterCTA}
@@ -3255,6 +3750,8 @@ export function ImageToolsWorkspace({
                 creditsTooltipLines={creditsTooltipLines}
                 creditsProgressFraction={creditsProgressFraction}
                 creditsProgressAriaProps={creditsProgressAriaProps}
+                showNoLimitWarning={creditsKeyHasNoLimit}
+                onOpenExternalUrl={openExternalLink}
                 creditsLabelColor={creditsLabelColor}
                 progressBorderColor={progressBorderColor}
                 progressTrackBackground={progressTrackBackground}
@@ -3267,9 +3764,6 @@ export function ImageToolsWorkspace({
                 aria-label={settingsButtonLabel}
                 sx={{
                   position: "relative",
-                  border: `1px solid ${theme.colors.border}`,
-                  bgcolor: theme.colors.surfaceAlt,
-                  boxShadow: theme.colors.panelShadow,
                   color: theme.colors.textPrimary,
                   transition: "opacity 150ms ease",
                   "&:hover": { opacity: 0.85 },
@@ -3327,21 +3821,27 @@ export function ImageToolsWorkspace({
             referenceImages={referenceItems}
             rightImage={rightItem}
             resultImages={resultItems}
+            replacementItemsByIncomingId={replacementItemsByIncomingId}
+            bookImagesAction={
+              onCommitBookImages
+                ? {
+                    label: bookImagesActionLabel ?? "Replace images in your book with these images",
+                    testId: bookImagesActionTestId,
+                    disabled: !hasBookImageReplacement,
+                    onClick: onCommitBookImages,
+                  }
+                : undefined
+            }
             activeToolId={activeToolId}
             toolParams={paramsByTool}
             historyItems={state.history}
-            hasHiddenHistory={hasHiddenHistory}
-            onRequestHistoryAccess={() => {
-              if (!fsSupported) {
-                setIsSettingsDialogOpen(true);
-                return;
-              }
-              void handleEnableFolderStorage();
-            }}
+            onOpenStripPreview={handleOpenStripPreview}
             thumbnailStrips={thumbnailStrips}
             thumbnailStripConfigs={resolvedThumbnailStripConfigs}
             onStripItemDrop={handleStripItemDrop}
             onStripRemoveItem={handleStripRemoveItem}
+            onAssignReplacement={handleAssignReplacement}
+            onAssignCurrent={handleAssignBookImageCurrent}
             onStripPinToggle={handleStripPinToggle}
             onStripActivate={handleStripActivate}
             onStripDragActivate={handleStripDragActivate}
@@ -3362,10 +3862,21 @@ export function ImageToolsWorkspace({
             onClearTarget={handleClearTargetImage}
             onClearRight={handleClearRightPanel}
             onUploadRight={handleUploadRight}
+            onUseCurrentResult={handleUseCurrentResult}
+            currentResultActionLabel={currentResultActionLabel}
+            currentResultActionTestId={currentResultActionTestId}
             onSelectHistoryItem={handleSelectHistoryItem}
             onToggleHistoryStar={handleToggleHistoryStar}
             onRenameHistoryItem={handleRenameImage}
             onAddCharacterImage={handleAddCharacterImage}
+            hasHiddenHistory={hasHiddenHistory}
+            onRequestHistoryAccess={() => {
+              if (!fsSupported) {
+                setIsSettingsDialogOpen(true);
+                return;
+              }
+              void handleEnableFolderStorage();
+            }}
             generationProgress={generationProgress}
             previewModifierActive={isPreviewModifierActive}
             previewSelectionImageIds={previewSelectionImageIds}
@@ -3393,11 +3904,12 @@ export function ImageToolsWorkspace({
         </Box>
 
         <ImagePreviewDialog
-          open={previewDialogImages.length > 0}
-          images={previewDialogImages}
+          open={previewDialogItems.length > 0}
+          items={previewDialogItems}
+          layout={previewDialogLayout}
           onClose={() => {
             setPreviewSelectionImageIds([]);
-            setPreviewDialogImageIds([]);
+            setPreviewDialogImageIdGroups([]);
           }}
         />
 
@@ -3422,22 +3934,32 @@ export function ImageToolsWorkspace({
             onConnect: handleConnect,
             onDisconnect: handleDisconnect,
             onProvideKey: handleProvideKey,
+            onOpenExternalUrl: openExternalLink,
+            demoOnly,
           }}
-          history={{
-            isSupported: fsSupported,
-            isLoading: fsLoading,
-            isFolderPersistenceActive,
-            directoryName: fsBinding?.directoryName ?? null,
-            error: fsError,
-            onEnableFolder: () => {
-              void handleEnableFolderStorage();
-            },
-            onDisableFolder: () => {
-              void handleDisableFolderStorage();
-            },
-          }}
+          history={
+            // When hosted in Bloom, the host supplies the history mechanism (the
+            // per-book .ai-image-editor/ folder), so the editor's own folder-linking
+            // UI is irrelevant and hidden.
+            hostManagesHistory
+              ? undefined
+              : {
+                  isSupported: fsSupported,
+                  isLoading: fsLoading,
+                  isFolderPersistenceActive,
+                  directoryName: fsBinding?.directoryName ?? null,
+                  error: fsError,
+                  onEnableFolder: () => {
+                    void handleEnableFolderStorage();
+                  },
+                  onDisableFolder: () => {
+                    void handleDisableFolderStorage();
+                  },
+                }
+          }
         />
       </Box>
+      <TextFieldContextMenu />
     </ThemeProvider>
   );
 }

@@ -1,12 +1,26 @@
+/**
+ * App — the single entry point, which decides *how* the editor is running and renders
+ * the matching shell. There is one built app; the URL's `?mode=` query selects a shell:
+ *
+ *   ?mode=bloom-iframe   Embedded in Bloom as an <iframe> overlay. Talk to the host
+ *                        over postMessage via `createIframeBloomHostBridge()` and
+ *                        render <BloomHostedImageEditor>. This is the production path.
+ *   ?mode=bloom-harness  Standalone dev/e2e with a *fake* Bloom (BloomHostHarness),
+ *                        which seeds demo data and an in-memory bridge.
+ *   (no mode)            Plain standalone editor (<StandaloneImageEditor>), e.g. the demo
+ *                        site, with browser/localStorage persistence.
+ *
+ * The same `dist`/`dist-app` build serves all three; Bloom loads `index.html` and adds
+ * `?mode=bloom-iframe`. (A retired design embedded us in a dedicated WebView2 window via
+ * `chrome.webview`; that bridge has been removed — Bloom always uses the iframe path.)
+ */
 import React, { useEffect, useMemo } from "react";
-import { ImageToolsWorkspace } from "./src";
-import { createBrowserImageToolsPersistence } from "./services/persistence/browserPersistence";
 import { ENV_KEY_SKIP_FLAG } from "./lib/authFlags";
-import retroFuturism from "./assets/art-styles/retro-futurism.png";
-import watercolorDream from "./assets/art-styles/watercolor-dream.png";
-import paperCutCollage from "./assets/art-styles/paper-cut-collage.png";
-import cleanLineArt from "./assets/art-styles/clean-line-art.png";
 import { useLastDragDelayMs } from "./components/dndDragState";
+import { BloomHostedImageEditor } from "./components/BloomHostedImageEditor";
+import { BloomHostHarness } from "./components/BloomHostHarness";
+import { createIframeBloomHostBridge } from "./services/host/BloomHostBridge";
+import { StandaloneImageEditor } from "./components/StandaloneImageEditor";
 import { seedHistory } from "./dev/seedHistory";
 // import ThemeTuner from "./dev/ThemeTuner";
 
@@ -47,7 +61,8 @@ function DragTimingOverlay() {
 }
 
 export default function App() {
-  const persistence = useMemo(() => createBrowserImageToolsPersistence(), []);
+  const searchParams =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -58,27 +73,31 @@ export default function App() {
   }, []);
 
   const envApiKey = getEnvApiKey();
-  const environmentImages = useMemo(
-    () => [retroFuturism, watercolorDream, paperCutCollage, cleanLineArt],
-    [],
+  const mode = searchParams?.get("mode") ?? "";
+  const isBloomHarness = mode === "bloom-harness";
+  const isBloomIframeHost = mode === "bloom-iframe";
+  // Opt-in flag to exercise the Bloom-specific book-images features in the plain
+  // standalone editor (dev/e2e). Off by default so the public demo stays clean.
+  const bloomFeaturesParam = searchParams?.get("bloomFeatures") ?? null;
+  const standaloneBloomFeatures =
+    bloomFeaturesParam !== null && bloomFeaturesParam !== "0" && bloomFeaturesParam !== "false";
+  const bloomBridge = useMemo(
+    () => (isBloomIframeHost ? createIframeBloomHostBridge() : null),
+    [isBloomIframeHost],
   );
 
   return (
     <>
-      <ImageToolsWorkspace
-        persistence={persistence}
-        envApiKey={envApiKey}
-        environmentImageUrls={environmentImages}
-        environmentStripMode="editable"
-        thumbnailStripConfigOverrides={{
-          environment: {
-            label: "Book pages",
-            allowDrop: true,
-            allowRemove: true,
-            allowReorder: true,
-          },
-        }}
-      />
+      {isBloomHarness ? (
+        <BloomHostHarness />
+      ) : bloomBridge ? (
+        <BloomHostedImageEditor
+          bridge={bloomBridge}
+          onCommitComplete={() => bloomBridge.cancel()}
+        />
+      ) : (
+        <StandaloneImageEditor envApiKey={envApiKey} bloomFeatures={standaloneBloomFeatures} />
+      )}
       {import.meta.env.DEV && <DragTimingOverlay />}
       {/* {import.meta.env.DEV && <ThemeTuner />} */}
     </>

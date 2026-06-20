@@ -1,5 +1,5 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { getReferenceConstraints } from "../lib/toolHelpers";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
@@ -128,6 +128,9 @@ interface WorkspaceProps {
   onClearTarget: () => void;
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
+  onUseCurrentResult?: () => void;
+  currentResultActionLabel?: string;
+  currentResultActionTestId?: string;
   isProcessing: boolean;
   generationProgress: GenerationProgressState | null;
   activeToolId: string | null;
@@ -149,6 +152,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onClearTarget,
   onClearRight,
   onUploadRight,
+  onUseCurrentResult,
+  currentResultActionLabel,
+  currentResultActionTestId,
   isProcessing,
   generationProgress,
   activeToolId,
@@ -227,6 +233,56 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     },
     dropLabel: "",
   }));
+
+  const currentResultItem = resultImages[0] ?? rightImage;
+  const resultActionButton =
+    currentResultItem?.incomingSlotId && onUseCurrentResult ? (
+      <Button
+        type="button"
+        variant="outlined"
+        size="small"
+        data-testid={currentResultActionTestId ?? "result-use-this-button"}
+        onClick={onUseCurrentResult}
+        sx={{
+          borderRadius: "999px",
+          textTransform: "none",
+          minWidth: 0,
+          px: 1.5,
+          py: 0.5,
+          fontSize: "0.75rem",
+          backgroundColor: "rgba(15, 23, 42, 0.72)",
+          color: "#fff",
+          borderColor: "rgba(255, 255, 255, 0.22)",
+          backdropFilter: "blur(10px)",
+          "&:hover": {
+            backgroundColor: "rgba(15, 23, 42, 0.86)",
+            borderColor: "rgba(255, 255, 255, 0.3)",
+          },
+        }}
+      >
+        {currentResultActionLabel ?? "Use this"}
+      </Button>
+    ) : undefined;
+  const resultHeaderActions = resultSlots.length ? resultActionButton : undefined;
+  const resultOverlayContent =
+    !resultSlots.length && resultActionButton && currentResultItem ? (
+      <Box
+        sx={{
+          position: "absolute",
+          right: 12,
+          bottom: 12,
+          zIndex: 4,
+          display: "flex",
+          justifyContent: "flex-end",
+          pointerEvents: "none",
+          "& > *": {
+            pointerEvents: "auto",
+          },
+        }}
+      >
+        {resultActionButton}
+      </Box>
+    ) : undefined;
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
   const leftColumnRef = React.useRef<HTMLDivElement>(null);
@@ -504,6 +560,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           {resultSlots.length ? (
             <ImagePanel
               label={derivedResultLabel}
+              headerActions={resultHeaderActions}
               layout="grid"
               panelTestId="result-panel"
               slots={resultSlots}
@@ -518,6 +575,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               image={rightImage}
               isAnyDndDragging={isAnyDndDragging}
               label="Result"
+              headerActions={resultHeaderActions}
+              overlayContent={resultOverlayContent}
               panelTestId="result-panel"
               onUpload={onUploadRight}
               isDropZone={true}

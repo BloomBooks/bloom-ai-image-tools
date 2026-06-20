@@ -72,7 +72,7 @@ export function OpenRouterWelcomeDialog({
                   },
                 }}
               >
-                Connect to OpenRouter
+                Connect to AI Image Generators
               </Button>
               <Button
                 variant="text"

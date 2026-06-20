@@ -4,13 +4,29 @@ import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib
 import { getModelNameById, getRequestModelIds } from "../lib/modelsCatalog";
 
 /**
- * Builds the OpenRouter model selector for a request body. When a model
- * declares a fallback key we send a `models` array so OpenRouter routes to the
- * first key that works; otherwise we send the single `model` field.
+ * Detects OpenRouter errors that mean "this particular model key cannot serve
+ * the request" — a retired/renamed key, or one whose endpoints don't offer the
+ * requested output modality. These are the cases where failing over to the next
+ * candidate model id is the right move (unlike credits/rate-limit/no-image,
+ * which are not model-identity problems and must not switch models).
+ *
+ * We try candidate ids ONE PER REQUEST rather than handing OpenRouter a `models`
+ * array, because OpenRouter rejects the whole array with a 400 if any id in it
+ * is unrecognized. That makes the array useless for the case we care about most
+ * — a not-yet-published successor key — but a standalone follow-up request to
+ * the successor works fine once it goes live.
  */
-function buildModelSelector(modelId: string): Record<string, unknown> {
-  const ids = getRequestModelIds(modelId);
-  return ids.length > 1 ? { models: ids } : { model: modelId };
+function isModelUnavailableError(
+  status: number,
+  detailMessage: string | null | undefined,
+): boolean {
+  const msg = (detailMessage || "").toLowerCase();
+  // 404 "No endpoints found that support the requested output modalities: ..."
+  if (status === 404 && (msg.includes("no endpoints") || msg.includes("modalit"))) {
+    return true;
+  }
+  // "<id> is not a valid model ID" — unknown/retired key (usually 400 or 404).
+  return msg.includes("not a valid model");
 }
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -536,8 +552,14 @@ export const editImage = async (
   // OpenAI-style size (pixel dimensions) for models that don't support image_config
   const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
 
+  // Ordered model keys to try, one HTTP request each (see
+  // isModelUnavailableError for why we don't send these as a `models` array).
+  // The first is the chosen model; any others are declared fallbacks, e.g. a
+  // renamed/successor key listed via the catalog's `fallbackId`.
+  const candidateModelIds = getRequestModelIds(modelToUse);
+
   const body: Record<string, any> = {
-    ...buildModelSelector(modelToUse),
+    // `model` is set per candidate inside the failover loop below.
     messages: [
       {
         role: "user",
@@ -589,192 +611,219 @@ export const editImage = async (
 
   let lastNoImageDetail = "no text either";
 
-  for (let attempt = 0; attempt < MAX_IMAGE_ATTEMPTS; attempt += 1) {
-    if (effort) {
-      // We only need the image output, not the model's reasoning text.
-      body.reasoning = { effort, exclude: true };
-    } else {
-      delete body.reasoning;
-    }
+  for (let modelIndex = 0; modelIndex < candidateModelIds.length; modelIndex += 1) {
+    const modelForRequest = candidateModelIds[modelIndex];
+    const hasFallbackModel = modelIndex < candidateModelIds.length - 1;
+    const nextModelId = hasFallbackModel ? candidateModelIds[modelIndex + 1] : null;
+    body.model = modelForRequest;
+    let modelUnavailable = false;
 
-    // Log the request parameters (never the image bytes) so the full request is
-    // visible in the console without opening the Network panel.
-    console.log("[openRouter] image request", {
-      model: modelToUse,
-      attempt: attempt + 1,
-      attemptsPlanned: MAX_IMAGE_ATTEMPTS,
-      reasoningLevelRequested: reasoningLevel,
-      reasoningEffortSent: effort ?? "(omitted — model default)",
-      modalities: body.modalities,
-      maxTokens: body.max_tokens,
-      sizeOpenAI: body.size,
-      imageConfigGemini: body.image_config,
-      inputImageCount: images.length,
-      promptChars: prompt.length,
-      promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,
-    });
-
-    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Bloom AI Image Tools",
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    // If the user cancelled while the body was streaming, the read rejects with
-    // AbortError — rethrow it so cancel propagates instead of being swallowed
-    // into an empty body and treated as a retryable "no image" response.
-    const rawText = await response.text().catch(rethrowIfAbort);
-    let data: any = null;
-    try {
-      data = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      data = { _nonJsonBody: rawText };
-    }
-
-    if (!response.ok) {
-      const detailMessage = getOpenRouterErrorDetail(data);
-
-      if (response.status === 402 && detailMessage) {
-        throw new OpenRouterApiError(detailMessage, {
-          status: response.status,
-          reason: "insufficient-credits",
-          detailMessage,
-          infoUrl: OPENROUTER_KEYS_URL,
-        });
+    for (let attempt = 0; attempt < MAX_IMAGE_ATTEMPTS; attempt += 1) {
+      if (effort) {
+        // We only need the image output, not the model's reasoning text.
+        body.reasoning = { effort, exclude: true };
+      } else {
+        delete body.reasoning;
       }
 
-      if (response.status === 429) {
-        throw new OpenRouterApiError(buildRateLimitMessage(modelToUse), {
-          status: response.status,
-          reason: "rate-limited",
-          detailMessage,
-        });
-      }
-
-      const message = detailMessage || rawText || response.statusText || "";
-      const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-      throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
-        status: response.status,
-        detailMessage,
+      // Log the request parameters (never the image bytes) so the full request is
+      // visible in the console without opening the Network panel.
+      console.log("[openRouter] image request", {
+        model: modelForRequest,
+        attempt: attempt + 1,
+        attemptsPlanned: MAX_IMAGE_ATTEMPTS,
+        reasoningLevelRequested: reasoningLevel,
+        reasoningEffortSent: effort ?? "(omitted — model default)",
+        modalities: body.modalities,
+        maxTokens: body.max_tokens,
+        sizeOpenAI: body.size,
+        imageConfigGemini: body.image_config,
+        inputImageCount: images.length,
+        promptChars: prompt.length,
+        promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,
       });
-    }
 
-    // Try to extract image(s) from chat-style response. Interleaved image
-    // models can return MORE THAN ONE image (e.g. one per panel), so collect
-    // them all in order rather than stopping at the first.
-    const choice = data?.choices?.[0];
-    const contentArray = choice?.message?.content;
-    const imagesArray = choice?.message?.images;
-    const finishReason = choice?.finish_reason ?? choice?.native_finish_reason ?? null;
-    const returnedText =
-      extractTextContent(contentArray) || normalizeErrorString(choice?.message?.text);
+      const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Bloom AI Image Tools",
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
 
-    const collectedImages: string[] = [];
-    const addImage = (url: unknown) => {
-      if (
-        typeof url === "string" &&
-        url.startsWith("data:image") &&
-        !collectedImages.includes(url)
-      ) {
-        collectedImages.push(url);
+      // If the user cancelled while the body was streaming, the read rejects with
+      // AbortError — rethrow it so cancel propagates instead of being swallowed
+      // into an empty body and treated as a retryable "no image" response.
+      const rawText = await response.text().catch(rethrowIfAbort);
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { _nonJsonBody: rawText };
       }
-    };
-    // Content array (some models return images here)
-    if (Array.isArray(contentArray)) {
-      for (const part of contentArray) {
-        if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
-      }
-    }
-    // Images array (Gemini models return images here)
-    if (Array.isArray(imagesArray)) {
-      for (const part of imagesArray) {
-        if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
-      }
-    }
-    // OpenAI-style b64_json data array (DALL·E / gpt-image)
-    if (collectedImages.length === 0 && Array.isArray(data?.data)) {
-      for (const entry of data.data) {
-        if (entry?.b64_json) addImage(`data:image/png;base64,${entry.b64_json}`);
-      }
-    }
 
-    // Log the response shape (counts/metadata only — never the image bytes).
-    console.log("[openRouter] image response", {
-      status: response.status,
-      model: (data?.model as string) || modelToUse,
-      attempt: attempt + 1,
-      reasoningEffortSent: effort ?? "(omitted — model default)",
-      finishReason,
-      imagesReturned: collectedImages.length,
-      textChars: returnedText?.length ?? 0,
-      textPreview: returnedText ? returnedText.slice(0, 400) : null,
-      cost: (data?.usage?.cost as number) ?? null,
-      usage: data?.usage ?? null,
-    });
+      if (!response.ok) {
+        const detailMessage = getOpenRouterErrorDetail(data);
 
-    if (collectedImages.length > 0) {
-      return {
-        imageData: collectedImages[0],
-        images: collectedImages,
-        duration: getNow() - localStartTime,
-        model: (data?.model as string) || modelToUse,
-        cost: (data?.usage?.cost as number) ?? 0,
-        text: extractTextContent(contentArray) || undefined,
+        // Retired/renamed key, or one with no image-output endpoint: try the next
+        // candidate model instead of failing the whole request.
+        if (hasFallbackModel && isModelUnavailableError(response.status, detailMessage)) {
+          console.warn(
+            `[openRouter] model "${modelForRequest}" unavailable (${response.status}); ` +
+              `falling over to "${nextModelId}".`,
+          );
+          modelUnavailable = true;
+          break;
+        }
+
+        if (response.status === 402 && detailMessage) {
+          throw new OpenRouterApiError(detailMessage, {
+            status: response.status,
+            reason: "insufficient-credits",
+            detailMessage,
+            infoUrl: OPENROUTER_KEYS_URL,
+          });
+        }
+
+        if (response.status === 429) {
+          throw new OpenRouterApiError(buildRateLimitMessage(modelForRequest), {
+            status: response.status,
+            reason: "rate-limited",
+            detailMessage,
+          });
+        }
+
+        const message = detailMessage || rawText || response.statusText || "";
+        const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+        throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
+          status: response.status,
+          detailMessage,
+        });
+      }
+
+      // Try to extract image(s) from chat-style response. Interleaved image
+      // models can return MORE THAN ONE image (e.g. one per panel), so collect
+      // them all in order rather than stopping at the first.
+      const choice = data?.choices?.[0];
+      const contentArray = choice?.message?.content;
+      const imagesArray = choice?.message?.images;
+      const finishReason = choice?.finish_reason ?? choice?.native_finish_reason ?? null;
+      const returnedText =
+        extractTextContent(contentArray) || normalizeErrorString(choice?.message?.text);
+
+      const collectedImages: string[] = [];
+      const addImage = (url: unknown) => {
+        if (
+          typeof url === "string" &&
+          url.startsWith("data:image") &&
+          !collectedImages.includes(url)
+        ) {
+          collectedImages.push(url);
+        }
       };
+      // Content array (some models return images here)
+      if (Array.isArray(contentArray)) {
+        for (const part of contentArray) {
+          if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
+        }
+      }
+      // Images array (Gemini models return images here)
+      if (Array.isArray(imagesArray)) {
+        for (const part of imagesArray) {
+          if (part?.type === "image_url" && part?.image_url?.url) addImage(part.image_url.url);
+        }
+      }
+      // OpenAI-style b64_json data array (DALL·E / gpt-image)
+      if (collectedImages.length === 0 && Array.isArray(data?.data)) {
+        for (const entry of data.data) {
+          if (entry?.b64_json) addImage(`data:image/png;base64,${entry.b64_json}`);
+        }
+      }
+
+      // Log the response shape (counts/metadata only — never the image bytes).
+      console.log("[openRouter] image response", {
+        status: response.status,
+        model: (data?.model as string) || modelForRequest,
+        attempt: attempt + 1,
+        reasoningEffortSent: effort ?? "(omitted — model default)",
+        finishReason,
+        imagesReturned: collectedImages.length,
+        textChars: returnedText?.length ?? 0,
+        textPreview: returnedText ? returnedText.slice(0, 400) : null,
+        cost: (data?.usage?.cost as number) ?? null,
+        usage: data?.usage ?? null,
+      });
+
+      if (collectedImages.length > 0) {
+        return {
+          imageData: collectedImages[0],
+          images: collectedImages,
+          duration: getNow() - localStartTime,
+          model: (data?.model as string) || modelForRequest,
+          cost: (data?.usage?.cost as number) ?? 0,
+          text: extractTextContent(contentArray) || undefined,
+        };
+      }
+
+      // No image. Diagnose what came back so the failure isn't opaque.
+      const refusal = normalizeErrorString(choice?.message?.refusal);
+      console.warn("[openRouter] No image in response.", {
+        attempt,
+        effort,
+        model: (data?.model as string) || modelForRequest,
+        finishReason,
+        refusal: refusal || null,
+        textPreview: returnedText ? returnedText.slice(0, 800) : null,
+        hadContentArray: Array.isArray(contentArray),
+        hadImagesArray: Array.isArray(imagesArray),
+      });
+
+      const detail =
+        refusal ||
+        returnedText ||
+        (finishReason ? `finish_reason="${finishReason}"` : "") ||
+        "no text either";
+      lastNoImageDetail = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;
+
+      const truncated = finishReason === "length" || finishReason === "MAX_TOKENS";
+      if (truncated) {
+        // The full output-token budget was spent (and billed) on reasoning, so
+        // resending the same request would likely just burn it again. Tell the
+        // user what to change instead of retrying or silently lowering it.
+        const currentLevel =
+          reasoningLevel === "default" || reasoningLevel === "none"
+            ? "the model's default"
+            : `"${reasoningLevel}"`;
+        const lowerLevel =
+          reasoningLevel === "high" ? '"medium"' : reasoningLevel === "medium" ? '"low"' : null;
+        const suggestion = lowerLevel
+          ? `Try lowering it to ${lowerLevel} in the model settings.`
+          : reasoningLevel === "low"
+            ? "Reasoning is already at the lowest level; try a smaller image size."
+            : 'Try setting it to "low" in the model settings.';
+        throw new Error(
+          `The model spent its whole output budget thinking before producing the image. ` +
+            `The reasoning level is currently ${currentLevel}. ${suggestion}`,
+        );
+      }
+
+      if (attempt < MAX_IMAGE_ATTEMPTS - 1) {
+        console.warn(
+          `[openRouter] No image in response (attempt ${attempt + 1}/${MAX_IMAGE_ATTEMPTS}); retrying.`,
+        );
+      }
     }
 
-    // No image. Diagnose what came back so the failure isn't opaque.
-    const refusal = normalizeErrorString(choice?.message?.refusal);
-    console.warn("[openRouter] No image in response.", {
-      attempt,
-      effort,
-      model: (data?.model as string) || modelToUse,
-      finishReason,
-      refusal: refusal || null,
-      textPreview: returnedText ? returnedText.slice(0, 800) : null,
-      hadContentArray: Array.isArray(contentArray),
-      hadImagesArray: Array.isArray(imagesArray),
-    });
-
-    const detail =
-      refusal ||
-      returnedText ||
-      (finishReason ? `finish_reason="${finishReason}"` : "") ||
-      "no text either";
-    lastNoImageDetail = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;
-
-    const truncated = finishReason === "length" || finishReason === "MAX_TOKENS";
-    if (truncated) {
-      // The full output-token budget was spent (and billed) on reasoning, so
-      // resending the same request would likely just burn it again. Tell the
-      // user what to change instead of retrying or silently lowering it.
-      const currentLevel =
-        reasoningLevel === "default" || reasoningLevel === "none"
-          ? "the model's default"
-          : `"${reasoningLevel}"`;
-      const lowerLevel =
-        reasoningLevel === "high" ? '"medium"' : reasoningLevel === "medium" ? '"low"' : null;
-      const suggestion = lowerLevel
-        ? `Try lowering it to ${lowerLevel} in the model settings.`
-        : reasoningLevel === "low"
-          ? "Reasoning is already at the lowest level; try a smaller image size."
-          : 'Try setting it to "low" in the model settings.';
-      throw new Error(
-        `The model spent its whole output budget thinking before producing the image. ` +
-          `The reasoning level is currently ${currentLevel}. ${suggestion}`,
-      );
-    }
-
-    if (attempt < MAX_IMAGE_ATTEMPTS - 1) {
-      console.warn(
-        `[openRouter] No image in response (attempt ${attempt + 1}/${MAX_IMAGE_ATTEMPTS}); retrying.`,
-      );
+    // The model served the request but never produced an image after every
+    // retry. That's not a model-identity problem, so don't burn a fallback
+    // model on it — surface the diagnostic below. (When the inner loop broke
+    // because the model was unavailable, fall through to the next candidate.)
+    if (!modelUnavailable) {
+      break;
     }
   }
 
@@ -807,8 +856,10 @@ export const generateText = async (
     });
   }
 
-  const requestBody = JSON.stringify({
-    ...buildModelSelector(modelToUse),
+  // One HTTP request per candidate model id (see isModelUnavailableError) — the
+  // chosen model first, then any declared fallback/successor keys.
+  const candidateModelIds = getRequestModelIds(modelToUse);
+  const baseRequest = {
     messages: [
       {
         role: "user",
@@ -816,7 +867,7 @@ export const generateText = async (
       },
     ],
     stream: false,
-  });
+  };
 
   // Text endpoints occasionally return an OK response with an EMPTY body
   // (finish_reason="stop", 0 completion tokens) — the same transient hiccup we
@@ -829,85 +880,110 @@ export const generateText = async (
   let accumulatedCost = 0;
   let lastModel = modelToUse;
 
-  for (let attempt = 0; attempt < MAX_TEXT_ATTEMPTS; attempt += 1) {
-    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Bloom AI Image Tools",
-      },
-      body: requestBody,
-      signal: options?.signal,
-    });
+  for (let modelIndex = 0; modelIndex < candidateModelIds.length; modelIndex += 1) {
+    const modelForRequest = candidateModelIds[modelIndex];
+    const hasFallbackModel = modelIndex < candidateModelIds.length - 1;
+    const nextModelId = hasFallbackModel ? candidateModelIds[modelIndex + 1] : null;
+    const requestBody = JSON.stringify({ model: modelForRequest, ...baseRequest });
+    let modelUnavailable = false;
 
-    const rawText = await response.text().catch(rethrowIfAbort);
-    let data: any = null;
-    try {
-      data = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      data = { _nonJsonBody: rawText };
-    }
-
-    if (!response.ok) {
-      const detailMessage = getOpenRouterErrorDetail(data);
-
-      if (response.status === 402 && detailMessage) {
-        throw new OpenRouterApiError(detailMessage, {
-          status: response.status,
-          reason: "insufficient-credits",
-          detailMessage,
-          infoUrl: OPENROUTER_KEYS_URL,
-        });
-      }
-
-      if (response.status === 429) {
-        throw new OpenRouterApiError(buildRateLimitMessage(modelToUse), {
-          status: response.status,
-          reason: "rate-limited",
-          detailMessage,
-        });
-      }
-
-      const message = detailMessage || rawText || response.statusText || "";
-      const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-      throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
-        status: response.status,
-        detailMessage,
+    for (let attempt = 0; attempt < MAX_TEXT_ATTEMPTS; attempt += 1) {
+      const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Bloom AI Image Tools",
+        },
+        body: requestBody,
+        signal: options?.signal,
       });
-    }
 
-    // An empty attempt may still bill prompt tokens, so keep a running total.
-    accumulatedCost += (data?.usage?.cost as number) ?? 0;
-    lastModel = (data?.model as string) || modelToUse;
+      const rawText = await response.text().catch(rethrowIfAbort);
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { _nonJsonBody: rawText };
+      }
 
-    const text =
-      extractTextContent(data?.choices?.[0]?.message?.content) ||
-      normalizeErrorString(data?.choices?.[0]?.message?.text) ||
-      normalizeErrorString(data?.output_text);
+      if (!response.ok) {
+        const detailMessage = getOpenRouterErrorDetail(data);
 
-    if (text) {
-      return {
-        text: stripMarkdownCodeFence(text),
-        duration: performance.now() - startTime,
-        model: lastModel,
-        cost: accumulatedCost,
-      };
-    }
+        // Retired/renamed key, or one with no matching endpoint: try the next
+        // candidate model instead of failing the whole request.
+        if (hasFallbackModel && isModelUnavailableError(response.status, detailMessage)) {
+          console.warn(
+            `[openRouter] model "${modelForRequest}" unavailable (${response.status}); ` +
+              `falling over to "${nextModelId}".`,
+          );
+          modelUnavailable = true;
+          break;
+        }
 
-    const finishReason =
-      data?.choices?.[0]?.finish_reason ?? data?.choices?.[0]?.native_finish_reason ?? null;
-    console.warn(
-      `[openRouter] No text in response (attempt ${attempt + 1}/${MAX_TEXT_ATTEMPTS}).`,
-      { model: lastModel, finishReason },
-    );
+        if (response.status === 402 && detailMessage) {
+          throw new OpenRouterApiError(detailMessage, {
+            status: response.status,
+            reason: "insufficient-credits",
+            detailMessage,
+            infoUrl: OPENROUTER_KEYS_URL,
+          });
+        }
 
-    if (attempt === MAX_TEXT_ATTEMPTS - 1) {
-      throw new Error(
-        `OpenRouter did not return text after ${MAX_TEXT_ATTEMPTS} attempts.` +
-          (finishReason ? ` (finish_reason="${finishReason}")` : ""),
+        if (response.status === 429) {
+          throw new OpenRouterApiError(buildRateLimitMessage(modelForRequest), {
+            status: response.status,
+            reason: "rate-limited",
+            detailMessage,
+          });
+        }
+
+        const message = detailMessage || rawText || response.statusText || "";
+        const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+        throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
+          status: response.status,
+          detailMessage,
+        });
+      }
+
+      // An empty attempt may still bill prompt tokens, so keep a running total.
+      accumulatedCost += (data?.usage?.cost as number) ?? 0;
+      lastModel = (data?.model as string) || modelForRequest;
+
+      const text =
+        extractTextContent(data?.choices?.[0]?.message?.content) ||
+        normalizeErrorString(data?.choices?.[0]?.message?.text) ||
+        normalizeErrorString(data?.output_text);
+
+      if (text) {
+        return {
+          text: stripMarkdownCodeFence(text),
+          duration: performance.now() - startTime,
+          model: lastModel,
+          cost: accumulatedCost,
+        };
+      }
+
+      const finishReason =
+        data?.choices?.[0]?.finish_reason ?? data?.choices?.[0]?.native_finish_reason ?? null;
+      console.warn(
+        `[openRouter] No text in response (attempt ${attempt + 1}/${MAX_TEXT_ATTEMPTS}).`,
+        { model: lastModel, finishReason },
       );
+
+      if (attempt === MAX_TEXT_ATTEMPTS - 1) {
+        throw new Error(
+          `OpenRouter did not return text after ${MAX_TEXT_ATTEMPTS} attempts.` +
+            (finishReason ? ` (finish_reason="${finishReason}")` : ""),
+        );
+      }
+    }
+
+    // Reached only when the inner loop broke because the model was unavailable;
+    // fall through to the next candidate. (No-text exhaustion throws above.)
+    if (!modelUnavailable) {
+      break;
     }
   }
 

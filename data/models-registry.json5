@@ -1,5 +1,14 @@
 // Model registry (JSON5)
 // Add comments, trailing commas, etc.
+//
+// Surviving a model-key rename (e.g. the "-preview" lifecycle): set `fallbackId`
+// on an entry to its successor key. openRouterService tries `id` first and, if
+// that key is unavailable (retired/renamed, or no endpoint for the needed
+// modality), automatically retries the request with `fallbackId`. The two keys
+// are sent as SEPARATE requests, not as an OpenRouter `models` array — an array
+// 400s the whole request if either key is unknown, so it can't pre-list a
+// successor that isn't live yet. With `fallbackId`, the day OpenRouter retires
+// the primary the app fails over on its own, no code change or redeploy needed.
 [
   {
     id: "google/gemini-3-pro-image",

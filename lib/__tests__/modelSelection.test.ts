@@ -11,7 +11,7 @@ import {
 } from "../modelsCatalog";
 import type { ToolDefinition } from "../../types";
 
-const GEMINI_FLASH = "google/gemini-3.1-flash-image-preview";
+const GEMINI_FLASH = "google/gemini-3.1-flash-image";
 const GPT5_IMAGE = "openai/gpt-5-image";
 const GPT54_IMAGE_2 = "openai/gpt-5.4-image-2";
 

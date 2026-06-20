@@ -2,7 +2,7 @@
 // Add comments, trailing commas, etc.
 [
   {
-    id: "google/gemini-3-pro-image-preview",
+    id: "google/gemini-3-pro-image",
     name: "Gemini 3 Pro Preview",
     badge: "Great but Expensive",
     description: "'Nano Banana Pro' Good for editing, as it preserves the original image.",
@@ -26,14 +26,11 @@
     default: false,
   },
   {
-    // OpenRouter currently only exposes the "-preview" key. We can NOT pre-list
-    // the not-yet-published "google/gemini-3.1-flash-image" as a fallbackId:
-    // OpenRouter validates every id in the `models` array up front and rejects
-    // the whole request with 400 ("... is not a valid model ID") for any key it
-    // doesn't recognize. (The `models` fallback only fails over on runtime
-    // errors of *valid* models, not unknown ids.) When OpenRouter retires the
-    // preview and republishes the non-preview key, update `id` here.
-    id: "google/gemini-3.1-flash-image-preview",
+    // OpenRouter retired the "-preview" key and republished the stable
+    // "google/gemini-3.1-flash-image" key (the preview now has no
+    // image-output endpoint, surfacing as "404 No endpoints found that support
+    // the requested output modalities: text, image"). Use the stable key.
+    id: "google/gemini-3.1-flash-image",
     name: "Gemini 3.1 Flash",
     badge: "Great",
     description: "'Nano Banana 2'. Good for editing, as it preserves the original image. Not quite as good at instruction understanding as Gemini 3 Pro.",

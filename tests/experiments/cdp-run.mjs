@@ -130,9 +130,9 @@ await page.evaluate((level) => {
     const state = JSON.parse(RAW);
     state.modelReasoningLevels = state.modelReasoningLevels || {};
     if (level === "default") {
-      delete state.modelReasoningLevels["google/gemini-3-pro-image-preview"];
+      delete state.modelReasoningLevels["google/gemini-3-pro-image"];
     } else {
-      state.modelReasoningLevels["google/gemini-3-pro-image-preview"] = level;
+      state.modelReasoningLevels["google/gemini-3-pro-image"] = level;
     }
     localStorage.setItem("imageToolsAppState.v1", JSON.stringify(state));
     return "ok";

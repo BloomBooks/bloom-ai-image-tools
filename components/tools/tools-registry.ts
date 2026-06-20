@@ -580,8 +580,8 @@ export const TOOLS: ToolDefinition[] = (
       referenceImages: "0",
       // Only offer these two engines: Gemini 3 Pro Preview (default) and
       // GPT-5.4 Image 2 as a secondary option. Other catalog models are hidden.
-      modelIds: ["google/gemini-3-pro-image-preview", "openai/gpt-5.4-image-2"],
-      recommendedModelIds: ["google/gemini-3-pro-image-preview"],
+      modelIds: ["google/gemini-3-pro-image", "openai/gpt-5.4-image-2"],
+      recommendedModelIds: ["google/gemini-3-pro-image"],
     },
     {
       id: "remove_object",

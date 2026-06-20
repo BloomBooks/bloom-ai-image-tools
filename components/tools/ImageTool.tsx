@@ -41,10 +41,10 @@ import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSiz
 import { ToolModelPicker } from "./ToolModelPicker";
 import { theme } from "../../themes";
 
-// Must match the catalog id in data/models-registry.json5, which is the
-// "-preview" key while OpenRouter only exposes the preview. Keep in sync if the
-// non-preview key is ever published and the registry id is updated.
-const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image-preview";
+// Must match the catalog id in data/models-registry.json5 (the stable,
+// non-preview key now that OpenRouter has retired the "-preview" key). Keep in
+// sync if the registry id changes.
+const GEMINI_3_1_FLASH_MODEL_ID = "google/gemini-3.1-flash-image";
 
 const LOCALIZE_TOOL_ORDER = [
   "extract_cast_of_characters",

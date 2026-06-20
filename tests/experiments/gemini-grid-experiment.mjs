@@ -18,7 +18,7 @@ const INPUT = process.env.INPUT_IMAGE
 const OUT_IMAGE = path.resolve(here, "output-grid.png");
 const OUT_TEXT = path.resolve(here, "output-text.txt");
 
-const MODEL = process.env.EXPERIMENT_MODEL || "google/gemini-3.1-flash-image-preview";
+const MODEL = process.env.EXPERIMENT_MODEL || "google/gemini-3.1-flash-image";
 const KEY = process.env.BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS;
 
 const PROMPT = `This image is a single page containing several separate illustrated panels (a comic / instructional poster). Do TWO things.

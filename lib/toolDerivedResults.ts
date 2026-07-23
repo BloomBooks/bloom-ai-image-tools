@@ -1,5 +1,9 @@
 import { removeBackgroundFromImage } from "./backgroundRemoval";
-import { segmentImageIntoPieces } from "./imageSegmentation";
+import {
+  detectMagentaFrameBoundsFromImage,
+  segmentImageIntoPieces,
+  sliceSheetIntoGridCells,
+} from "./imageSegmentation";
 
 export type DerivedImageExtractionResult = {
   imageDataItems: string[];
@@ -15,6 +19,15 @@ export const extractDerivedImageItems = async (
     componentMergeMarginRatio?: number;
     targetPieceCount?: number;
     detectColoredFrames?: boolean;
+    /**
+     * Slice the sheet along the uniform grid the generation prompt mandated
+     * for this many frames, keeping each full cell as one piece so the subject
+     * stays wherever it sits inside its cell. Used for animation sprite
+     * sheets, where that registration is what keeps the encoded GIF from
+     * jittering. Falls back to whitespace/component segmentation when no
+     * plausible grid is found.
+     */
+    uniformGridFrameCount?: number;
   } = {},
 ): Promise<DerivedImageExtractionResult> => {
   // Magenta-frame path first, on the PRISTINE generator output: the neural
@@ -28,7 +41,25 @@ export const extractDerivedImageItems = async (
     }
   }
 
+  // Magenta frame boxes are detected on the PRISTINE sheet (the background
+  // remover erodes the thin lines), but the frames themselves are cut from
+  // the background-removed image — the coordinates are the same.
+  const magentaBoxes = options.uniformGridFrameCount
+    ? await detectMagentaFrameBoundsFromImage(imageData)
+    : [];
+
   const backgroundRemoved = await removeBackgroundFromImage(imageData, options);
+
+  if (options.uniformGridFrameCount) {
+    const gridCells = await sliceSheetIntoGridCells(backgroundRemoved.imageData, {
+      expectedFrameCount: options.uniformGridFrameCount,
+      presetCellBounds: magentaBoxes.length >= 2 ? magentaBoxes : undefined,
+    });
+    if (gridCells.length) {
+      return { imageDataItems: gridCells, durationMs: backgroundRemoved.durationMs };
+    }
+  }
+
   const segmentedItems = await segmentImageIntoPieces(backgroundRemoved.imageData, {
     preferSeparatedSubjects: options.preferSeparatedSubjects,
     preferComponents: options.preferComponents,

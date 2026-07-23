@@ -29,6 +29,12 @@ export const createAnimatedGif = async (
   options: {
     delayMs?: number;
     repeat?: number;
+    /**
+     * Delay for the final frame only. One-way actions hold their end state
+     * here so the endless GIF repeat reads as "…done — again!" instead of an
+     * abrupt strobe back to frame 1.
+     */
+    finalDelayMs?: number;
   } = {},
 ): Promise<string> => {
   if (!frameImageData.length) {
@@ -42,6 +48,12 @@ export const createAnimatedGif = async (
   const images = await Promise.all(frameImageData.map((frame) => loadImage(frame)));
   const width = Math.max(1, ...images.map((image) => image.naturalWidth));
   const height = Math.max(1, ...images.map((image) => image.naturalHeight));
+  // Uniform grid cells arrive pre-registered on identical canvases — stack
+  // them untouched. Re-aligning them by bounding box would reintroduce the
+  // very jitter the grid slicing exists to avoid.
+  const framesShareCanvasSize = images.every(
+    (image) => image.naturalWidth === width && image.naturalHeight === height,
+  );
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -53,15 +65,16 @@ export const createAnimatedGif = async (
 
   const gif = GIFEncoder();
   const delay = Math.max(40, options.delayMs ?? 140);
+  const finalDelay = options.finalDelayMs ? Math.max(delay, options.finalDelayMs) : delay;
   const repeat = options.repeat ?? 0;
 
-  for (const image of images) {
+  for (const [index, image] of images.entries()) {
     context.clearRect(0, 0, width, height);
 
-    // Align every frame to the same baseline and centerline so trimmed cutouts
-    // do not jitter when the animation is encoded.
-    const x = Math.round((width - image.naturalWidth) / 2);
-    const y = height - image.naturalHeight;
+    // Mixed-size frames are trimmed cutouts with no shared registration; the
+    // baseline/centerline alignment is the best heuristic left for those.
+    const x = framesShareCanvasSize ? 0 : Math.round((width - image.naturalWidth) / 2);
+    const y = framesShareCanvasSize ? 0 : height - image.naturalHeight;
     context.drawImage(image, x, y);
 
     const frame = context.getImageData(0, 0, width, height);
@@ -74,7 +87,7 @@ export const createAnimatedGif = async (
 
     gif.writeFrame(indexedFrame, width, height, {
       palette,
-      delay,
+      delay: index === images.length - 1 ? finalDelay : delay,
       repeat,
       dispose: 2,
       transparent: transparentIndex >= 0,

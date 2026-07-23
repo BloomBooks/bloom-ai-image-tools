@@ -111,6 +111,11 @@ import { createAnimatedGif } from "../lib/animatedGif";
 import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import { extractDerivedImageItems } from "../lib/toolDerivedResults";
 import {
+  getGifSheetAspectRatio,
+  parseGifEnding,
+  parseGifFrameCount,
+} from "../lib/gifAnimationPrompt";
+import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
   hydrateThumbnailStripsSnapshot,
@@ -2142,6 +2147,11 @@ export function ImageToolsWorkspace({
 
       const basePrompt = tool.promptTemplate(params);
       let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
+      if (tool.derivedResultMode === "animated-gif") {
+        // The sheet's canvas shape follows the frame-count's grid layout
+        // (16 portrait cells don't fit a 16:9 canvas, so 4x4 goes square).
+        requestedAspectRatio = getGifSheetAspectRatio(parseGifFrameCount(params.frameCount));
+      }
 
       const constrainedReferences = referenceItems.slice(0, max);
       const referenceStyleId =
@@ -2176,7 +2186,7 @@ export function ImageToolsWorkspace({
       // Tools that decompose a page (break-comic) must not downscale it. Match
       // the output size + aspect ratio to the input so resolution is preserved
       // (a 3508px poster -> 4K), instead of falling back to a square 1K default.
-      let requestedSize = params.size;
+      let requestedSize = params.size ?? tool.hiddenSizeDefault;
       let autoSizeResolution: { width: number; height: number } | undefined;
       if (tool.autoSizeFromInput && sourceImages[0]) {
         const inputResolution = await getImageDimensions(sourceImages[0]);
@@ -2552,6 +2562,13 @@ export function ImageToolsWorkspace({
             // they drive the split directly (falls back to whitespace inference
             // if the generator didn't draw usable frames).
             detectColoredFrames: tool.splitByComponents,
+            // Animation sheets are cut along the uniform grid the prompt
+            // mandated, keeping each full cell so the subject stays registered
+            // frame to frame.
+            uniformGridFrameCount:
+              tool.derivedResultMode === "animated-gif"
+                ? parseGifFrameCount(params.frameCount)
+                : undefined,
           });
           durationMs += derivedItemsResult.durationMs;
           imageDataItems = derivedItemsResult.imageDataItems;
@@ -2744,11 +2761,27 @@ export function ImageToolsWorkspace({
         const gifImageData = await createAnimatedGif(imageDataItems, {
           delayMs: 140,
           repeat: 0,
+          // One-way actions hold their end state before the repeat wraps
+          // around, so the restart doesn't read as an abrupt strobe.
+          finalDelayMs: parseGifEnding(params.ending) === "one-way" ? 1200 : undefined,
         });
         throwIfCancelled();
         const gifItem = await createHistoryItem(gifImageData, parentId);
+        // Keep the raw sprite sheet next to the GIF so a bad animation can be
+        // diagnosed at a glance (badly drawn vs badly cut). Skipped when the
+        // model returned per-frame images — there is no single sheet then.
+        const gifSheetItem =
+          tool.keepDerivedSourceSheet && !modelReturnedMultipleImages
+            ? await createHistoryItem(processedImageData, parentId)
+            : null;
+        // One synchronous block, GIF appended last so it lands leftmost in the
+        // strip (see the orphan-cleanup note above for why nothing may be
+        // appended between awaits).
+        if (gifSheetItem) {
+          appendHistoryEntry(gifSheetItem);
+        }
         appendHistoryEntry(gifItem);
-        finalizeDerivedItems([gifItem]);
+        finalizeDerivedItems(gifSheetItem ? [gifItem, gifSheetItem] : [gifItem]);
         return;
       }
 

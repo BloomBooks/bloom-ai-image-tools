@@ -34,3 +34,10 @@ playwright/.cache/
 nul
 
 BloomEditor
+
+# GIF animation experiment output (tests/experiments/gif-animation-experiment.mjs)
+tests/experiments/gif-out/
+
+# Python bytecode cache (tests/experiments helper scripts)
+__pycache__/
+*.pyc

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  computeGridCellBoundsFromRaster,
+  computeGridFrameLayout,
+  computeUniformGridCellBoundsFromRaster,
+  dropSparseGridCells,
+  eraseEdgeIntrudersFromFrameRaster,
   detectMagentaFrameBounds,
   extractOpaqueBoundsFromRaster,
   extractPieceBoundsFromRaster,
@@ -344,6 +349,361 @@ describe("extractPieceBoundsFromRaster", () => {
       right: 122,
       bottom: 64,
     });
+  });
+});
+
+describe("computeGridCellBoundsFromRaster", () => {
+  // A 2-row × 4-column animation sprite sheet: 30×30 subjects centered at
+  // x = 50/150/250/350 and y = 50/150 on a 400×200 white sheet.
+  const sheetSubject = (column: number, row: number) => ({
+    left: 35 + column * 100,
+    top: 35 + row * 100,
+    right: 64 + column * 100,
+    bottom: 64 + row * 100,
+  });
+  const INK = { r: 200, g: 60, b: 60 };
+
+  it("returns every full grid cell in reading order, cut mid-gutter", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    const subjects = [0, 1].flatMap((row) =>
+      [0, 1, 2, 3].map((column) => sheetSubject(column, row)),
+    );
+    subjects.forEach((subject) => fillRect(data, width, subject, INK));
+
+    const cells = computeGridCellBoundsFromRaster({ data, width, height });
+
+    expect(cells).toHaveLength(8);
+
+    // Reading order: first four cells span the top row left to right.
+    for (let index = 1; index < 4; index += 1) {
+      expect(cells[index].top).toBe(cells[0].top);
+      expect(cells[index].left).toBeGreaterThan(cells[index - 1].left);
+    }
+    expect(cells[4].top).toBeGreaterThan(cells[0].bottom);
+
+    // Each cell contains its whole subject — the cell is NOT trimmed to the
+    // subject's bounding box; the cut lands in the middle of the gutter.
+    subjects.forEach((subject, index) => {
+      expectBoundsToContain(cells[index], subject);
+    });
+    expect(cells[0].right).toBeGreaterThanOrEqual(90); // gutter spans x=65..134
+    expect(cells[0].bottom).toBeGreaterThanOrEqual(90); // gutter spans y=65..134
+  });
+
+  it("drops empty grid positions", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    [0, 1]
+      .flatMap((row) => [0, 1, 2, 3].map((column) => sheetSubject(column, row)))
+      .slice(0, 7)
+      .forEach((subject) => fillRect(data, width, subject, INK));
+
+    expect(computeGridCellBoundsFromRaster({ data, width, height })).toHaveLength(7);
+  });
+
+  it("returns a single cell for one solid subject", () => {
+    const width = 200;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    fillRect(data, width, { left: 40, top: 40, right: 160, bottom: 160 }, INK);
+
+    expect(computeGridCellBoundsFromRaster({ data, width, height })).toHaveLength(1);
+  });
+
+  it("returns nothing for a blank raster", () => {
+    const width = 100;
+    const height = 100;
+    expect(
+      computeGridCellBoundsFromRaster({ data: createWhiteRaster(width, height), width, height }),
+    ).toHaveLength(0);
+  });
+});
+
+describe("computeUniformGridCellBoundsFromRaster", () => {
+  const INK = { r: 200, g: 60, b: 60 };
+
+  // 2 rows × 4 columns on a 400×200 sheet: true cell pitch 100×100.
+  const drawSubjects = (
+    data: Uint8ClampedArray,
+    width: number,
+    subjects: Array<{ column: number; row: number; detachedProp?: boolean }>,
+  ) => {
+    subjects.forEach(({ column, row, detachedProp }) => {
+      // Main subject blob, off-center within its cell.
+      fillRect(
+        data,
+        width,
+        {
+          left: 10 + column * 100,
+          top: 30 + row * 100,
+          right: 45 + column * 100,
+          bottom: 90 + row * 100,
+        },
+        INK,
+      );
+      if (detachedProp) {
+        // A separated prop (hat blowing away): its own blob near the cell's
+        // far side, NOT touching the subject.
+        fillRect(
+          data,
+          width,
+          {
+            left: 70 + column * 100,
+            top: 12 + row * 100,
+            right: 92 + column * 100,
+            bottom: 30 + row * 100,
+          },
+          INK,
+        );
+      }
+    });
+  };
+
+  it("cuts the mandated 2x4 layout even when frames contain detached pieces", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    drawSubjects(
+      data,
+      width,
+      [0, 1].flatMap((row) =>
+        [0, 1, 2, 3].map((column) => ({ column, row, detachedProp: column >= 2 })),
+      ),
+    );
+
+    const cells = computeUniformGridCellBoundsFromRaster({ data, width, height }, 8);
+
+    expect(cells).toHaveLength(8);
+    // Cells sit on the uniform 100px pitch (within the offset search slack),
+    // and each cell keeps its subject AND its detached prop together.
+    cells.forEach((cell, index) => {
+      const column = index % 4;
+      const row = Math.floor(index / 4);
+      expect(Math.abs(cell.left - column * 100)).toBeLessThanOrEqual(12);
+      expect(Math.abs(cell.top - row * 100)).toBeLessThanOrEqual(12);
+    });
+  });
+
+  it("keeps empty grid positions out of the frame list", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    drawSubjects(
+      data,
+      width,
+      [0, 1].flatMap((row) => [0, 1, 2, 3].map((column) => ({ column, row }))).slice(0, 7),
+    );
+
+    expect(computeUniformGridCellBoundsFromRaster({ data, width, height }, 8)).toHaveLength(7);
+  });
+
+  it("cuts along drawn grid borders instead of counting them as artwork", () => {
+    // The model sometimes draws the grid it was told to keep invisible. A
+    // 4x4 sheet with black divider lines on the cell boundaries: the full-
+    // length lines mark the cuts and must not fail the damage check.
+    const width = 400;
+    const height = 400;
+    const data = createWhiteRaster(width, height);
+    const BLACK = { r: 20, g: 20, b: 20 };
+    for (const line of [100, 200, 300]) {
+      fillRect(data, width, { left: line - 1, top: 0, right: line + 1, bottom: height - 1 }, BLACK);
+      fillRect(data, width, { left: 0, top: line - 1, right: width - 1, bottom: line + 1 }, BLACK);
+    }
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        fillRect(
+          data,
+          width,
+          {
+            left: 30 + column * 100,
+            top: 25 + row * 100,
+            right: 70 + column * 100,
+            bottom: 80 + row * 100,
+          },
+          INK,
+        );
+      }
+    }
+
+    const cells = computeUniformGridCellBoundsFromRaster({ data, width, height }, 16);
+    expect(cells).toHaveLength(16);
+    expect(Math.abs(cells[1].left - 100)).toBeLessThanOrEqual(4);
+  });
+
+  it("accepts the grid the model actually drew when it differs from the requested count", () => {
+    // Asked for 12 frames, but the sheet came back as a clean 4x4 (16 cells).
+    // Cutting the grid that was drawn beats failing over to content inference.
+    const width = 400;
+    const height = 400;
+    const data = createWhiteRaster(width, height);
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        fillRect(
+          data,
+          width,
+          {
+            left: 25 + column * 100,
+            top: 20 + row * 100,
+            right: 75 + column * 100,
+            bottom: 85 + row * 100,
+          },
+          INK,
+        );
+      }
+    }
+
+    expect(computeUniformGridCellBoundsFromRaster({ data, width, height }, 12)).toHaveLength(16);
+  });
+
+  it("returns nothing when the sheet is not the requested grid", () => {
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    // One big drawing across the whole canvas: every candidate cut line
+    // crosses artwork, so no layout passes the damage check.
+    fillRect(data, width, { left: 20, top: 20, right: 380, bottom: 180 }, INK);
+
+    expect(computeUniformGridCellBoundsFromRaster({ data, width, height }, 8)).toHaveLength(0);
+  });
+});
+
+describe("dropSparseGridCells", () => {
+  it("drops cells where the subject is missing (only a stray prop)", () => {
+    const INK = { r: 200, g: 60, b: 60 };
+    const width = 600;
+    const height = 100;
+    const data = createWhiteRaster(width, height);
+    const cells = [0, 1, 2, 3, 4, 5].map((column) => ({
+      left: column * 100,
+      top: 0,
+      right: column * 100 + 99,
+      bottom: 99,
+    }));
+    // Four cells hold the subject; cells 2 and 4 hold only a small prop.
+    for (const column of [0, 1, 3, 5]) {
+      fillRect(
+        data,
+        width,
+        { left: 20 + column * 100, top: 10, right: 80 + column * 100, bottom: 90 },
+        INK,
+      );
+    }
+    for (const column of [2, 4]) {
+      fillRect(
+        data,
+        width,
+        { left: 40 + column * 100, top: 20, right: 55 + column * 100, bottom: 32 },
+        INK,
+      );
+    }
+
+    const kept = dropSparseGridCells({ data, width, height }, cells);
+    expect(kept).toHaveLength(4);
+    expect(kept.map((cell) => cell.left)).toEqual([0, 100, 300, 500]);
+  });
+});
+
+describe("computeGridFrameLayout divider clipping", () => {
+  const INK = { r: 200, g: 60, b: 60 };
+  const LINE = { r: 30, g: 30, b: 30 };
+
+  it("clips frame windows at drawn dividers that fall inside them", () => {
+    // Sheet with a full-height drawn divider at x=190..193, but the cut
+    // landed at x=210 (uneven grid): cell 1's window would contain the line
+    // plus a strip of cell 2's subject. The window must stop at the divider.
+    const width = 400;
+    const height = 200;
+    const data = createWhiteRaster(width, height);
+    fillRect(data, width, { left: 190, top: 0, right: 193, bottom: 199 }, LINE);
+    fillRect(data, width, { left: 40, top: 40, right: 150, bottom: 180 }, INK); // subject 1
+    fillRect(data, width, { left: 240, top: 40, right: 350, bottom: 180 }, INK); // subject 2
+    const cells = [
+      { left: 0, top: 0, right: 210, bottom: 199 },
+      { left: 211, top: 0, right: 399, bottom: 199 },
+    ];
+
+    const layout = computeGridFrameLayout({ data, width, height }, cells);
+
+    expect(layout).not.toBeNull();
+    // Cell 1's window ends before the divider; cell 2's is untouched (the
+    // divider is outside it).
+    expect(layout!.windows[0].right).toBeLessThan(190);
+    expect(layout!.windows[1].left).toBe(211 + 2); // its edge inset only
+  });
+});
+
+describe("eraseEdgeIntrudersFromFrameRaster", () => {
+  const INK = { r: 200, g: 60, b: 60 };
+  const alphaAt = (data: Uint8ClampedArray, width: number, x: number, y: number) =>
+    data[(y * width + x) * 4 + 3];
+
+  it("erases a narrow neighbor fragment hugging the edge, keeps subject and props", () => {
+    const width = 200;
+    const height = 200;
+    const data = new Uint8ClampedArray(width * height * 4); // transparent frame
+    // Main subject in the middle, with an arm reaching to the right edge.
+    fillRect(data, width, { left: 60, top: 40, right: 140, bottom: 180 }, INK);
+    fillRect(data, width, { left: 140, top: 60, right: 199, bottom: 70 }, INK); // own arm at edge
+    // A floating prop (hat) not touching any edge.
+    fillRect(data, width, { left: 90, top: 5, right: 115, bottom: 20 }, INK);
+    // Neighbor bleed: narrow strip hugging the left edge, disconnected.
+    fillRect(data, width, { left: 0, top: 80, right: 14, bottom: 160 }, INK);
+
+    const erased = eraseEdgeIntrudersFromFrameRaster({ data, width, height });
+
+    expect(erased).toBe(1);
+    expect(alphaAt(data, width, 5, 100)).toBe(0); // bleed gone
+    expect(alphaAt(data, width, 100, 100)).toBe(255); // subject intact
+    expect(alphaAt(data, width, 195, 65)).toBe(255); // own arm at edge intact
+    expect(alphaAt(data, width, 100, 10)).toBe(255); // floating prop intact
+  });
+});
+
+describe("computeGridFrameLayout", () => {
+  const INK = { r: 200, g: 60, b: 60 };
+
+  it("aligns rows by their baselines when the sheet has uneven margins", () => {
+    // The generator centered two content bands inside arbitrary canvas margins
+    // (top 80, bottom 100) instead of filling uniform cells. Canvas-anchored
+    // cells then hold their subjects at different heights; baseline
+    // registration must land both rows' feet at the same output y.
+    const width = 400;
+    const height = 400;
+    const data = createWhiteRaster(width, height);
+    const feetRow1 = 160;
+    const feetRow2 = 300;
+    for (const column of [0, 1]) {
+      fillRect(
+        data,
+        width,
+        { left: 40 + column * 200, top: 80, right: 120 + column * 200, bottom: feetRow1 },
+        INK,
+      );
+      fillRect(
+        data,
+        width,
+        { left: 40 + column * 200, top: 220, right: 120 + column * 200, bottom: feetRow2 },
+        INK,
+      );
+    }
+
+    const cells = computeUniformGridCellBoundsFromRaster({ data, width, height }, 4);
+    expect(cells).toHaveLength(4);
+
+    const layout = computeGridFrameLayout({ data, width, height }, cells);
+    expect(layout).not.toBeNull();
+    const outputFeet = layout!.windows.map((window, index) => {
+      const baseline = cells[index].top < 200 ? feetRow1 : feetRow2;
+      return window.destY + (baseline - window.top);
+    });
+    outputFeet.forEach((feetY) => {
+      expect(Math.abs(feetY - outputFeet[0])).toBeLessThanOrEqual(1);
+    });
+    // Frames shrink to content instead of inheriting the giant margins.
+    expect(layout!.frameHeight).toBeLessThan(150);
   });
 });
 

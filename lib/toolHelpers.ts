@@ -44,14 +44,17 @@ export const getRequestedAspectRatioValue = (
   tool: ToolDefinition | null,
   params: ToolParams | null | undefined,
 ): string => {
-  const configuredValue = params?.aspectRatio?.trim();
-  if (configuredValue) {
-    return configuredValue;
-  }
-
+  // A hidden default outranks params: tools that declare one have no shape
+  // picker, so any params.aspectRatio is a stale leftover persisted from
+  // before the picker was hidden for that tool.
   const hiddenDefault = tool?.hiddenAspectRatioDefault?.trim();
   if (hiddenDefault) {
     return hiddenDefault;
+  }
+
+  const configuredValue = params?.aspectRatio?.trim();
+  if (configuredValue) {
+    return configuredValue;
   }
 
   return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO;

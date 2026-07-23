@@ -285,6 +285,277 @@ const detectGridBounds = (mask: Uint8Array, width: number, height: number): Boun
   return bounds;
 };
 
+// Build one cell interval per content range along an axis, cutting at the
+// midpoint of each whitespace gutter. Outer edges are trimmed to the content
+// extent (not the sheet edge) so uneven outer margins don't skew the cells.
+const buildCellIntervals = (
+  ranges: Array<{ start: number; end: number }>,
+): Array<{ start: number; end: number }> => {
+  const intervals: Array<{ start: number; end: number }> = [];
+  for (let index = 0; index < ranges.length; index += 1) {
+    const start =
+      index === 0
+        ? ranges[0].start
+        : Math.floor((ranges[index - 1].end + 1 + ranges[index].start) / 2);
+    const end =
+      index === ranges.length - 1
+        ? ranges[index].end
+        : Math.floor((ranges[index].end + 1 + ranges[index + 1].start) / 2) - 1;
+    intervals.push({ start, end });
+  }
+  return intervals;
+};
+
+// Candidate row/column layouts for a sprite sheet requested with `frameCount`
+// frames. Deliberately NOT limited to grids that hold exactly that count: the
+// generator sometimes draws a different grid than asked (e.g. 4x4 when told
+// 2x6), and cutting the grid it actually drew — verified by the damage check —
+// beats failing over to content inference. Capped at 8x8 / twice the requested
+// count to keep the search sane.
+const gridLayoutCandidates = (frameCount: number): Array<{ rows: number; columns: number }> => {
+  const layouts: Array<{ rows: number; columns: number }> = [];
+  const maxCells = Math.max(frameCount * 2, 24);
+  for (let rows = 1; rows <= 8; rows += 1) {
+    for (let columns = 1; columns <= 8; columns += 1) {
+      const cells = rows * columns;
+      if (cells >= 2 && cells <= maxCells) {
+        layouts.push({ rows, columns });
+      }
+    }
+  }
+  return layouts;
+};
+
+// For one axis, find the global shift of an evenly-pitched set of cut lines
+// that crosses the least foreground. A compliant sheet has whitespace gutters
+// at the uniform-pitch positions, so the best shift's "damage" is ~zero; a
+// non-compliant sheet forces every candidate line through artwork. A line
+// whose foreground spans (nearly) the whole perpendicular extent is a DRAWN
+// grid divider, not artwork — models sometimes draw the grid despite being
+// told not to — and marks exactly where to cut, so it costs nothing.
+const bestUniformCuts = (
+  counts: number[],
+  parts: number,
+  perpendicularExtent: number,
+): { positions: number[]; damage: number; maxLineDamage: number } => {
+  const extent = counts.length;
+  const pitch = extent / parts;
+  if (parts <= 1) {
+    return { positions: [], damage: 0, maxLineDamage: 0 };
+  }
+
+  // A divider is a THIN full-length line: near-full perpendicular coverage
+  // AND part of a short run of such positions. Without the thickness cap, any
+  // solid drawing spanning the sheet would zero out cuts straight through it.
+  const dividerThreshold = Math.max(1, Math.floor(perpendicularExtent * 0.9));
+  const maxDividerThickness = Math.max(4, Math.round(extent * 0.006));
+  const isDivider = new Uint8Array(extent);
+  for (let index = 0; index < extent; index += 1) {
+    if (counts[index] < dividerThreshold) {
+      continue;
+    }
+    let runEnd = index;
+    while (runEnd + 1 < extent && counts[runEnd + 1] >= dividerThreshold) {
+      runEnd += 1;
+    }
+    if (runEnd - index + 1 <= maxDividerThickness) {
+      isDivider.fill(1, index, runEnd + 1);
+    }
+    index = runEnd;
+  }
+  const sampleAt = (position: number) => (isDivider[position] ? 0 : counts[position]);
+  const sampleLine = (position: number) =>
+    sampleAt(position - 1) + sampleAt(position) + sampleAt(position + 1);
+  const searchRadius = Math.max(2, Math.floor(pitch * 0.1));
+  let best: {
+    positions: number[];
+    damage: number;
+    maxLineDamage: number;
+    distance: number;
+  } | null = null;
+  for (let offset = -searchRadius; offset <= searchRadius; offset += 1) {
+    const positions: number[] = [];
+    let damage = 0;
+    let maxLineDamage = 0;
+    for (let part = 1; part < parts; part += 1) {
+      const line = Math.round(offset + part * pitch);
+      if (line < 1 || line > extent - 2) {
+        damage = Number.POSITIVE_INFINITY;
+        break;
+      }
+      positions.push(line);
+      const lineDamage = sampleLine(line);
+      damage += lineDamage;
+      maxLineDamage = Math.max(maxLineDamage, lineDamage);
+    }
+    // Among equally clean offsets prefer the one closest to the exact pitch
+    // positions: a compliant sheet then cuts on its true grid instead of
+    // wherever a wide gutter happens to allow.
+    const distance = Math.abs(offset);
+    if (
+      best === null ||
+      damage < best.damage ||
+      (damage === best.damage && distance < best.distance)
+    ) {
+      best = { positions, damage, maxLineDamage, distance };
+    }
+  }
+  return best
+    ? { positions: best.positions, damage: best.damage, maxLineDamage: best.maxLineDamage }
+    : { positions: [], damage: Number.POSITIVE_INFINITY, maxLineDamage: Number.POSITIVE_INFINITY };
+};
+
+// Cut a sprite sheet into `frameCount` equal cells along the uniform grid the
+// generation prompt mandates. Unlike content-based inference this is immune to
+// subjects that split into several pieces inside one frame (a hat blowing off a
+// head created extra whitespace boundaries and shredded the sheet into 15
+// "cells"): the cut lines come from the requested layout, and the content is
+// only used to (a) nudge the lines onto the gutters and (b) verify the sheet
+// really is a compliant grid — when the cheapest cut lines still cross real
+// artwork, the sheet doesn't match the layout and [] is returned so the caller
+// can fall back. Cells are uniform, so stacked frames stay registered exactly.
+export const computeUniformGridCellBoundsFromRaster = (
+  raster: RasterImageData,
+  frameCount: number,
+): Bounds[] => {
+  const { width, height } = raster;
+  if (!width || !height || frameCount < 2) {
+    return [];
+  }
+
+  const mask = createForegroundMask(raster);
+  const rowCounts = collectAxisCounts(mask, width, height, "row");
+  const columnCounts = collectAxisCounts(mask, width, height, "column");
+  const totalForeground = rowCounts.reduce((total, count) => total + count, 0);
+  if (!totalForeground) {
+    return [];
+  }
+
+  const minimumCellPixels = Math.max(48, Math.floor(width * height * 0.0004));
+  const collectCells = (rowCuts: number[], columnCuts: number[]): Bounds[] => {
+    const rowEdges = [0, ...rowCuts, height];
+    const columnEdges = [0, ...columnCuts, width];
+    const cells: Bounds[] = [];
+    for (let row = 0; row < rowEdges.length - 1; row += 1) {
+      for (let column = 0; column < columnEdges.length - 1; column += 1) {
+        const candidate = {
+          left: columnEdges[column],
+          top: rowEdges[row],
+          right: columnEdges[column + 1] - 1,
+          bottom: rowEdges[row + 1] - 1,
+        };
+        if (countForeground(mask, width, candidate) >= minimumCellPixels) {
+          cells.push(candidate);
+        }
+      }
+    }
+    return cells;
+  };
+
+  // The cut lines sample 3px each; thin stray marks (wind lines) crossing a
+  // gutter are tolerable, artwork is not. Above 2% of the sheet's foreground
+  // on the cuts, the layout doesn't match the sheet at all. Several layouts
+  // can pass (a clean 2x4 sheet also cuts cleanly as 1x8 when subjects and
+  // their detached props alternate, and as 2x2 pairs), so rank the passing
+  // layouts: genuinely clean cuts beat merely-tolerable ones (never slice
+  // artwork just to hit the requested count), then the non-empty cell count
+  // closest to the requested frame count, then the FINER grid (so a drawn 4x4
+  // isn't halved into stacked pairs when both cut cleanly), then least damage.
+  const damageLimit = totalForeground * 0.02;
+  const cleanLimit = totalForeground * 0.002;
+  // Per-cut ceiling: a genuine gutter cut costs ~nothing (thin stray marks at
+  // most), while a cut through the subject costs hundreds of pixels. Without
+  // this, a layout with few cuts can slice straight through artwork and still
+  // fit under the TOTAL damage budget.
+  const perCutLimit = Math.max(6, totalForeground * 0.001);
+  let best: {
+    cells: Bounds[];
+    damage: number;
+    cleanRank: number;
+    countMiss: number;
+  } | null = null;
+  for (const layout of gridLayoutCandidates(frameCount)) {
+    const rowResult = bestUniformCuts(rowCounts, layout.rows, width);
+    const columnResult = bestUniformCuts(columnCounts, layout.columns, height);
+    const damage = rowResult.damage + columnResult.damage;
+    if (
+      damage > damageLimit ||
+      Math.max(rowResult.maxLineDamage, columnResult.maxLineDamage) > perCutLimit
+    ) {
+      continue;
+    }
+    const cells = collectCells(rowResult.positions, columnResult.positions);
+    if (cells.length < 2) {
+      continue;
+    }
+    const cleanRank = damage <= cleanLimit ? 0 : 1;
+    const countMiss = Math.abs(cells.length - frameCount);
+    const isBetter =
+      !best ||
+      cleanRank < best.cleanRank ||
+      (cleanRank === best.cleanRank &&
+        (countMiss < best.countMiss ||
+          (countMiss === best.countMiss &&
+            (cells.length > best.cells.length ||
+              (cells.length === best.cells.length && damage < best.damage)))));
+    if (isBetter) {
+      best = { cells, damage, cleanRank, countMiss };
+    }
+  }
+
+  return best?.cells ?? [];
+};
+
+// Compute the uniform grid cells of a sprite sheet WITHOUT trimming each cell
+// to its content. Animation frames are drawn registered against their cell
+// (the GIF prompt anchors the subject inside every frame), so the cell
+// rectangle — not the foreground bounding box — is what keeps frames aligned
+// when they are stacked into a GIF. Cells are the full spans between gutter
+// midpoints; empty grid positions are dropped. Returns cells in reading order.
+export const computeGridCellBoundsFromRaster = (raster: RasterImageData): Bounds[] => {
+  const { width, height } = raster;
+  if (!width || !height) {
+    return [];
+  }
+
+  const mask = createForegroundMask(raster);
+  const rowCounts = collectAxisCounts(mask, width, height, "row");
+  const columnCounts = collectAxisCounts(mask, width, height, "column");
+  const maxRowCount = rowCounts.reduce((highest, count) => Math.max(highest, count), 0);
+  const maxColumnCount = columnCounts.reduce((highest, count) => Math.max(highest, count), 0);
+  // The 8%-of-peak term lets a limb poking into a gutter still read as
+  // background, so an extended arm doesn't fuse two neighboring frames.
+  const rowThreshold = Math.max(2, Math.floor(width * 0.008), Math.ceil(maxRowCount * 0.08));
+  const columnThreshold = Math.max(2, Math.floor(height * 0.008), Math.ceil(maxColumnCount * 0.08));
+  const rowGap = Math.max(2, Math.floor(height * 0.008));
+  const columnGap = Math.max(2, Math.floor(width * 0.008));
+  const rowRanges = detectActiveRanges(rowCounts, rowThreshold, rowGap);
+  const columnRanges = detectActiveRanges(columnCounts, columnThreshold, columnGap);
+  if (!rowRanges.length || !columnRanges.length) {
+    return [];
+  }
+
+  const rowIntervals = buildCellIntervals(rowRanges);
+  const columnIntervals = buildCellIntervals(columnRanges);
+  const minimumCellPixels = Math.max(48, Math.floor(width * height * 0.0004));
+  const cells: Bounds[] = [];
+  rowIntervals.forEach((row) => {
+    columnIntervals.forEach((column) => {
+      const candidate = {
+        left: column.start,
+        top: row.start,
+        right: column.end,
+        bottom: row.end,
+      };
+      if (countForeground(mask, width, candidate) >= minimumCellPixels) {
+        cells.push(candidate);
+      }
+    });
+  });
+
+  return cells;
+};
+
 const rangesOverlap = (
   aStart: number,
   aEnd: number,
@@ -1008,6 +1279,458 @@ const cropBoundsToDataUrl = async (image: HTMLImageElement, bounds: Bounds): Pro
   );
 
   return createMarginCanvas(trimmedCanvas, SPLIT_OUTPUT_MARGIN_PX).toDataURL("image/png");
+};
+
+// Drop grid cells whose frame the generator failed to draw. A cell holding
+// only a stray prop or fragment (e.g. the sheet where the boy simply vanished
+// for three frames, leaving just the hat) makes the subject blink out of the
+// animation. The median cell is subject-sized even when several frames
+// failed, so anything far below it is a failed frame, not a smaller pose.
+export const dropSparseGridCells = (raster: RasterImageData, cellBounds: Bounds[]): Bounds[] => {
+  if (cellBounds.length < 3) {
+    return cellBounds;
+  }
+  const mask = createForegroundMask(raster);
+  const areas = cellBounds.map((bounds) => countForeground(mask, raster.width, bounds));
+  const sorted = [...areas].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const kept = cellBounds.filter((_, index) => areas[index] >= median * 0.25);
+  return kept.length >= 2 ? kept : cellBounds;
+};
+
+// Find DRAWN grid divider lines on the whole sheet: thin runs whose coverage
+// approaches the full perpendicular extent. At sheet level this is unambiguous
+// (a divider crosses every row band; artwork never does), unlike per-frame
+// detection where projections of subject, bleed, and line all overlap. The
+// isolation check guards single-row sheets, where a standing subject's torso
+// can also reach high coverage — but its neighbors do too, while a divider
+// stands alone.
+const findSheetDividerRuns = (
+  counts: number[],
+  perpendicularExtent: number,
+): Array<{ start: number; end: number }> => {
+  const extent = counts.length;
+  const threshold = Math.max(8, Math.floor(perpendicularExtent * 0.7));
+  const maxThickness = Math.max(8, Math.round(extent * 0.01));
+  const runs: Array<{ start: number; end: number }> = [];
+  for (let index = 0; index < extent; index += 1) {
+    if (counts[index] < threshold) {
+      continue;
+    }
+    let runEnd = index;
+    let peak = counts[index];
+    while (runEnd + 1 < extent && counts[runEnd + 1] >= threshold) {
+      runEnd += 1;
+      peak = Math.max(peak, counts[runEnd]);
+    }
+    const thin = runEnd - index + 1 <= maxThickness;
+    const beforeCount = counts[Math.max(0, index - 4)];
+    const afterCount = counts[Math.min(extent - 1, runEnd + 4)];
+    const isolated = beforeCount <= peak * 0.3 && afterCount <= peak * 0.3;
+    if (thin && isolated) {
+      runs.push({ start: index, end: runEnd });
+    }
+    index = runEnd;
+  }
+  return runs;
+};
+
+// Erase fragments of NEIGHBORING frames that ride along inside a cell crop.
+// The cut line sits in the gutter, but a subject leaning toward it can end a
+// few pixels past it — the neighbor's shoulder/arm then shows as a narrow
+// strip hugging the frame's left or right edge and flashes in the animation.
+// Signature: a connected foreground component that touches a vertical edge,
+// stays within a narrow edge band, and is far smaller than the frame's main
+// subject. (An object exiting the frame mid-action matches too and vanishes
+// one frame early — harmless next to a foreign body part flashing.) Mutates
+// the raster in place; returns how many components were erased.
+export const eraseEdgeIntrudersFromFrameRaster = (raster: RasterImageData): number => {
+  const { data, width, height } = raster;
+  const mask = createForegroundMask(raster);
+  const visited = new Uint8Array(mask.length);
+  type Component = { pixels: number[]; left: number; right: number };
+  const components: Component[] = [];
+
+  for (let index = 0; index < mask.length; index += 1) {
+    if (!mask[index] || visited[index]) {
+      continue;
+    }
+    visited[index] = 1;
+    const queue = [index];
+    const pixels: number[] = [];
+    let left = index % width;
+    let right = left;
+    while (queue.length) {
+      const current = queue.pop() as number;
+      pixels.push(current);
+      const x = current % width;
+      const y = Math.floor(current / width);
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nextX = x + dx;
+          const nextY = y + dy;
+          if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) {
+            continue;
+          }
+          const nextIndex = nextY * width + nextX;
+          if (mask[nextIndex] && !visited[nextIndex]) {
+            visited[nextIndex] = 1;
+            queue.push(nextIndex);
+          }
+        }
+      }
+    }
+    components.push({ pixels, left, right });
+  }
+
+  const largestArea = components.reduce((largest, c) => Math.max(largest, c.pixels.length), 0);
+  const maxBandWidth = Math.max(4, Math.floor(width * 0.18));
+  // "Touching" needs slack: the edge inset and anti-aliasing shave the
+  // outermost pixels off a bleed fragment, leaving it a few px shy of the
+  // frame edge.
+  const edgeSlack = Math.max(5, Math.round(width * 0.02));
+  let erasedCount = 0;
+  for (const component of components) {
+    const touchesEdge = component.left <= edgeSlack || component.right >= width - 1 - edgeSlack;
+    const bandWidth = component.right - component.left + 1;
+    if (!touchesEdge || bandWidth > maxBandWidth || component.pixels.length > largestArea * 0.25) {
+      continue;
+    }
+    for (const pixel of component.pixels) {
+      data[pixel * 4 + 3] = 0;
+    }
+    erasedCount += 1;
+  }
+  return erasedCount;
+};
+
+export type GridFrameLayout = {
+  frameWidth: number;
+  frameHeight: number;
+  windows: Array<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    destX: number;
+    destY: number;
+  }>;
+};
+
+// Turn grid cells into per-frame crop windows with row-baseline registration.
+// Some generators anchor their rows to the canvas (uniform cells), others
+// center a block of content bands inside arbitrary margins — cutting those on
+// the uniform grid leaves each row's subject at a different height inside its
+// cell, and the GIF bounces at every row change. The one vertical invariant
+// the generation prompt guarantees is the ground line, and within a row it is
+// pixel-exact (all cells share the row's cut), so: find each row's foreground
+// baseline and anchor every frame's crop window a fixed distance above it.
+// Horizontal stays grid-anchored (there is no horizontal invariant), inset a
+// little against cut-line residue; the frame height shrinks to the tallest
+// row's content instead of inheriting the cells' empty margins.
+export const computeGridFrameLayout = (
+  raster: RasterImageData,
+  cellBounds: Bounds[],
+): GridFrameLayout | null => {
+  if (!cellBounds.length) {
+    return null;
+  }
+
+  const { data, width, height } = raster;
+  const rowForeground = (y: number, left: number, right: number): boolean => {
+    for (let x = left; x <= right; x += 1) {
+      if (!isBackgroundPixel(data, (y * width + x) * 4)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Drawn dividers on the sheet: when the generator drew its grid unevenly,
+  // the uniform cut can land a little beside a divider, leaving the line AND a
+  // strip of the neighboring frame inside a cell. Each window is clipped at
+  // any divider that falls inside it (keeping the side holding the cell's own
+  // subject), so line, halo, and neighbor bleed all fall away. Content that
+  // genuinely straddles a divider is cut at the boundary — it reads as normal
+  // frame clipping.
+  const sheetMask = createForegroundMask(raster);
+  const columnDividers = findSheetDividerRuns(
+    collectAxisCounts(sheetMask, width, height, "column"),
+    height,
+  );
+  const rowDividers = findSheetDividerRuns(
+    collectAxisCounts(sheetMask, width, height, "row"),
+    width,
+  );
+  const DIVIDER_HALO = 4;
+
+  // Group cells into grid rows. Uniform cuts give identical tops; cells from
+  // detected drawn boxes wobble by a few pixels, so cluster tops within a
+  // fraction of the cell height instead of requiring exact equality.
+  const sortedHeights = cellBounds
+    .map((bounds) => bounds.bottom - bounds.top + 1)
+    .sort((a, b) => a - b);
+  const medianCellHeight = sortedHeights[Math.floor(sortedHeights.length / 2)];
+  const rowTolerance = Math.max(4, Math.floor(medianCellHeight * 0.25));
+  const sortedTops = [...new Set(cellBounds.map((bounds) => bounds.top))].sort((a, b) => a - b);
+  const topClusters: number[][] = [];
+  for (const top of sortedTops) {
+    const cluster = topClusters[topClusters.length - 1];
+    if (cluster && top - cluster[0] <= rowTolerance) {
+      cluster.push(top);
+    } else {
+      topClusters.push([top]);
+    }
+  }
+  const rowByTop = new Map<number, ReturnType<typeof buildRow>>();
+  function buildRow(cluster: number[]) {
+    const cells = cellBounds.filter((bounds) => cluster.includes(bounds.top));
+    const left = Math.min(...cells.map((bounds) => bounds.left));
+    const right = Math.max(...cells.map((bounds) => bounds.right));
+    const top = Math.min(...cluster);
+    const bottom = Math.max(...cells.map((bounds) => bounds.bottom));
+    let baseline = top;
+    for (let y = bottom; y >= top; y -= 1) {
+      if (rowForeground(y, left, right)) {
+        baseline = y;
+        break;
+      }
+    }
+    let contentTop = baseline;
+    for (let y = top; y <= baseline; y += 1) {
+      if (rowForeground(y, left, right)) {
+        contentTop = y;
+        break;
+      }
+    }
+    return { top, bottom, baseline, contentTop };
+  }
+  const rows = topClusters.map((cluster) => {
+    const row = buildRow(cluster);
+    cluster.forEach((top) => rowByTop.set(top, row));
+    return row;
+  });
+
+  const widestCell = cellBounds.reduce(
+    (widest, bounds) => Math.max(widest, bounds.right - bounds.left + 1),
+    1,
+  );
+  const tallestCell = cellBounds.reduce(
+    (tallest, bounds) => Math.max(tallest, bounds.bottom - bounds.top + 1),
+    1,
+  );
+  const edgeInset = Math.max(2, Math.round(Math.min(widestCell, tallestCell) * 0.01));
+  const pad = Math.max(6, Math.round(tallestCell * 0.02));
+  const frameWidth = Math.max(1, widestCell - edgeInset * 2);
+  const tallestContent = rows.reduce(
+    (tallest, row) => Math.max(tallest, row.baseline - row.contentTop + 1),
+    1,
+  );
+  const frameHeight = Math.min(tallestCell, tallestContent + pad * 2);
+
+  const windows = cellBounds.map((bounds) => {
+    const row = rowByTop.get(bounds.top);
+    const insetLeft = bounds.left + edgeInset;
+    const insetRight = Math.max(bounds.right - edgeInset, insetLeft);
+
+    // Clip at dividers inside the window, keeping the subject's side. The
+    // dest offset shifts with a left/top clip so registration is unaffected.
+    let clippedLeft = insetLeft;
+    let clippedRight = insetRight;
+    const centerX = (bounds.left + bounds.right) / 2;
+    for (const divider of columnDividers) {
+      if (divider.start > clippedLeft + 2 && divider.end < clippedRight - 2) {
+        if ((divider.start + divider.end) / 2 <= centerX) {
+          clippedLeft = Math.min(divider.end + DIVIDER_HALO, clippedRight);
+        } else {
+          clippedRight = Math.max(divider.start - DIVIDER_HALO, clippedLeft);
+        }
+      }
+    }
+    const insetWidth = insetRight - insetLeft + 1;
+    const destX = Math.floor((frameWidth - insetWidth) / 2) + (clippedLeft - insetLeft);
+
+    // Anchor from the row baseline: the window bottom sits `pad` below it,
+    // clamped inside the cell so cut-line residue stays out; the top is
+    // whatever the frame height reaches, clipped at the cell's inset edge
+    // (content above that belongs to the row above). Clipping shifts destY,
+    // never the baseline anchor, so alignment survives clamping.
+    const idealBottom = Math.min((row?.baseline ?? bounds.bottom) + pad, bounds.bottom - edgeInset);
+    const idealTop = idealBottom - frameHeight + 1;
+    const visibleTop = Math.max(idealTop, bounds.top + edgeInset, 0);
+    let clippedTop = visibleTop;
+    let clippedBottom = Math.max(idealBottom, visibleTop);
+    const centerY = (bounds.top + bounds.bottom) / 2;
+    for (const divider of rowDividers) {
+      if (divider.start > clippedTop + 2 && divider.end < clippedBottom - 2) {
+        if ((divider.start + divider.end) / 2 <= centerY) {
+          clippedTop = Math.min(divider.end + DIVIDER_HALO, clippedBottom);
+        } else {
+          clippedBottom = Math.max(divider.start - DIVIDER_HALO, clippedTop);
+        }
+      }
+    }
+    const destY = visibleTop - idealTop + (clippedTop - visibleTop);
+
+    return {
+      left: clippedLeft,
+      top: clippedTop,
+      right: clippedRight,
+      bottom: clippedBottom,
+      destX,
+      destY,
+    };
+  });
+
+  return { frameWidth, frameHeight, windows };
+};
+
+// Detect the magenta frame boxes on a sheet image (DOM wrapper around
+// detectMagentaFrameBounds). Run this on the PRISTINE generator output: the
+// neural background remover erodes the thin lines (same lesson as break-comic).
+export const detectMagentaFrameBoundsFromImage = async (imageData: string): Promise<Bounds[]> => {
+  if (typeof document === "undefined") {
+    return [];
+  }
+  const image = await loadImage(imageData);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas context unavailable for magenta box detection.");
+  }
+  context.drawImage(image, 0, 0);
+  const raster = context.getImageData(0, 0, canvas.width, canvas.height);
+  return detectMagentaFrameBounds({
+    data: raster.data,
+    width: raster.width,
+    height: raster.height,
+  });
+};
+
+// Slice a sprite sheet into its uniform grid cells for animation frames. Every
+// returned frame has the SAME canvas size, with frame content registered by
+// grid position horizontally and by row baseline vertically (see
+// computeGridFrameLayout), so the encoder can stack frames as-is and the
+// subject stays wherever the generator drew it. Deliberately no per-cell
+// trimming: the trim-and-realign path (cropBoundsToDataUrl + bbox alignment)
+// discards that registration and makes the subject jump whenever its
+// silhouette changes. Returns [] when no plausible multi-cell grid is found,
+// so the caller can fall back to whitespace/component segmentation.
+export const sliceSheetIntoGridCells = async (
+  imageData: string,
+  options: {
+    expectedFrameCount?: number;
+    minimumCellCount?: number;
+    /**
+     * Cell rectangles already known from detected magenta frame boxes (outer
+     * bounds, from the pristine sheet — coordinates match the background-
+     * removed image). These beat any grid inference: the generator registered
+     * each frame to the box it drew. Insetting past the line happens here.
+     */
+    presetCellBounds?: Array<{ left: number; top: number; right: number; bottom: number }>;
+  } = {},
+): Promise<string[]> => {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
+  const image = await loadImage(imageData);
+  const sheetCanvas = document.createElement("canvas");
+  sheetCanvas.width = image.naturalWidth;
+  sheetCanvas.height = image.naturalHeight;
+  const sheetContext = sheetCanvas.getContext("2d");
+  if (!sheetContext) {
+    throw new Error("Canvas context unavailable for grid slicing.");
+  }
+  sheetContext.drawImage(image, 0, 0);
+  const raster = sheetContext.getImageData(0, 0, sheetCanvas.width, sheetCanvas.height);
+  const rasterData = {
+    data: raster.data,
+    width: raster.width,
+    height: raster.height,
+  };
+
+  // Preference order: detected magenta boxes (exact, model-registered), then
+  // the uniform layout-driven cut (immune to subjects that separate into
+  // several pieces within one frame), then content-inferred grid as fallback
+  // for sheets that ignored the requested layout.
+  const boxes = options.presetCellBounds ?? [];
+  const boxInset = boxes.length
+    ? Math.max(
+        8,
+        Math.round(
+          Math.min(...boxes.map((box) => Math.min(box.right - box.left, box.bottom - box.top))) *
+            0.02,
+        ),
+      )
+    : 0;
+  const presetBounds: Bounds[] = boxes.map((box) => ({
+    left: box.left + boxInset,
+    top: box.top + boxInset,
+    right: Math.max(box.right - boxInset, box.left + boxInset),
+    bottom: Math.max(box.bottom - boxInset, box.top + boxInset),
+  }));
+  const uniformBounds =
+    !presetBounds.length && options.expectedFrameCount
+      ? computeUniformGridCellBoundsFromRaster(rasterData, options.expectedFrameCount)
+      : [];
+  let cellBounds = presetBounds.length ? presetBounds : uniformBounds;
+  if (!cellBounds.length) {
+    const inferredBounds = computeGridCellBoundsFromRaster(rasterData);
+    // A content-inferred cell count far from the requested frame count means
+    // the inference latched onto sub-pieces (e.g. a hat separated from its
+    // character), which animates as garbage — better to bail out entirely.
+    const plausible =
+      !options.expectedFrameCount ||
+      Math.abs(inferredBounds.length - options.expectedFrameCount) <= 1;
+    cellBounds = plausible ? inferredBounds : [];
+  }
+  const minimumCellCount = options.minimumCellCount ?? 4;
+  if (cellBounds.length < minimumCellCount) {
+    return [];
+  }
+
+  const layout = computeGridFrameLayout(rasterData, dropSparseGridCells(rasterData, cellBounds));
+  if (!layout) {
+    return [];
+  }
+
+  return layout.windows.map((window) => {
+    const cropWidth = window.right - window.left + 1;
+    const cropHeight = window.bottom - window.top + 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = layout.frameWidth;
+    canvas.height = layout.frameHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas context unavailable for grid slicing.");
+    }
+    context.drawImage(
+      image,
+      window.left,
+      window.top,
+      cropWidth,
+      cropHeight,
+      window.destX,
+      window.destY,
+      cropWidth,
+      cropHeight,
+    );
+    const frameData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const erased = eraseEdgeIntrudersFromFrameRaster({
+      data: frameData.data,
+      width: frameData.width,
+      height: frameData.height,
+    });
+    if (erased > 0) {
+      context.putImageData(frameData, 0, 0);
+    }
+    return canvas.toDataURL("image/png");
+  });
 };
 
 export const segmentImageIntoPieces = async (

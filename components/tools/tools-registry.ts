@@ -18,6 +18,15 @@ import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "..
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
 import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
 import { BREAK_COMIC_EDIT_PROMPT } from "../../lib/breakComic";
+import {
+  buildGifAnimationSheetPrompt,
+  DEFAULT_GIF_ENDING_OPTION,
+  DEFAULT_GIF_FRAME_COUNT,
+  GIF_ENDING_OPTIONS,
+  GIF_FRAME_COUNT_OPTIONS,
+  parseGifEnding,
+  parseGifFrameCount,
+} from "../../lib/gifAnimationPrompt";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
@@ -52,6 +61,7 @@ const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
 
 const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "pdf_to_images",
+  "make_gif",
   "ethnicity",
   "apply_localized_characters",
   "enhance_drawing",
@@ -242,10 +252,32 @@ export const TOOLS: ToolDefinition[] = (
             "Optional: describe the motion, such as blinking, waving, hopping, or turning around.",
           optional: true,
         },
+        {
+          name: "frameCount",
+          label: "Frames",
+          type: "select",
+          options: GIF_FRAME_COUNT_OPTIONS.map(String),
+          defaultValue: String(DEFAULT_GIF_FRAME_COUNT),
+        },
+        {
+          name: "ending",
+          label: "Ending",
+          type: "select",
+          options: [...GIF_ENDING_OPTIONS],
+          defaultValue: DEFAULT_GIF_ENDING_OPTION,
+        },
       ],
       promptTemplate: (params: Record<string, string>) => {
-        const basePrompt =
-          "Using the supplied reference image, create a clean animation sprite sheet of 8 sequential frames for the same main subject. Keep the character or object recognizable and consistent from frame to frame, with the same design language, camera angle, scale, and lighting. Arrange the 8 frames in reading order on a pure white background with generous spacing so each frame can be separated cleanly. Each frame must show a different moment in one short looping action. No borders, no panels, no captions, no text, no frame numbers, no arrows, no motion trails, and no extra scene background. The animation should work as transparent cutout frames after the white background is removed.";
+        // Magenta boxes: the generator registers each frame to the box it
+        // drew (best measured stability), the slicer cuts on exact known
+        // rectangles, and any compliance failure is obvious on the kept
+        // sheet. The invisible-grid slicing remains the automatic fallback
+        // when a model doesn't draw usable boxes.
+        const basePrompt = buildGifAnimationSheetPrompt(
+          parseGifFrameCount(params.frameCount),
+          parseGifEnding(params.ending),
+          { magentaBoxes: true },
+        );
         return appendOptionalInstructions(
           basePrompt,
           params.animationDescription,
@@ -256,6 +288,14 @@ export const TOOLS: ToolDefinition[] = (
       referenceImages: "1",
       editImage: false,
       derivedResultMode: "animated-gif",
+      // Keep the raw sprite sheet in history next to the GIF so a bad result
+      // can be diagnosed (was it drawn wrong, or cut wrong?).
+      keepDerivedSourceSheet: true,
+      // The sheet layout (2 wide rows of portrait-ish cells) wants a wide
+      // canvas, and more pixels means more usable per-frame resolution at the
+      // same per-image price — so skip the shape picker and always ask big.
+      hiddenAspectRatioDefault: "16:9",
+      hiddenSizeDefault: "2k",
     },
     {
       id: "enhance_drawing",

@@ -117,8 +117,9 @@ export interface ToolDefinition {
   /** Optional derived output handling for tools that split a generated sheet into assets. */
   derivedResultMode?: ToolDerivedResultMode;
   /**
-   * For "split-images" tools, also keep the unsplit grid sheet alongside the
-   * individual pieces (instead of discarding it once the pieces are produced).
+   * For "split-images" and "animated-gif" tools, also keep the unsplit grid
+   * sheet alongside the derived result (instead of discarding it once the
+   * pieces / GIF are produced).
    */
   keepDerivedSourceSheet?: boolean;
   /**
@@ -148,6 +149,8 @@ export interface ToolDefinition {
   autoSizeFromInput?: boolean;
   /** Hidden tools without a shape picker can still override their requested aspect ratio. */
   hiddenAspectRatioDefault?: string;
+  /** Tools without a size picker can still request a specific output size tier. */
+  hiddenSizeDefault?: string;
 }
 
 export interface EthnicityCategory {

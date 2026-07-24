@@ -25,6 +25,29 @@ const getRuntimeHostname = () => {
 export const isLocalhostHostname = (hostname: string | null | undefined) =>
   LOCALHOST_HOSTNAMES.has((hostname || "").trim().toLowerCase());
 
+// When the editor is hosted (Bloom iframe), the host decides whether developer
+// tools are exposed: the hosted shell calls setHostDeveloperToolsEnabled() with
+// IBloomHostInitPayload.showDeveloperTools on every init. Hostname gating alone
+// is not enough there — Bloom serves the editor from localhost even for real
+// end users. null = standalone (no host verdict) → hostname gating applies.
+let hostDeveloperToolsPreference: boolean | null = null;
+
+export const setHostDeveloperToolsEnabled = (enabled: boolean | null) => {
+  hostDeveloperToolsPreference = enabled;
+};
+
+/**
+ * Whether the local dummy model should be offered in tool model pickers.
+ * The dummy runs entirely in-browser but stays localhost-only regardless;
+ * on localhost the host's preference (when hosted) is the deciding vote.
+ */
+export const isLocalDummyModelOffered = (hostname = getRuntimeHostname()) => {
+  if (!isLocalhostHostname(hostname)) {
+    return false;
+  }
+  return hostDeveloperToolsPreference ?? true;
+};
+
 export const withLocalModels = (
   models: ModelInfo[],
   hostname = getRuntimeHostname(),

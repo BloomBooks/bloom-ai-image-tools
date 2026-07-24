@@ -1,4 +1,4 @@
-import type { ModelReasoningLevel, ThumbnailStripsSnapshot } from "../../types";
+import type { ImageCredits, ModelReasoningLevel, ThumbnailStripsSnapshot } from "../../types";
 
 /**
  * Metadata for a single image in the history. Bytes are stored separately
@@ -26,6 +26,8 @@ export interface HistoryEntry {
   caption?: string | null;
   /** Human-assigned name for the image's subject (e.g. a character name). */
   name?: string | null;
+  /** IP credits of the image's source (see ImageRecordData.credits). */
+  credits?: ImageCredits | null;
   /** MIME type of the stored bytes (e.g. "image/png"). Drives file extension. */
   imageMime: string;
   /** Bumped every time mutable metadata changes; LWW key during reconcile. */

@@ -159,6 +159,21 @@ export interface EthnicityCategory {
   description: string;
 }
 
+/**
+ * IP/attribution metadata for an image — the six fields Bloom reads/writes via
+ * ClearShare. The editor treats the object as opaque: it carries credits along
+ * edit chains and hands them back at commit, but never interprets or fills in
+ * the fields itself. Any field may be null/empty.
+ */
+export interface ImageCredits {
+  copyrightNotice?: string | null;
+  creator?: string | null;
+  license?: string | null;
+  attributionUrl?: string | null;
+  collectionName?: string | null;
+  collectionUri?: string | null;
+}
+
 export interface ImageRecordData {
   id: string;
   parentId: string | null;
@@ -191,6 +206,14 @@ export interface ImageRecordData {
   resolution?: { width: number; height: number };
   isStarred?: boolean;
   origin?: "generated" | "uploaded" | "bookImages";
+  /**
+   * Credits of this image's IP source: supplied by the host for book images,
+   * and copied from the edit target when a result is created by editing it.
+   * Absent/null = no known credits. A result that is not derived from a
+   * credited image (text-to-image, reference-only generation, in-editor
+   * upload) must NOT inherit credits from anywhere — never fabricate.
+   */
+  credits?: ImageCredits | null;
 }
 
 /** @deprecated Use ImageRecordData. */

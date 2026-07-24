@@ -324,6 +324,7 @@ const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): HistoryEn
   sourceSummary: record.sourceSummary ?? null,
   caption: record.caption ?? null,
   name: record.name ?? null,
+  credits: record.credits ?? null,
   imageMime: mime,
   metaUpdatedAt: Date.now(),
 });
@@ -349,6 +350,7 @@ const imageRecordFromHistoryEntry = (
   sourceSummary: entry.sourceSummary ?? null,
   caption: entry.caption ?? null,
   name: entry.name ?? null,
+  credits: entry.credits ?? null,
   resolution: entry.resolution,
   isStarred: entry.isStarred ?? false,
   origin: entry.origin,

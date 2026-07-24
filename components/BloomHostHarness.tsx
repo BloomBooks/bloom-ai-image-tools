@@ -27,7 +27,7 @@ import {
   IBloomHostHistoryImage,
   createHarnessBloomHostBridge,
 } from "../services/host/BloomHostBridge";
-import { PersistedImageToolsState } from "../types";
+import { ImageCredits, PersistedImageToolsState } from "../types";
 import { BloomHostedImageEditor } from "./BloomHostedImageEditor";
 import { theme } from "../themes";
 
@@ -41,6 +41,23 @@ const HARNESS_BOOK_ID = "sample-book";
 // `init`) — using `.invalid` makes it obvious this value is a stand-in, not an endpoint.
 const HARNESS_UNUSED_HTTP_BASE = "https://bloom-host.invalid/bloom/api/aiImageEditor";
 const SEEDED_RESULT_HISTORY_ID = "history-seeded-result-1";
+
+// IP credits for some book-image slots (others deliberately have none).
+const HARNESS_BOOK_IMAGE_CREDITS: Record<string, ImageCredits> = {
+  "book-image-1": {
+    copyrightNotice: "Copyright © 2020, Acme Art Collective",
+    creator: "Ada Artist",
+    license: "http://creativecommons.org/licenses/by/4.0/",
+    attributionUrl: "https://acme-art.invalid/retro-futurism",
+    collectionName: "Acme Art Collective",
+    collectionUri: "https://acme-art.invalid",
+  },
+  "book-image-3": {
+    copyrightNotice: "Copyright © 2018, Paper Cut Press",
+    creator: "Pat Papercut",
+    license: "http://creativecommons.org/licenses/by-nc/3.0/",
+  },
+};
 
 // Default harness history: the host enumerates `.ai-image-editor/history/` and
 // supplies each image with its `<id>.json` sidecar — except the last entry, an
@@ -79,6 +96,12 @@ const DEMO_HISTORY: IBloomHostHistoryImage[] = [
       sourceSummary: "Line art edit",
       isStarred: true,
       origin: "generated",
+      // Credits carried from an edited source image, persisted in the sidecar.
+      credits: {
+        copyrightNotice: "Copyright © 2015, History House",
+        creator: "Hana History",
+        license: "http://creativecommons.org/licenses/by-sa/4.0/",
+      },
     },
   },
   // Orphan: present in the folder, no sidecar.
@@ -213,6 +236,11 @@ export const BloomHostHarness: React.FC = () => {
   const requestCloseListenersRef = React.useRef<Array<() => void>>([]);
   const seedMode =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("seed") : null;
+  // The harness plays a developer-mode Bloom by default (the e2e specs lean on
+  // the free dummy model); `?devtools=off` simulates a normal end-user Bloom.
+  const showDeveloperTools =
+    typeof window === "undefined" ||
+    new URLSearchParams(window.location.search).get("devtools") !== "off";
   const initialFiles = React.useMemo(() => {
     if (seedMode === "current-result") {
       return { "state.json": JSON.stringify(createSeededResultUiState()) };
@@ -241,6 +269,9 @@ export const BloomHostHarness: React.FC = () => {
                 id: `book-image-${index + 1}`,
                 src,
                 pageLabel: `Page ${index + 1}`,
+                // Some slots carry IP credits (as a real book would), others
+                // don't — the specs assert both cases round-trip on commit.
+                credits: HARNESS_BOOK_IMAGE_CREDITS[`book-image-${index + 1}`] ?? null,
               }),
             ),
             // An empty placeholder slot: the editor should show its own placeholder
@@ -261,6 +292,7 @@ export const BloomHostHarness: React.FC = () => {
           sessionToken: "harness-session",
           // Simulate launching on a specific image: it should land in "Image to Edit".
           selectedBookImageId: "book-image-3",
+          showDeveloperTools,
         },
         initialFiles,
         onCommit(replacements) {
@@ -274,7 +306,7 @@ export const BloomHostHarness: React.FC = () => {
           setReadyCount((count) => count + 1);
         },
       }),
-    [initialFiles, historyImages],
+    [initialFiles, historyImages, showDeveloperTools],
   );
 
   React.useEffect(() => {
@@ -296,9 +328,13 @@ export const BloomHostHarness: React.FC = () => {
           flexDirection: "column",
           gap: 1,
           maxWidth: 360,
+          // The debug overlay floats above the editor's tool sidebar; it must
+          // never steal clicks meant for the app underneath (its own buttons
+          // opt back in).
+          pointerEvents: "none",
         }}
       >
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ pointerEvents: "auto" }}>
           <Button
             data-testid="bloom-harness-request-close"
             variant="outlined"

@@ -6,6 +6,7 @@ import {
   AppState,
   GenerationProgressState,
   GenerationTimingState,
+  ImageCredits,
   ImageRecord,
   ImageToolsStatePersistence,
   MeasuredStats,
@@ -438,7 +439,12 @@ export interface ImageToolsWorkspaceProps {
    *  already-supplied key but must not set, change, or clear OpenRouter credentials. */
   demoOnly?: boolean;
   bookImageUrls?: string[];
-  bookImages?: Array<{ id: string; src: string; isPlaceholder?: boolean }>;
+  bookImages?: Array<{
+    id: string;
+    src: string;
+    isPlaceholder?: boolean;
+    credits?: ImageCredits | null;
+  }>;
   /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
   selectedBookImageId?: string;
   bookImagesStripMode?: "host" | "editable";
@@ -603,12 +609,14 @@ export function ImageToolsWorkspace({
           id: image.id?.trim(),
           url: image.src?.trim(),
           isPlaceholder: image.isPlaceholder,
+          credits: image.credits ?? null,
           index,
         }))
         .filter(({ id, url }) => Boolean(id) && Boolean(url))
-        .map(({ id, url, isPlaceholder, index }) => ({
+        .map(({ id, url, isPlaceholder, credits, index }) => ({
           ...buildBookImageEntry(url as string, index),
           id: id as string,
+          credits,
           // Empty book slots: show our own placeholder graphic rather than the
           // book's placeHolder.png (which isn't served as a book file).
           ...(isPlaceholder ? { imageData: imagePlaceholder } : {}),
@@ -2447,6 +2455,10 @@ export function ImageToolsWorkspace({
           sourceSummary,
           resolution,
           isStarred: false,
+          // Credits carry only when the source image was actually edited; a
+          // reference-only or from-scratch generation is a new work and must
+          // not inherit anyone's credits.
+          credits: requiresEditImage && targetImage ? (targetImage.credits ?? null) : null,
           ...extraFields,
         };
 

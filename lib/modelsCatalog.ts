@@ -1,7 +1,7 @@
 import JSON5 from "json5";
 import modelCatalogText from "../data/models-registry.json5";
 import type { MeasuredStats, ModelInfo, ModelReasoningLevel, ToolDefinition } from "../types";
-import { LOCAL_DUMMY_MODEL_ID, withLocalModels } from "./localModels";
+import { isLocalDummyModelOffered, LOCAL_DUMMY_MODEL_ID, withLocalModels } from "./localModels";
 import { DEFAULT_SIZE_TOKEN } from "./imageSizes";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
@@ -72,9 +72,12 @@ const getAllowedModelIds = (tool: ToolDefinition): string[] => {
     ids.push(id);
   });
   // The dummy model is only present in the catalog on localhost (see
-  // withLocalModels). Where it exists, offer it on every tool (unless the tool
-  // explicitly disallows it) as a no-network engine for UI testing.
+  // withLocalModels). Where it exists AND developer tools are enabled
+  // (standalone dev, or a host that opted in via showDeveloperTools), offer it
+  // on every tool (unless the tool explicitly disallows it) as a no-network
+  // engine for UI testing.
   if (
+    isLocalDummyModelOffered() &&
     getModelInfoById(LOCAL_DUMMY_MODEL_ID) &&
     !disallowed.has(LOCAL_DUMMY_MODEL_ID) &&
     !seen.has(LOCAL_DUMMY_MODEL_ID)

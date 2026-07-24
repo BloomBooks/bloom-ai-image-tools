@@ -37,6 +37,7 @@ export const historyEntryToImageRecord = (
   promptUsed: entry.promptUsed,
   sourceSummary: entry.sourceSummary ?? null,
   caption: entry.caption ?? null,
+  credits: entry.credits ?? null,
   resolution: entry.resolution,
   isStarred: entry.isStarred ?? false,
   origin: entry.origin,
@@ -60,6 +61,7 @@ export const imageRecordToHistoryEntry = (record: ImageRecord, mime: string): Hi
   sourceStyleId: record.sourceStyleId ?? null,
   sourceSummary: record.sourceSummary ?? null,
   caption: record.caption ?? null,
+  credits: record.credits ?? null,
   imageMime: mime,
   metaUpdatedAt: Date.now(),
 });
@@ -211,6 +213,7 @@ export const useHistoryStore = (): UseHistoryStoreResult => {
       if (typeof patch.sourceSummary !== "undefined") allowed.sourceSummary = patch.sourceSummary;
       if (typeof patch.sourceStyleId !== "undefined") allowed.sourceStyleId = patch.sourceStyleId;
       if (typeof patch.caption !== "undefined") allowed.caption = patch.caption;
+      if (typeof patch.credits !== "undefined") allowed.credits = patch.credits;
       if (typeof patch.parameters !== "undefined") allowed.parameters = patch.parameters;
       if (Object.keys(allowed).length === 0) return;
       await store.updateMeta(id, allowed);

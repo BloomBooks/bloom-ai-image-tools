@@ -33,7 +33,7 @@
  *   If a future host embeds us some other way, add a new factory here; nothing outside
  *   this file should learn the transport.
  */
-import { HistoryImageSidecar } from "../../types";
+import { HistoryImageSidecar, ImageCredits } from "../../types";
 
 export interface IBloomHostBookImage {
   id: string;
@@ -44,6 +44,9 @@ export interface IBloomHostBookImage {
   /** True when the slot is an empty placeholder; the editor shows its own
    *  placeholder graphic instead of trying to load the book's placeHolder.png. */
   isPlaceholder?: boolean;
+  /** The image's current IP credits as stored in the book. The editor carries
+   *  these along edit chains and returns per-result credits on commit. */
+  credits?: ImageCredits | null;
 }
 
 export interface IBloomHostReferenceImage {
@@ -87,6 +90,13 @@ export interface IBloomHostInitPayload {
   /** When true (a Bloom Playground/template book), the editor opens in a shared
    *  "demo" context and must disable its OpenRouter credential-setting UI. */
   demoOnly?: boolean;
+  /** When true, the editor exposes developer-only affordances — currently the
+   *  "Local Dummy (No AI)" model, a free deterministic engine offered on every
+   *  tool for exercising edit flows without an AI call. The host sends true
+   *  when it is itself in developer mode. Hostname gating is not enough when
+   *  hosted (Bloom serves the editor from localhost even for end users), so
+   *  absent/false means hidden. Standalone dev builds are unaffected. */
+  showDeveloperTools?: boolean;
   /** Root of Bloom's local AI-image-editor HTTP API, e.g.
    *  `http://localhost:8089/bloom/api/aiImageEditor`. The port is whatever Bloom's
    *  server actually bound (8089 is only its default), so this is always supplied by
@@ -105,6 +115,12 @@ export interface IBloomCommitReplacement {
   /** For an image that already has a host-served URL (e.g. another book image
    *  reused as a replacement): that URL, which the host resolves to a file. */
   sourceUrl?: string;
+  /** The result's IP credits, as determined by the editor: the source image's
+   *  credits when the result was made by editing it, or null when the result
+   *  has none (brand-new generation, in-editor upload). Always present so the
+   *  host never has to guess: it embeds exactly this — null means embed none,
+   *  NOT "keep the replaced slot's old credits". */
+  credits: ImageCredits | null;
 }
 
 // The host integration has TWO distinct planes, so the bridge is split into two

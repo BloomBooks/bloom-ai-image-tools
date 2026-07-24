@@ -31,6 +31,7 @@ import {
   IBloomHostInitPayload,
 } from "../services/host/BloomHostBridge";
 import { ImageToolsWorkspace } from "./ImageToolsWorkspace";
+import { setHostDeveloperToolsEnabled } from "../lib/localModels";
 import { theme } from "../themes";
 
 interface BloomHostedImageEditorProps {
@@ -68,6 +69,9 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       }
 
       lastInitSignatureRef.current = signature;
+      // Hosted mode: the host's verdict (absent = false) decides whether
+      // developer-only affordances like the local dummy model are offered.
+      setHostDeveloperToolsEnabled(Boolean(payload.showDeveloperTools));
       setInitPayload(payload);
       setStatus(``);
       //setStatus(`Connected to ${payload.book.title}`);
@@ -104,6 +108,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         id: image.id,
         src: image.src,
         isPlaceholder: image.isPlaceholder,
+        credits: image.credits ?? null,
       })),
     [initPayload?.bookImages],
   );
@@ -126,10 +131,10 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         // normally writes this already; this guarantees presence (idempotent
         // overwrite) without racing the debounced save.
         await bridge.putFile(`history/${item.id}.png`, item.imageData);
-        return { incomingId, resultId: item.id };
+        return { incomingId, resultId: item.id, credits: item.credits ?? null };
       }
       if (item.imageData) {
-        return { incomingId, sourceUrl: item.imageData };
+        return { incomingId, sourceUrl: item.imageData, credits: item.credits ?? null };
       }
       return null;
     },

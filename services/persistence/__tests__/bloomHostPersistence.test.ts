@@ -116,6 +116,54 @@ describe("createBloomHostPersistence", () => {
     expect(history.find((item) => item.id === "orphan-1")?.promptUsed).toBe("Recovered image");
   });
 
+  it("round-trips credits through the sidecar (and leaves them absent when unset)", async () => {
+    const { bridge, fileStore } = createBridge();
+    const credits = {
+      copyrightNotice: "Copyright © 2020, Acme",
+      creator: "Ada Artist",
+      license: "http://creativecommons.org/licenses/by/4.0/",
+    };
+    const persistence = createBloomHostPersistence(bridge, { historyImages: [] });
+
+    await persistence.save(
+      makeUiState({
+        appState: {
+          targetImageId: null,
+          referenceImageIds: [],
+          rightPanelImageId: null,
+          history: [
+            makeRecord("credited", "data:image/png;base64,abc", { credits }),
+            makeRecord("uncredited", "data:image/png;base64,def"),
+          ],
+        },
+      }),
+    );
+
+    const creditedSidecar = JSON.parse(
+      fileStore.get("history/credited.json")!,
+    ) as HistoryImageSidecar;
+    expect(creditedSidecar.credits).toEqual(credits);
+    const uncreditedSidecar = JSON.parse(
+      fileStore.get("history/uncredited.json")!,
+    ) as HistoryImageSidecar;
+    expect(uncreditedSidecar.credits).toBeUndefined();
+
+    // A next session gets the credits back via the host-enumerated sidecar.
+    const reloaded = createBloomHostPersistence(bridge, {
+      historyImages: [
+        {
+          id: "credited",
+          url: "https://host/history/credited.png",
+          metadata: creditedSidecar,
+        },
+      ],
+    });
+    const restored = await reloaded.load();
+    expect(restored?.appState.history.find((item) => item.id === "credited")?.credits).toEqual(
+      credits,
+    );
+  });
+
   it("ignores any history array left in state.json and reads only UI state from it", async () => {
     const { bridge, fileStore } = createBridge();
     fileStore.set(

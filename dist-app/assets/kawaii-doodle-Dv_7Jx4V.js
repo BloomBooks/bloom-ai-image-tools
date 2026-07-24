@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/kawaii-doodle-MQ07QDEl.png`;export{e as default};

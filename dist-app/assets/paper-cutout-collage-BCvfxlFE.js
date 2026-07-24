@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/paper-cutout-collage-BbKdP-jO.png`;export{e as default};

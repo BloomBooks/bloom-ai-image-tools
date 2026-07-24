@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/whimsical-illustrations-RSeESviI.png`;export{e as default};

@@ -121,7 +121,10 @@ describe("createBloomHostPersistence", () => {
     const credits = {
       copyrightNotice: "Copyright © 2020, Acme",
       creator: "Ada Artist",
-      license: "http://creativecommons.org/licenses/by/4.0/",
+      licenseUrl: "http://creativecommons.org/licenses/by/4.0/",
+      // The license notes are the field a flattened single license string dropped
+      // (Bloom's BL-16603); toEqual below pins that the sidecar keeps every field.
+      licenseRightsStatement: "Not to be used in advertising.",
     };
     const persistence = createBloomHostPersistence(bridge, { historyImages: [] });
 

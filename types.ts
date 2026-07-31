@@ -160,15 +160,27 @@ export interface EthnicityCategory {
 }
 
 /**
- * IP/attribution metadata for an image — the six fields Bloom reads/writes via
+ * IP/attribution metadata for an image — the fields Bloom reads/writes via
  * ClearShare. The editor treats the object as opaque: it carries credits along
  * edit chains and hands them back at commit, but never interprets or fills in
  * the fields itself. Any field may be null/empty.
+ *
+ * Because the editor is a verbatim pass-through, this interface exists to document
+ * the host's contract rather than to drive any behaviour here. Keep it in step with
+ * Bloom's AiImageEditorApi.ImageCredits.
  */
 export interface ImageCredits {
   copyrightNotice?: string | null;
   creator?: string | null;
-  license?: string | null;
+  /** The Creative Commons license URL. Absent for a custom license or none at all. */
+  licenseUrl?: string | null;
+  /**
+   * The free-text rights statement: for a custom license the license itself, and for
+   * a Creative Commons license the extra "license notes" alongside its URL. These are
+   * two fields rather than one flattened license string because a CC license can have
+   * both, and flattening them lost the notes (Bloom's BL-16603).
+   */
+  licenseRightsStatement?: string | null;
   attributionUrl?: string | null;
   collectionName?: string | null;
   collectionUri?: string | null;

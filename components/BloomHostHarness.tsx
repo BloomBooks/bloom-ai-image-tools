@@ -47,7 +47,10 @@ const HARNESS_BOOK_IMAGE_CREDITS: Record<string, ImageCredits> = {
   "book-image-1": {
     copyrightNotice: "Copyright © 2020, Acme Art Collective",
     creator: "Ada Artist",
-    license: "http://creativecommons.org/licenses/by/4.0/",
+    licenseUrl: "http://creativecommons.org/licenses/by/4.0/",
+    // A CC license with license notes as well as its URL, the case that has to survive
+    // being carried through an edit chain (Bloom's BL-16603).
+    licenseRightsStatement: "Not to be used in advertising.",
     attributionUrl: "https://acme-art.invalid/retro-futurism",
     collectionName: "Acme Art Collective",
     collectionUri: "https://acme-art.invalid",
@@ -55,7 +58,7 @@ const HARNESS_BOOK_IMAGE_CREDITS: Record<string, ImageCredits> = {
   "book-image-3": {
     copyrightNotice: "Copyright © 2018, Paper Cut Press",
     creator: "Pat Papercut",
-    license: "http://creativecommons.org/licenses/by-nc/3.0/",
+    licenseUrl: "http://creativecommons.org/licenses/by-nc/3.0/",
   },
 };
 
@@ -100,7 +103,7 @@ const DEMO_HISTORY: IBloomHostHistoryImage[] = [
       credits: {
         copyrightNotice: "Copyright © 2015, History House",
         creator: "Hana History",
-        license: "http://creativecommons.org/licenses/by-sa/4.0/",
+        licenseUrl: "http://creativecommons.org/licenses/by-sa/4.0/",
       },
     },
   },

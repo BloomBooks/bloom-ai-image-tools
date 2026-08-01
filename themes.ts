@@ -30,6 +30,10 @@ export const defaultThemeColors = {
   danger: "#ef4444",
   dangerHover: "#dc2626",
   dangerSubtle: "rgba(239, 68, 68, 0.16)",
+  // Batch-run progress UI (bar fill, i-of-N label, Cancel button) — a warm
+  // red distinct from both accent and danger so an in-flight batch reads as
+  // "attention, money being spent" without looking like an error.
+  batchProgress: "#d65649",
   overlay: "rgba(15, 23, 42, 0.78)",
   overlaySoft: "rgba(15, 23, 42, 0.55)",
   overlayStrong: "rgba(11, 17, 26, 0.9)",

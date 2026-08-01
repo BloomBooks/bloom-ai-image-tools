@@ -399,6 +399,93 @@ const loadImageElement = (src: string): Promise<HTMLImageElement> =>
     image.src = src;
   });
 
+// Counts calls into the dummy generator so `window.__bloomDummyFailOnCallNumber`
+// (see below) can target a specific one, e.g. the 2nd of a 3-image batch.
+let dummyImageCallCount = 0;
+
+/**
+ * The Local Dummy model always takes at least this long, so batch concurrency
+ * (multiple spinners) and progress UI are observable by eye instead of
+ * resolving instantly. `window.__bloomDummyDelayMs` overrides it absolutely,
+ * including down to 0 for tests that want the dummy at full speed.
+ */
+const DEFAULT_DUMMY_DELAY_MS = 1000;
+
+/**
+ * Test-only hooks for the Local Dummy model, read from `window` so a Playwright
+ * spec can force a specific dummy call to fail or rate-limit, or to run slowly
+ * (e.g. to exercise batch-run failure isolation or to give a cancel click time
+ * to land). `canUseLocalDummyModelWithoutApiKey` already restricts the dummy
+ * model itself to localhost, so these hooks are unreachable in production
+ * regardless.
+ *
+ * - `window.__bloomDummyFailOnCallNumber`: 1-indexed call number (across all
+ *   dummy-model calls since page load) that should throw instead of returning
+ *   an image.
+ * - `window.__bloomDummyRateLimitOnCallNumbers`: 1-indexed call numbers that
+ *   should throw an `OpenRouterApiError` with `reason: "rate-limited"`
+ *   instead of returning an image, so a spec can exercise the batch runner's
+ *   429 backoff + concurrency-drop path (lib/batchPool.ts) without a real
+ *   OpenRouter rate limit.
+ * - `window.__bloomDummyDelayMs`: delay (ms) applied before every dummy call.
+ *   Defaults to `DEFAULT_DUMMY_DELAY_MS`; set to 0 for instant dummy calls.
+ */
+declare global {
+  interface Window {
+    __bloomDummyFailOnCallNumber?: number;
+    __bloomDummyRateLimitOnCallNumbers?: number[];
+    __bloomDummyDelayMs?: number;
+  }
+}
+
+const applyDummyImageTestHooks = async (signal?: AbortSignal): Promise<void> => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  // Capture THIS call's own number into a local before awaiting anything.
+  // Batch runs (PLAN-batch-processing.md WP7) can have several dummy calls in
+  // flight at once; re-reading the shared `dummyImageCallCount` after the
+  // delay below would race against other concurrent calls incrementing it
+  // further in the meantime, making every call see whatever the count had
+  // advanced to rather than its own.
+  dummyImageCallCount += 1;
+  const callNumber = dummyImageCallCount;
+
+  const delayMs =
+    typeof window.__bloomDummyDelayMs === "number"
+      ? window.__bloomDummyDelayMs
+      : DEFAULT_DUMMY_DELAY_MS;
+  if (delayMs > 0) {
+    await new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException("Generation cancelled.", "AbortError"));
+        return;
+      }
+      const timeoutId = setTimeout(resolve, delayMs);
+      signal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timeoutId);
+          reject(new DOMException("Generation cancelled.", "AbortError"));
+        },
+        { once: true },
+      );
+    });
+  }
+
+  if (window.__bloomDummyFailOnCallNumber === callNumber) {
+    throw new Error(`Local Dummy model forced failure for e2e test (call #${callNumber}).`);
+  }
+
+  if (window.__bloomDummyRateLimitOnCallNumbers?.includes(callNumber)) {
+    throw new OpenRouterApiError(buildRateLimitMessage(LOCAL_DUMMY_MODEL_ID), {
+      status: 429,
+      reason: "rate-limited",
+    });
+  }
+};
+
 // Produces a deterministic, no-network result image for local UI testing.
 // When a source image is supplied (i.e. an edit tool with a target), the result
 // is derived from that image — tinted with a "DUMMY EDIT" banner — so the output
@@ -543,6 +630,7 @@ export const editImage = async (
   const modelToUse = (modelId && modelId.trim()) || DEFAULT_IMAGE_MODEL;
 
   if (canUseLocalDummyModelWithoutApiKey(modelToUse)) {
+    await applyDummyImageTestHooks(options?.signal);
     const sourceImage = (base64Images || []).find((image) => !!image);
     const dummyImage = await createLocalDummyImage(options?.imageConfig?.aspectRatio, sourceImage);
     return {

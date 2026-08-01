@@ -47,7 +47,7 @@ const REASONING_LABELS: Record<ModelReasoningLevel, string> = {
   high: "High",
 };
 
-const formatCost = (cost: number): string => {
+export const formatCost = (cost: number): string => {
   if (cost >= 0.01) {
     return `$${cost.toFixed(2)}`;
   }

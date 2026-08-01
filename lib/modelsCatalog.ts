@@ -1,7 +1,12 @@
 import JSON5 from "json5";
 import modelCatalogText from "../data/models-registry.json5";
 import type { MeasuredStats, ModelInfo, ModelReasoningLevel, ToolDefinition } from "../types";
-import { isLocalDummyModelOffered, LOCAL_DUMMY_MODEL_ID, withLocalModels } from "./localModels";
+import {
+  canUseLocalDummyModelWithoutApiKey,
+  isLocalDummyModelOffered,
+  LOCAL_DUMMY_MODEL_ID,
+  withLocalModels,
+} from "./localModels";
 import { DEFAULT_SIZE_TOKEN } from "./imageSizes";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
@@ -160,6 +165,29 @@ export const resolveToolReasoningLevel = (
     return model.initialReasoningLevel;
   }
   return "default";
+};
+
+/**
+ * The per-image USD price a tool would currently run at, for batch cost
+ * estimates (N ticked images × this value). Returns null for tools/models with
+ * no fixed per-image price: local-only tools (e.g. `remove_background`), the
+ * localhost-only dummy model, or a catalog entry with no `pricePerImageUsd`.
+ */
+export const getEstimatedCostPerImageUsd = (
+  tool: ToolDefinition,
+  modelByTool?: Record<string, string>,
+): number | null => {
+  // Mirrors the "requiresOpenRouter" check in ImageTool.tsx: remove_background
+  // runs free/local rather than through a priced catalog model.
+  if (tool.id === "remove_background" || tool.localOnly) {
+    return null;
+  }
+  const modelId = resolveToolModelId(tool, modelByTool);
+  if (canUseLocalDummyModelWithoutApiKey(modelId)) {
+    return null;
+  }
+  const price = getModelInfoById(modelId)?.pricePerImageUsd;
+  return typeof price === "number" && price > 0 ? price : null;
 };
 
 export const buildMeasuredStatKey = (

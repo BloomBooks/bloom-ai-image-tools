@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Button } from "@mui/material";
+import { Box, Button, Chip } from "@mui/material";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { getReferenceConstraints } from "../lib/toolHelpers";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
@@ -141,6 +141,21 @@ interface WorkspaceProps {
   activeToolId: string | null;
   onToggleHistoryStar: (id: string) => void;
   isAnyDndDragging?: boolean;
+  /** Set while one or more book images are ticked for a batch run: the
+   *  "Image to Edit" panel shows this message instead of an image. */
+  batchSelectionMessage?: string | null;
+  /** True for the whole duration of a batch run (PLAN-batch-processing.md
+   *  WP4). isProcessing alone can't distinguish "the single edit that owns
+   *  this Result pane is in flight" from "some OTHER ticked image is being
+   *  processed while this pane already shows a finished result" — the Result
+   *  pane's loading overlay must only ever cover the former. */
+  isBatchRunning?: boolean;
+  /** True once the user has clicked a strip item to inspect it mid-run; shows
+   *  the "Follow latest" chip so they can resume auto-following completions
+   *  (PLAN-batch-processing.md WP5). */
+  isInspectorPinned?: boolean;
+  /** Un-pins the inspector; wired to the "Follow latest" chip. */
+  onUnpinInspector?: () => void;
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({
@@ -168,6 +183,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   activeToolId,
   onToggleHistoryStar,
   isAnyDndDragging = false,
+  batchSelectionMessage = null,
+  isBatchRunning = false,
+  isInspectorPinned = false,
+  onUnpinInspector,
 }) => {
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
@@ -181,7 +200,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
       : tool?.id === "break_comic_into_images"
         ? "Original Comic"
         : "Image to Edit";
-  const needsEditImage = activeToolId !== null && showTargetPanel && !targetImage;
+  const needsEditImage =
+    activeToolId !== null && showTargetPanel && !targetImage && !batchSelectionMessage;
   const canAddReferenceSlot =
     referenceImages.length < maxReferenceCount || !Number.isFinite(maxReferenceCount);
 
@@ -316,6 +336,28 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         {resultActionButton}
         {resultCancelButton}
       </Box>
+    ) : undefined;
+  // Shown only while the Result pane is pinned to an inspected image during an
+  // active batch run; clicking it resumes following new completions
+  // (PLAN-batch-processing.md WP5).
+  const followLatestChip =
+    isBatchRunning && isInspectorPinned ? (
+      <Chip
+        label="Follow latest"
+        data-testid="batch-follow-latest-chip"
+        onClick={onUnpinInspector}
+        size="small"
+        sx={{
+          position: "absolute",
+          right: 24,
+          top: 20,
+          zIndex: 4,
+          fontWeight: 600,
+          backgroundColor: theme.colors.accent,
+          color: "#fff",
+          "&:hover": { backgroundColor: theme.colors.accentHover },
+        }}
+      />
     ) : undefined;
 
   const workspaceRef = React.useRef<HTMLDivElement>(null);
@@ -534,6 +576,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                   uploadInputTestId="target-upload-input"
                   onToggleStar={targetImage ? () => onToggleHistoryStar(targetImage.id) : undefined}
                   needsImage={needsEditImage}
+                  emptyStateMessage={batchSelectionMessage ?? undefined}
                 />
               </Box>
             )}
@@ -617,12 +660,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({
               draggableImageId={rightImage?.id}
               dndDropId="panel:result"
               dndDragId={rightImage ? `panelItem:result:${rightImage.id}` : undefined}
-              isLoading={isProcessing}
+              isLoading={isProcessing && !isBatchRunning}
               loadingProgress={generationProgress}
               onToggleStar={rightImage ? () => onToggleHistoryStar(rightImage.id) : undefined}
             />
           )}
           {resultActionOverlay}
+          {followLatestChip}
         </Box>
       </Box>
     </Box>

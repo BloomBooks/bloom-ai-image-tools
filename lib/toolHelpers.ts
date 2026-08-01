@@ -90,3 +90,6 @@ export const toolRequiresReferenceImage = (tool: ToolDefinition | null): boolean
   const mode = tool?.referenceImages ?? DEFAULT_REFERENCE_MODE;
   return getReferenceConstraints(mode).min > 0;
 };
+
+export const toolSupportsBatch = (tool: ToolDefinition | null | undefined): boolean =>
+  Boolean(tool?.allowBatch);

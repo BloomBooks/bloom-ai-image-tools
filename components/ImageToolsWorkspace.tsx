@@ -4,6 +4,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import {
   AppState,
+  BatchRunState,
   GenerationProgressState,
   GenerationTimingState,
   ImageCredits,
@@ -17,18 +18,8 @@ import {
   ToolParamsById,
 } from "../types";
 import { ImageToolsBar } from "./ImageToolsBar";
-import {
-  editImage,
-  generateText,
-  OpenRouterApiError,
-  OPENROUTER_KEYS_URL,
-  ImageConfig,
-} from "../services/openRouterService";
-import {
-  BREAK_COMIC_CAPTIONS_PROMPT,
-  BREAK_COMIC_MERGE_MARGIN_RATIO,
-  BREAK_COMIC_TEXT_MODEL,
-} from "../lib/breakComic";
+import { OpenRouterApiError, OPENROUTER_KEYS_URL } from "../services/openRouterService";
+import { BREAK_COMIC_MERGE_MARGIN_RATIO } from "../lib/breakComic";
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
 import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
@@ -49,9 +40,7 @@ import {
   isModelReasoningLevel,
   MODEL_CATALOG,
   resolveToolModelId,
-  resolveToolReasoningLevel,
 } from "../lib/modelsCatalog";
-import { pickSizeTokenForLongEdge } from "../lib/imageSizes";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
@@ -86,36 +75,37 @@ import {
 } from "../services/persistence/fileSystemAccess";
 import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
 import {
-  AUTO_ASPECT_RATIO,
-  getAspectRatioPromptHint,
-  resolveAspectRatioValue,
-} from "../lib/aspectRatios";
-import {
   ensureDataUrl,
   getImageDimensions,
   getMimeTypeFromUrl,
   prepareImageBlob,
 } from "../lib/imageUtils";
 import {
-  getRequestedAspectRatioValue,
   getReferenceConstraints,
   getToolReferenceMode,
+  toolSupportsBatch,
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
-import { removeBackgroundFromImage } from "../lib/backgroundRemoval.ts";
 import {
   captionLeadingNumber,
   parseCaptionArray,
   stripLeadingTitle,
 } from "../lib/captionExtraction";
 import { createAnimatedGif } from "../lib/animatedGif";
-import { applyPostProcessingPipeline } from "../lib/postProcessing";
 import { extractDerivedImageItems } from "../lib/toolDerivedResults";
 import {
-  getGifSheetAspectRatio,
-  parseGifEnding,
-  parseGifFrameCount,
-} from "../lib/gifAnimationPrompt";
+  hashString,
+  normalizeGenerationTiming,
+  updateGenerationTiming,
+} from "../lib/generationTiming";
+import { MissingApiKeyError, runToolOnImage, RunToolOnImageResult } from "../lib/runToolOnImage";
+import {
+  BATCH_CONCURRENCY,
+  BATCH_RATE_LIMIT_MAX_RETRIES,
+  resolveBatchRetryDelaysMs,
+  runBatchPool,
+} from "../lib/batchPool";
+import { parseGifEnding, parseGifFrameCount } from "../lib/gifAnimationPrompt";
 import {
   addItemToStrip,
   createDefaultThumbnailStripsSnapshot,
@@ -185,19 +175,6 @@ const buildInsufficientCreditsError = (message: string, url: string): React.Reac
   return <>OpenRouter said "{linkifyMessageWithUrl(safeMessage, url)}"</>;
 };
 
-const hashString = (value: string) => {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36);
-};
-
-const DEFAULT_GENERATION_ESTIMATE_MS = 30000;
-const MAX_PROMPT_DURATION_ESTIMATES = 40;
-const MAX_TOOL_DURATION_ESTIMATES = 24;
-const PESSIMISTIC_MS = 3000;
 const HISTORY_HYDRATION_BATCH_SIZE = 8;
 const PERSISTENCE_POINTER_QUIET_MS = 1000;
 // Show the credits gauge in the "danger" (red) styling once the remaining
@@ -205,105 +182,6 @@ const PERSISTENCE_POINTER_QUIET_MS = 1000;
 const LOW_CREDITS_THRESHOLD_USD = 3;
 
 const getNowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
-
-const clampDurationMs = (value: number | null | undefined) => {
-  if (!Number.isFinite(value) || (value ?? 0) <= 0) {
-    return DEFAULT_GENERATION_ESTIMATE_MS;
-  }
-
-  return Math.max(1000, Math.min(300000, Math.round(value as number)));
-};
-
-const limitDurationMap = (durationsByKey: Record<string, number>, maxEntries: number) => {
-  const entries = Object.entries(durationsByKey);
-  if (entries.length <= maxEntries) {
-    return durationsByKey;
-  }
-
-  return Object.fromEntries(entries.slice(-maxEntries));
-};
-
-const normalizeDurationMap = (value: unknown, maxEntries: number): Record<string, number> => {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-
-  const normalized = Object.entries(value as Record<string, unknown>).reduce<
-    Record<string, number>
-  >((result, [key, durationMs]) => {
-    const cleanKey = key.trim();
-    if (!cleanKey || typeof durationMs !== "number" || durationMs <= 0) {
-      return result;
-    }
-
-    result[cleanKey] = clampDurationMs(durationMs);
-    return result;
-  }, {});
-
-  return limitDurationMap(normalized, maxEntries);
-};
-
-const normalizeGenerationTiming = (value: unknown): GenerationTimingState => {
-  const raw = value as Partial<GenerationTimingState> | null | undefined;
-
-  return {
-    lastDurationMs:
-      typeof raw?.lastDurationMs === "number" && raw.lastDurationMs > 0
-        ? clampDurationMs(raw.lastDurationMs)
-        : null,
-    promptDurationsByKey: normalizeDurationMap(
-      raw?.promptDurationsByKey,
-      MAX_PROMPT_DURATION_ESTIMATES,
-    ),
-    toolDurationsByKey: normalizeDurationMap(raw?.toolDurationsByKey, MAX_TOOL_DURATION_ESTIMATES),
-  };
-};
-
-const createPromptDurationKey = (toolId: string, modelId: string, prompt: string) =>
-  `${toolId}:${modelId}:${hashString(prompt.trim())}`;
-
-const createToolDurationKey = (toolId: string, modelId: string) => `${toolId}:${modelId}`;
-
-const resolveEstimatedDurationMs = (
-  timing: GenerationTimingState,
-  promptKey: string,
-  toolKey: string,
-) =>
-  (timing.promptDurationsByKey[promptKey] ||
-    timing.toolDurationsByKey[toolKey] ||
-    timing.lastDurationMs ||
-    DEFAULT_GENERATION_ESTIMATE_MS) + PESSIMISTIC_MS;
-
-const updateGenerationTiming = (
-  current: GenerationTimingState,
-  promptKey: string,
-  toolKey: string,
-  durationMs: number,
-): GenerationTimingState => {
-  const normalizedDurationMs = clampDurationMs(durationMs);
-  const previousToolDuration = current.toolDurationsByKey[toolKey];
-  const nextToolDuration = previousToolDuration
-    ? Math.round(previousToolDuration * 0.65 + normalizedDurationMs * 0.35)
-    : normalizedDurationMs;
-
-  return {
-    lastDurationMs: normalizedDurationMs,
-    promptDurationsByKey: limitDurationMap(
-      {
-        ...current.promptDurationsByKey,
-        [promptKey]: normalizedDurationMs,
-      },
-      MAX_PROMPT_DURATION_ESTIMATES,
-    ),
-    toolDurationsByKey: limitDurationMap(
-      {
-        ...current.toolDurationsByKey,
-        [toolKey]: clampDurationMs(nextToolDuration),
-      },
-      MAX_TOOL_DURATION_ESTIMATES,
-    ),
-  };
-};
 
 const normalizeModelByTool = (value: unknown): Record<string, string> => {
   if (!value || typeof value !== "object") {
@@ -549,10 +427,34 @@ export function ImageToolsWorkspace({
   const [generationProgress, setGenerationProgress] = useState<GenerationProgressState | null>(
     null,
   );
+  // Batch runner progress (PLAN-batch-processing.md WP4). Deliberately separate
+  // from generationProgress: batch runs must not trigger the right-panel
+  // loading overlay (WP5 adds its own progress bar for this).
+  const [batchRun, setBatchRun] = useState<BatchRunState | null>(null);
+  // Inspector pin (PLAN-batch-processing.md WP5): by default the right panel
+  // follows the latest completed batch result. Clicking any strip item while
+  // a batch context is active (ticks or a run in progress) pins the panel to
+  // that item instead, so later completions stop overwriting it until the
+  // user un-pins via the "Follow latest" chip. Reset to unpinned at the start
+  // of every batch run.
+  const [isInspectorPinned, setIsInspectorPinned] = useState(false);
+  const isInspectorPinnedRef = useRef(false);
+  useEffect(() => {
+    isInspectorPinnedRef.current = isInspectorPinned;
+  }, [isInspectorPinned]);
   const [resultImageIds, setResultImageIds] = useState<string[]>([]);
   const [replacementImageIdByIncomingId, setReplacementImageIdByIncomingId] = useState<
     Record<string, string | null>
   >({});
+  // When each "incomingId:replacementId" pairing was assigned (handleAssignReplacement),
+  // keyed the same way. Backs the grace period in the validation effect below —
+  // see its comment for why this exists.
+  const replacementAssignedAtRef = useRef<Record<string, number>>({});
+  // Book images ticked for a batch run (see PLAN-batch-processing.md WP3).
+  // Deliberately independent of state.targetImageId: ticking never touches the
+  // target, so clearing all ticks needs no "restore" logic — the previously
+  // loaded target image is simply still there, unmodified.
+  const [batchTickedIds, setBatchTickedIds] = useState<Set<string>>(() => new Set());
   const [isPreviewModifierActive, setIsPreviewModifierActive] = useState(false);
   const [previewSelectionImageIds, setPreviewSelectionImageIds] = useState<string[]>([]);
   const [previewDialogLayout, setPreviewDialogLayout] = useState<PreviewDialogLayout>("row");
@@ -594,14 +496,30 @@ export function ImageToolsWorkspace({
   const envApiKey = envApiKeyProp?.trim() || "";
   const initialApiKey = initialApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
+  const activeTool = useMemo(
+    () => (activeToolId ? TOOLS.find((t) => t.id === activeToolId) || null : null),
+    [activeToolId],
+  );
   // The active tool's resolved model decides whether we can run without an API
   // key (only the localhost dummy model qualifies).
-  const activeToolModelId = (() => {
-    const activeTool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
-    return activeTool ? resolveToolModelId(activeTool, modelByTool) : DEFAULT_MODEL?.id || "";
-  })();
+  const activeToolModelId = activeTool
+    ? resolveToolModelId(activeTool, modelByTool)
+    : DEFAULT_MODEL?.id || "";
   const canUseSelectedModelWithoutApiKey = canUseLocalDummyModelWithoutApiKey(activeToolModelId);
   const usingEnvKey = !!(envApiKey && !apiKey);
+  // Batch-selection eligibility: only in the hosted book-images strip, and only
+  // while the active tool is one that supports batch runs (PLAN-batch-processing.md).
+  const isBatchSelectionActive = bookImagesStripMode === "host" && toolSupportsBatch(activeTool);
+  const placeholderBookImageIds = useMemo(() => {
+    const ids = new Set<string>();
+    bookImages.forEach((image) => {
+      const id = image.id?.trim();
+      if (id && image.isPlaceholder) {
+        ids.add(id);
+      }
+    });
+    return ids;
+  }, [bookImages]);
   const resolvedBookImageEntries = useMemo(() => {
     if (bookImages.length) {
       return bookImages
@@ -640,6 +558,77 @@ export function ImageToolsWorkspace({
     () => thumbnailStrips.itemIdsByStrip.bookImages || [],
     [thumbnailStrips.itemIdsByStrip.bookImages],
   );
+  // Eligible for batch ticking: no replacement assigned yet, and not the
+  // book's own empty-slot placeholder graphic (Agreed UX in
+  // PLAN-batch-processing.md).
+  const eligibleBatchBookImageIds = useMemo(() => {
+    const ids = new Set<string>();
+    bookImageSlotIds.forEach((id) => {
+      if (!replacementImageIdByIncomingId[id] && !placeholderBookImageIds.has(id)) {
+        ids.add(id);
+      }
+    });
+    return ids;
+  }, [bookImageSlotIds, placeholderBookImageIds, replacementImageIdByIncomingId]);
+
+  // Clear ticks when the active tool switches to one that doesn't support batch.
+  useEffect(() => {
+    if (!isBatchSelectionActive) {
+      setBatchTickedIds((prev) => (prev.size ? new Set() : prev));
+    }
+  }, [isBatchSelectionActive]);
+
+  // Drop any ticks that just became ineligible (e.g. a drag-and-drop assigned
+  // that slot a replacement while it was ticked).
+  useEffect(() => {
+    setBatchTickedIds((prev) => {
+      const filtered = new Set([...prev].filter((id) => eligibleBatchBookImageIds.has(id)));
+      return filtered.size === prev.size ? prev : filtered;
+    });
+  }, [eligibleBatchBookImageIds]);
+
+  const handleToggleBatchTick = useCallback(
+    (incomingId: string) => {
+      if (!eligibleBatchBookImageIds.has(incomingId)) {
+        return;
+      }
+      setBatchTickedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(incomingId)) {
+          next.delete(incomingId);
+        } else {
+          next.add(incomingId);
+        }
+        return next;
+      });
+    },
+    [eligibleBatchBookImageIds],
+  );
+
+  const batchSelection = useMemo(
+    () =>
+      isBatchSelectionActive
+        ? {
+            eligibleIds: eligibleBatchBookImageIds,
+            tickedIds: batchTickedIds,
+            onToggle: handleToggleBatchTick,
+            activeIncomingIds: new Set(batchRun?.currentIncomingIds ?? []),
+            failedIncomingIds: new Set(batchRun?.failedIncomingIds ?? []),
+          }
+        : undefined,
+    [
+      isBatchSelectionActive,
+      eligibleBatchBookImageIds,
+      batchTickedIds,
+      handleToggleBatchTick,
+      batchRun,
+    ],
+  );
+  const batchSelectionMessage =
+    batchTickedIds.size > 0
+      ? `Will edit the ${batchTickedIds.size} selected image${batchTickedIds.size === 1 ? "" : "s"}`
+      : null;
+
   const resolveIncomingSlotId = useCallback(
     (item: ImageRecord | null | undefined): string | undefined => {
       if (!item) {
@@ -952,6 +941,21 @@ export function ImageToolsWorkspace({
     const validIncomingIds = new Set(bookImageSlotIds);
     const validReplacementIds = new Set(state.history.map((item) => item.id));
 
+    // A batch run (PLAN-batch-processing.md WP7) can have several images
+    // completing within the same few milliseconds. Each completion's
+    // `appendHistoryEntry` (updates `state.history`) and `handleAssignReplacement`
+    // (updates `replacementImageIdByIncomingId`) land in two independently
+    // updated state hooks; under concurrent completions, this effect can run
+    // against a `state.history` snapshot that hasn't caught up with a
+    // just-assigned replacement from a DIFFERENT image's completion yet. Without
+    // a grace period that transient mismatch reads as "points at a deleted
+    // history item" and permanently nulls out a perfectly good assignment. Give
+    // every assignment a brief window to catch up before treating it as stale
+    // (an assignment with no recorded time — e.g. one restored from persisted
+    // state — has nothing to wait for, so it's validated immediately).
+    const REPLACEMENT_VALIDATION_GRACE_MS = 3000;
+    const now = Date.now();
+
     setReplacementImageIdByIncomingId((prev) => {
       let changed = false;
       const next: Record<string, string | null> = {};
@@ -963,6 +967,13 @@ export function ImageToolsWorkspace({
         }
 
         if (replacementId && !validReplacementIds.has(replacementId)) {
+          const assignedAt = replacementAssignedAtRef.current[`${incomingId}:${replacementId}`];
+          const withinGrace =
+            typeof assignedAt === "number" && now - assignedAt < REPLACEMENT_VALIDATION_GRACE_MS;
+          if (withinGrace) {
+            next[incomingId] = replacementId;
+            return;
+          }
           next[incomingId] = null;
           changed = true;
           return;
@@ -1004,6 +1015,15 @@ export function ImageToolsWorkspace({
     if (state.rightPanelImageId) {
       referencedIds.add(state.rightPanelImageId);
     }
+    // Assigned book-image replacements (including ones a batch run just
+    // assigned, well before the user gets to a strip that renders them) must
+    // survive as long as the assignment exists, or the map ends up pointing at
+    // a pruned, deleted history item.
+    Object.values(replacementImageIdByIncomingId).forEach((id) => {
+      if (id) {
+        referencedIds.add(id);
+      }
+    });
 
     // Leave very fresh entries alone: multi-item tools create their records
     // across several awaits before referencing them in a strip, and this
@@ -1045,6 +1065,7 @@ export function ImageToolsWorkspace({
     });
   }, [
     deleteHistoryImageFromFolder,
+    replacementImageIdByIncomingId,
     state.history,
     state.targetImageId,
     state.referenceImageIds,
@@ -2071,6 +2092,67 @@ export function ImageToolsWorkspace({
     }
   };
 
+  // Book images (origin "bookImages") are re-supplied by the host each launch
+  // and are never written into history/ (see bloomHostPersistence), so once a
+  // committed replacement overwrites the book file, the pre-edit image would
+  // survive nowhere. The first time a tool edits a book image, snapshot its
+  // bytes into history as a persistable "bookOriginal" record; results parent
+  // to the snapshot so the edit chain (and the way back to the original) works
+  // across relaunches.
+  //
+  // Returns the id the result should use as its parentId (the snapshot's id
+  // for a book image, the source's own id otherwise) plus, when a NEW snapshot
+  // was built, the record itself. The caller must appendHistoryEntry the
+  // returned record in the same synchronous block as the result record and any
+  // replacement assignment: the replacement-map validation effect prunes map
+  // entries whose id it can't find in its render's history, so a history
+  // commit that lands between "assign" and "result appended" gets a valid
+  // assignment nulled (this bit the batch runner when the snapshot was
+  // appended eagerly from inside this helper).
+  const buildBookOriginalSnapshot = useCallback(
+    async (source: ImageRecord): Promise<{ parentId: string; snapshot: ImageRecord | null }> => {
+      if (source.origin !== "bookImages") {
+        return { parentId: source.id, snapshot: null };
+      }
+      const existing = stateRef.current.history.find(
+        (item) => item.origin === "bookOriginal" && item.incomingSlotId === source.id,
+      );
+      if (existing) {
+        return { parentId: existing.id, snapshot: null };
+      }
+
+      const imageData = await ensureDataUrl(source.imageData);
+      const resolution = source.resolution ?? (await getImageDimensions(imageData));
+      let snapshot: ImageRecord = {
+        id: uuid(),
+        parentId: null,
+        // Ties the snapshot to its book slot: dedupes repeat edits of the same
+        // image, and makes the snapshot assignable back to the slot (revert).
+        incomingSlotId: source.id,
+        imageData,
+        toolId: "bookImages",
+        parameters: {},
+        sourceStyleId: null,
+        durationMs: 0,
+        cost: 0,
+        model: "",
+        timestamp: Date.now(),
+        promptUsed: "Original book image",
+        sourceSummary: "Original book image",
+        resolution,
+        isStarred: false,
+        origin: "bookOriginal",
+        name: source.name ?? null,
+        credits: source.credits ?? null,
+      };
+      if (fsBinding) {
+        snapshot = await persistHistoryImage(snapshot);
+      }
+      return { parentId: snapshot.id, snapshot };
+    },
+    [fsBinding, persistHistoryImage],
+  );
+
   const handleApplyTool = async (toolId: string, params: Record<string, string>) => {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
@@ -2137,30 +2219,6 @@ export function ImageToolsWorkspace({
     };
 
     try {
-      const targetImageResolution =
-        targetImage?.resolution ??
-        (targetImage?.imageData ? await getImageDimensions(targetImage.imageData) : undefined);
-      if (
-        targetImage &&
-        targetImageResolution &&
-        targetImage.resolution !== targetImageResolution
-      ) {
-        setState((prev) => ({
-          ...prev,
-          history: prev.history.map((item) =>
-            item.id === targetImage.id ? { ...item, resolution: targetImageResolution } : item,
-          ),
-        }));
-      }
-
-      const basePrompt = tool.promptTemplate(params);
-      let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
-      if (tool.derivedResultMode === "animated-gif") {
-        // The sheet's canvas shape follows the frame-count's grid layout
-        // (16 portrait cells don't fit a 16:9 canvas, so 4x4 goes square).
-        requestedAspectRatio = getGifSheetAspectRatio(parseGifFrameCount(params.frameCount));
-      }
-
       const constrainedReferences = referenceItems.slice(0, max);
       const referenceStyleId =
         constrainedReferences
@@ -2174,77 +2232,8 @@ export function ImageToolsWorkspace({
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
       const referenceImageCount = constrainedReferences.length;
       const sourceSummary = formatSourceSummary(editImageCount, referenceImageCount);
-      // Normalize every source to a base64 data URL. Book images from the Bloom
-      // host (and anything else dragged in by URL) arrive as http(s) URLs, which
-      // the OpenRouter client and local background removal cannot consume.
-      const targetImageData =
-        requiresEditImage && targetImage ? await ensureDataUrl(targetImage.imageData) : null;
-      const referenceImageData = await Promise.all(
-        constrainedReferences.map((h) => ensureDataUrl(h.imageData)),
-      );
-      const sourceImages = [...(targetImageData ? [targetImageData] : []), ...referenceImageData];
-      // Named images (e.g. characters named in the strip) get their name sent
-      // alongside the pixels so the prompt can refer to them by name. Aligned
-      // by index with sourceImages.
-      const imageLabels = [
-        ...(requiresEditImage && targetImage ? [targetImage.name ?? null] : []),
-        ...constrainedReferences.map((h) => h.name ?? null),
-      ];
 
-      // Tools that decompose a page (break-comic) must not downscale it. Match
-      // the output size + aspect ratio to the input so resolution is preserved
-      // (a 3508px poster -> 4K), instead of falling back to a square 1K default.
-      let requestedSize = params.size ?? tool.hiddenSizeDefault;
-      let autoSizeResolution: { width: number; height: number } | undefined;
-      if (tool.autoSizeFromInput && sourceImages[0]) {
-        const inputResolution = await getImageDimensions(sourceImages[0]);
-        if (inputResolution?.width && inputResolution?.height) {
-          autoSizeResolution = inputResolution;
-          requestedSize = pickSizeTokenForLongEdge(
-            Math.max(inputResolution.width, inputResolution.height),
-          );
-          requestedAspectRatio = resolveAspectRatioValue(
-            AUTO_ASPECT_RATIO,
-            inputResolution,
-            toolModel?.supportedAspectRatios,
-          );
-        }
-      }
-
-      const promptWithoutAspectRatio =
-        tool.id === "custom"
-          ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
-          : basePrompt;
-
-      const usesLocalBackgroundRemoval = tool.id === "remove_background";
-      const prompt = usesLocalBackgroundRemoval
-        ? promptWithoutAspectRatio
-        : `${promptWithoutAspectRatio}\n\n${getAspectRatioPromptHint(
-            requestedAspectRatio,
-            autoSizeResolution ?? targetImageResolution,
-            toolModel?.supportedAspectRatios,
-          )}`;
-      const modelTimingKey = usesLocalBackgroundRemoval
-        ? "local-background-removal"
-        : envApiKey && !apiKey
-          ? "default-image-model"
-          : toolModel?.id || "default-image-model";
-      const promptDurationKey = createPromptDurationKey(tool.id, modelTimingKey, prompt);
-      const toolDurationKey = createToolDurationKey(tool.id, modelTimingKey);
-
-      let processedImageData: string;
-      // All images returned by the generation (post-processed), in order.
-      // Usually length 1, but interleaved image models can return several
-      // (e.g. one per comic panel). processedImageData === processedImages[0].
-      let processedImages: string[] = [];
-      let durationMs = 0;
-      let cost = 0;
-      let model = "";
-      let generationText: string | null = null;
-      let reasoningLevelForRequest: ModelReasoningLevel | null = null;
-      let progressStartedAt = 0;
       const isBreakComic = tool.id === "break_comic_into_images";
-
       // Phase plan for the loading overlay. Only tools that do more than a
       // single image fetch get phases: break-comic redraws the sheet, then
       // transcribes captions, then splits it; other split-image tools generate
@@ -2271,138 +2260,68 @@ export function ImageToolsWorkspace({
         );
       };
 
-      if (usesLocalBackgroundRemoval) {
-        if (!targetImage || !targetImageData) {
-          throw new Error("Select an image to edit before applying this tool.");
-        }
-
-        progressStartedAt = getNowMs();
-        setGenerationProgress({
-          startedAt: progressStartedAt,
-          estimatedDurationMs: resolveEstimatedDurationMs(
-            generationTimingRef.current,
-            promptDurationKey,
-            toolDurationKey,
-          ),
-        });
-
-        const result = await removeBackgroundFromImage(targetImageData, {
+      let runResult: RunToolOnImageResult;
+      try {
+        runResult = await runToolOnImage({
+          tool,
+          toolModel,
+          requiresEditImage,
+          targetImage,
+          params,
+          constrainedReferences,
+          reasoningByTool,
+          generationTiming: generationTimingRef.current,
+          resolvedApiKey: effectiveApiKey,
+          useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
           signal: abortController.signal,
+          onProgressStart: (estimatedDurationMs) => {
+            setGenerationProgress({ startedAt: getNowMs(), estimatedDurationMs });
+          },
+          onPhase: setPhase,
         });
-
-        processedImageData = await applyPostProcessingPipeline(
-          result.imageData,
-          tool.postProcessingFunctions,
-        );
-        processedImages = [processedImageData];
-        durationMs = result.durationMs;
-        model = result.model;
-      } else {
-        const resolvedApiKey = effectiveApiKey;
-        const canRunWithoutApiKey = canUseLocalDummyModelWithoutApiKey(toolModel?.id);
-        if (!resolvedApiKey && !canRunWithoutApiKey) {
+      } catch (error) {
+        if (error instanceof MissingApiKeyError) {
           setGenerationProgress(null);
           setState((prev) => ({
             ...prev,
             isProcessing: false,
-            error: "Connect to OpenRouter before running tools.",
+            error: error.message,
           }));
           return;
         }
+        throw error;
+      }
 
-        shouldRefreshCredits = !canRunWithoutApiKey;
+      const {
+        processedImageData,
+        processedImages,
+        cost,
+        model,
+        generationText,
+        reasoningLevelForRequest,
+        prompt,
+        promptDurationKey,
+        toolDurationKey,
+        requestedSize,
+        targetImageResolution,
+        progressStartedAt,
+      } = runResult;
+      // Mutable: the split-images derived path below adds the splitter's own
+      // (uninterruptible) processing time on top of the measured generation time.
+      let durationMs = runResult.durationMs;
+      shouldRefreshCredits = runResult.shouldRefreshCredits;
 
-        // In E2E, we authenticate via an env key. In that mode we want the model
-        // to be controlled by VITE_OPENROUTER_IMAGE_MODEL (from the dev server env)
-        // rather than whatever the UI's default model happens to be.
-        const modelIdForRequest = canRunWithoutApiKey
-          ? toolModel?.id
-          : envApiKey && !apiKey
-            ? undefined
-            : toolModel?.id;
-        // Per-tool reasoning: the user's override, then the tool's hard
-        // imageReasoningLevel cap (e.g. break-comic stays at the model default
-        // so it doesn't "think" away its image-output budget), then the model's
-        // initial level. See resolveToolReasoningLevel.
-        reasoningLevelForRequest = resolveToolReasoningLevel(tool, toolModel, reasoningByTool);
-
-        // Build image configuration from tool parameters.
-        const imageConfig: ImageConfig = {
-          aspectRatio: resolveAspectRatioValue(
-            requestedAspectRatio,
-            autoSizeResolution ?? targetImageResolution,
-            toolModel?.supportedAspectRatios,
+      if (
+        targetImage &&
+        targetImageResolution &&
+        targetImage.resolution !== targetImageResolution
+      ) {
+        setState((prev) => ({
+          ...prev,
+          history: prev.history.map((item) =>
+            item.id === targetImage.id ? { ...item, resolution: targetImageResolution } : item,
           ),
-          size: requestedSize,
-        };
-
-        if (tool.autoSizeFromInput) {
-          console.log("[break-comic] request size/aspect", {
-            requestedSize,
-            aspect: imageConfig.aspectRatio,
-            inputResolution: autoSizeResolution,
-          });
-        }
-
-        progressStartedAt = getNowMs();
-        setGenerationProgress({
-          startedAt: progressStartedAt,
-          estimatedDurationMs: resolveEstimatedDurationMs(
-            generationTimingRef.current,
-            promptDurationKey,
-            toolDurationKey,
-          ),
-        });
-        setPhase(0);
-
-        const result = await editImage(sourceImages, prompt, resolvedApiKey, modelIdForRequest, {
-          signal: abortController.signal,
-          imageConfig,
-          reasoningLevel: reasoningLevelForRequest,
-          imageLabels,
-        });
-
-        const returnedImages = result.images?.length ? result.images : [result.imageData];
-        processedImages = await Promise.all(
-          returnedImages.map((image) =>
-            applyPostProcessingPipeline(image, tool.postProcessingFunctions),
-          ),
-        );
-        processedImageData = processedImages[0];
-        durationMs = result.duration;
-        cost = result.cost;
-        model = result.model;
-        generationText = result.text ?? null;
-
-        if (returnedImages.length > 1) {
-          console.log("[break-comic] model returned multiple images", {
-            toolId: tool.id,
-            imagesReturned: returnedImages.length,
-          });
-        }
-
-        if (isBreakComic && resolvedApiKey) {
-          setPhase(1);
-          // The cleanup-edit image call carries no caption JSON (and models
-          // like Gemini 3.1 Flash can't return image+text in one turn), so
-          // transcribe the captions from the ORIGINAL page in a separate
-          // cheap text call. Reading order matches the edited sheet because
-          // the edit preserves the page layout.
-          const captionsResult = await generateText(
-            [sourceImages[0]],
-            BREAK_COMIC_CAPTIONS_PROMPT,
-            resolvedApiKey,
-            { signal: abortController.signal, modelId: BREAK_COMIC_TEXT_MODEL },
-          );
-          console.log("[break-comic] captions call result", {
-            model: captionsResult.model,
-            textChars: captionsResult.text.length,
-            cost: captionsResult.cost,
-          });
-          generationText = captionsResult.text;
-          durationMs += captionsResult.duration;
-          cost += captionsResult.cost;
-        }
+        }));
       }
 
       // Remember what this tool/model/reasoning/size combination cost and how
@@ -2425,6 +2344,19 @@ export function ImageToolsWorkspace({
         }
       }
 
+      // Editing a book image? Preserve its pre-edit bytes in history and
+      // parent the result to that snapshot (see buildBookOriginalSnapshot).
+      // Appended here, before any result records: no replacement assignment
+      // exists for the result yet, so an intervening history commit is safe.
+      let editSourceParentId: string | null = null;
+      if (requiresEditImage && targetImage) {
+        const { parentId, snapshot } = await buildBookOriginalSnapshot(targetImage);
+        editSourceParentId = parentId;
+        if (snapshot) {
+          appendHistoryEntry(snapshot);
+        }
+      }
+
       const createHistoryItem = async (
         imageData: string,
         parentIdOverride?: string | null,
@@ -2439,7 +2371,7 @@ export function ImageToolsWorkspace({
             parentIdOverride !== undefined
               ? parentIdOverride
               : requiresEditImage && targetImage
-                ? targetImage.id
+                ? editSourceParentId
                 : constrainedReferences[0]?.id || null,
           incomingSlotId,
           imageData,
@@ -2852,6 +2784,300 @@ export function ImageToolsWorkspace({
     }
   };
 
+  // Sequential batch runner (PLAN-batch-processing.md WP4). Runs `tool` once
+  // per ticked book image, one at a time, sharing params/references across the
+  // whole run. Per-image parameters that derive from the source (AUTO aspect
+  // ratio, autoSize) still resolve inside runToolOnImage using that image's own
+  // resolution. Only ever called for allowBatch tools, which always require an
+  // edit-image target — no reference-only/from-scratch branch to handle here.
+  const handleApplyBatchTool = async (toolId: string, params: Record<string, string>) => {
+    const tool = TOOLS.find((t) => t.id === toolId);
+    if (!tool || !toolSupportsBatch(tool)) return;
+    if (state.isProcessing) return;
+
+    // Book-strip order, not Set insertion order.
+    const orderedIncomingIds = bookImageSlotIds.filter((id) => batchTickedIds.has(id));
+    if (!orderedIncomingIds.length) return;
+
+    const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
+    const { min, max } = getReferenceConstraints(tool.referenceImages);
+    const referenceItems = state.referenceImageIds
+      .map((id) => state.history.find((h) => h.id === id) || null)
+      .filter((h): h is ImageRecord => !!h);
+    if (referenceItems.length < min) {
+      setState((prev) => ({
+        ...prev,
+        error: "Please add a reference image for this tool (drag from history or upload).",
+      }));
+      return;
+    }
+    const constrainedReferences = referenceItems.slice(0, max);
+
+    setResultImageIds([]);
+    setState((prev) => ({ ...prev, isProcessing: true, error: null }));
+
+    const abortController = new AbortController();
+    requestAbortControllerRef.current = abortController;
+    setBatchRun({
+      total: orderedIncomingIds.length,
+      completed: 0,
+      failedIncomingIds: [],
+      currentIncomingIds: [],
+    });
+    // Every run starts unpinned: the right panel follows the latest result
+    // until the user clicks a strip item to inspect it (WP5).
+    setIsInspectorPinned(false);
+
+    const failedIncomingIds: string[] = [];
+    let completedCount = 0;
+    let shouldRefreshCredits = false;
+    let stoppedByMissingApiKey: string | null = null;
+
+    // One image's worth of work, run by the pool (lib/batchPool.ts) with up
+    // to BATCH_CONCURRENCY in flight at once. Throws on any failure; the pool
+    // classifies rate-limit vs abort vs plain failure via the predicates
+    // passed to runBatchPool below. Reads from the live ref rather than the
+    // closed-over `state`: other in-flight images mutate history/replacements
+    // via setState, and a run can span minutes, so the render this closure
+    // was created in is long stale by the time later images are processed.
+    const processOneImage = async (incomingId: string): Promise<void> => {
+      const targetImage = stateRef.current.history.find((h) => h.id === incomingId) || null;
+      if (!targetImage) {
+        throw new Error(`Book image ${incomingId} is no longer available.`);
+      }
+
+      try {
+        const referenceStyleId =
+          constrainedReferences
+            .map((item) => getStyleIdFromImageRecord(item))
+            .find((styleId): styleId is string => Boolean(styleId)) || null;
+        const derivedSourceStyleId =
+          getStyleIdFromParams(params) ||
+          getStyleIdFromImageRecord(targetImage) ||
+          referenceStyleId ||
+          null;
+        const sourceSummary = formatSourceSummary(1, constrainedReferences.length);
+
+        const runResult = await runToolOnImage({
+          tool,
+          toolModel,
+          requiresEditImage: true,
+          targetImage,
+          params,
+          constrainedReferences,
+          reasoningByTool,
+          generationTiming: generationTimingRef.current,
+          resolvedApiKey: effectiveApiKey,
+          useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
+          signal: abortController.signal,
+          // No right-panel loading overlay for batch runs (WP5 owns the
+          // dedicated progress bar); these are deliberate no-ops.
+          onProgressStart: () => {},
+          onPhase: () => {},
+        });
+
+        shouldRefreshCredits = shouldRefreshCredits || runResult.shouldRefreshCredits;
+
+        if (toolModel?.id) {
+          const safeCost =
+            Number.isFinite(runResult.cost) && runResult.cost > 0 ? runResult.cost : 0;
+          const safeDuration =
+            Number.isFinite(runResult.durationMs) && runResult.durationMs > 0
+              ? runResult.durationMs
+              : 0;
+          if (safeCost > 0 || safeDuration > 0) {
+            const statKey = buildMeasuredStatKey(
+              tool.id,
+              toolModel.id,
+              runResult.reasoningLevelForRequest ?? "default",
+              runResult.requestedSize,
+            );
+            setMeasuredStatsByKey((prev) => ({
+              ...prev,
+              [statKey]: { cost: safeCost, durationMs: safeDuration },
+            }));
+          }
+        }
+
+        // Preserve the pre-edit book image in history before its slot gets an
+        // auto-assigned replacement (see buildBookOriginalSnapshot). Appended
+        // below, in the same synchronous block as the result + assignment.
+        const { parentId, snapshot: originalSnapshot } =
+          await buildBookOriginalSnapshot(targetImage);
+        const resolution = await getImageDimensions(runResult.processedImageData);
+        const incomingSlotId = resolveIncomingSlotId(targetImage);
+        let newItem: ImageRecord = {
+          id: uuid(),
+          parentId,
+          incomingSlotId,
+          imageData: runResult.processedImageData,
+          toolId: tool.id,
+          parameters: params,
+          durationMs: runResult.durationMs,
+          cost: runResult.cost,
+          model: runResult.model,
+          reasoningLevel: runResult.reasoningLevelForRequest,
+          timestamp: Date.now(),
+          promptUsed: runResult.prompt,
+          sourceStyleId: derivedSourceStyleId,
+          sourceSummary,
+          resolution,
+          isStarred: false,
+          credits: targetImage.credits ?? null,
+        };
+
+        if (fsBinding) {
+          newItem = await persistHistoryImage(newItem);
+        }
+
+        if (runResult.progressStartedAt > 0) {
+          const observedDurationMs = Math.max(1, getNowMs() - runResult.progressStartedAt);
+          setGenerationTiming((prev) =>
+            updateGenerationTiming(
+              prev,
+              runResult.promptDurationKey,
+              runResult.toolDurationKey,
+              observedDurationMs,
+            ),
+          );
+        }
+
+        if (originalSnapshot) {
+          appendHistoryEntry(originalSnapshot);
+        }
+        appendHistoryEntry(newItem);
+        // Batch results land in their replacement slot immediately (unlike a
+        // single-image run, which waits for the user to press "commit") — see
+        // the Agreed UX in PLAN-batch-processing.md. Assigning also makes the
+        // slot ineligible for ticking, which auto-prunes it from
+        // batchTickedIds (the WP3 effect), so successful images untick
+        // themselves as they land.
+        if (incomingSlotId) {
+          handleAssignReplacement(incomingSlotId, newItem.id);
+        }
+
+        // A pinned inspector (the user clicked a strip item to inspect it)
+        // stops the right panel from following new results until they un-pin
+        // via "Follow latest" (WP5).
+        if (!isInspectorPinnedRef.current) {
+          setState((prev) => ({ ...prev, rightPanelImageId: newItem.id }));
+        }
+      } catch (error) {
+        if (error instanceof MissingApiKeyError) {
+          stoppedByMissingApiKey = error.message;
+          // Stop the whole run rather than just this image: without an API
+          // key every remaining image would fail the same way. Re-thrown as
+          // an AbortError so the pool (lib/batchPool.ts) treats it as
+          // cancelled, not a per-image failure.
+          abortController.abort();
+          throw new DOMException("Generation cancelled.", "AbortError");
+        }
+        // Everything else (a plain failure, an OpenRouterApiError including
+        // rate-limited, or a real AbortError from a cancel click) propagates
+        // to the pool, which classifies it via isRateLimited/isAbortError and
+        // reports it through onFailure/onCancelled below.
+        throw error;
+      }
+    };
+
+    await runBatchPool(
+      orderedIncomingIds,
+      processOneImage,
+      {
+        concurrency: BATCH_CONCURRENCY,
+        retryDelaysMs: resolveBatchRetryDelaysMs(),
+        maxRetries: BATCH_RATE_LIMIT_MAX_RETRIES,
+        signal: abortController.signal,
+        isRateLimited: (error) =>
+          error instanceof OpenRouterApiError && error.reason === "rate-limited",
+        isAbortError: (error) =>
+          error instanceof DOMException
+            ? error.name === "AbortError"
+            : (error as any)?.name === "AbortError",
+        wait: (ms, signal) =>
+          new Promise<void>((resolve, reject) => {
+            if (signal.aborted) {
+              reject(new DOMException("Generation cancelled.", "AbortError"));
+              return;
+            }
+            const timeoutId = setTimeout(resolve, ms);
+            signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timeoutId);
+                reject(new DOMException("Generation cancelled.", "AbortError"));
+              },
+              { once: true },
+            );
+          }),
+      },
+      {
+        onStart: (incomingId) => {
+          setBatchRun((prev) =>
+            prev && !prev.currentIncomingIds.includes(incomingId)
+              ? { ...prev, currentIncomingIds: [...prev.currentIncomingIds, incomingId] }
+              : prev,
+          );
+        },
+        onSuccess: (incomingId) => {
+          completedCount += 1;
+          setBatchRun((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  completed: completedCount,
+                  currentIncomingIds: prev.currentIncomingIds.filter((id) => id !== incomingId),
+                }
+              : prev,
+          );
+        },
+        onFailure: (incomingId, error) => {
+          console.error(`Batch run failed for ${incomingId}:`, error);
+          failedIncomingIds.push(incomingId);
+          setBatchRun((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  failedIncomingIds: [...prev.failedIncomingIds, incomingId],
+                  currentIncomingIds: prev.currentIncomingIds.filter((id) => id !== incomingId),
+                }
+              : prev,
+          );
+        },
+        onCancelled: (incomingId) => {
+          setBatchRun((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  currentIncomingIds: prev.currentIncomingIds.filter((id) => id !== incomingId),
+                }
+              : prev,
+          );
+        },
+      },
+    );
+
+    const cancelled = abortController.signal.aborted && !stoppedByMissingApiKey;
+
+    setBatchRun(null);
+    setState((prev) => ({
+      ...prev,
+      isProcessing: false,
+      error: stoppedByMissingApiKey
+        ? stoppedByMissingApiKey
+        : !cancelled && failedIncomingIds.length
+          ? `${completedCount} of ${orderedIncomingIds.length} images processed; ${failedIncomingIds.length} failed — the failed images are still ticked, run again to retry.`
+          : prev.error,
+    }));
+
+    if (requestAbortControllerRef.current === abortController) {
+      requestAbortControllerRef.current = null;
+    }
+    if (shouldRefreshCredits) {
+      void refreshCredits();
+    }
+  };
+
   const handleParamChange = useCallback((toolId: string, paramName: string, value: string) => {
     setParamsByTool((prev) => ({
       ...prev,
@@ -3239,6 +3465,9 @@ export function ImageToolsWorkspace({
 
   const handleAssignReplacement = useCallback(
     (incomingId: string, replacementId: string | null) => {
+      if (replacementId) {
+        replacementAssignedAtRef.current[`${incomingId}:${replacementId}`] = Date.now();
+      }
       setReplacementImageIdByIncomingId((prev) => ({
         ...prev,
         [incomingId]: replacementId,
@@ -3381,16 +3610,34 @@ export function ImageToolsWorkspace({
     }
 
     setResultImageIds([]);
+    // An explicit click always pins the inspector (see WP5): harmless outside
+    // a batch run (nothing reads the pin then), and reset to unpinned at the
+    // start of every run.
+    setIsInspectorPinned(true);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
-  // Clicking a "Current" book image copies it into the "Image to Edit" target
-  // (so the user can immediately apply a tool to it) rather than into the Result
-  // pane, and clears whatever was in the Result pane. Ctrl-click still adds it to
-  // the full-screen comparison selection.
+  // Clicking a "Current" book image normally copies it into the "Image to
+  // Edit" target (so the user can immediately apply a tool to it) rather than
+  // into the Result pane, clearing whatever was in the Result pane. But while
+  // ≥1 book image is ticked, or a batch is running, the "Image to Edit" box is
+  // just showing the "Will edit the N selected images" placeholder — so the
+  // click instead *inspects*: it shows that item's current state (its
+  // assigned replacement if one exists, else the original) in the Result
+  // panel and pins it there (PLAN-batch-processing.md WP5). Ctrl-click still
+  // adds it to the full-screen comparison selection either way.
   const handleSelectBookImageCurrent = (id: string) => {
     if (isPreviewModifierActive) {
       queuePreviewImage(id);
+      return;
+    }
+
+    const isInspectContext = batchTickedIds.size > 0 || batchRun !== null;
+    if (isInspectContext) {
+      const inspectedId = replacementImageIdByIncomingId[id] || id;
+      setResultImageIds([]);
+      setIsInspectorPinned(true);
+      setState((prev) => ({ ...prev, rightPanelImageId: inspectedId }));
       return;
     }
 
@@ -3402,6 +3649,10 @@ export function ImageToolsWorkspace({
       rightPanelImageId: null,
     }));
   };
+
+  const handleUnpinInspector = useCallback(() => {
+    setIsInspectorPinned(false);
+  }, []);
 
   const handleRenameImage = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
@@ -3755,6 +4006,12 @@ export function ImageToolsWorkspace({
   return (
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
+      {/* Test hook for the batch runner (PLAN-batch-processing.md WP4): not
+          visible UI (WP5 adds the real progress bar), but lets e2e specs read
+          batch progress deterministically instead of polling strip DOM state. */}
+      <Box data-testid="batch-run-status" sx={{ display: "none" }}>
+        {batchRun ? JSON.stringify(batchRun) : ""}
+      </Box>
       <Box
         sx={{
           display: "flex",
@@ -3914,7 +4171,14 @@ export function ImageToolsWorkspace({
             measuredStatsByKey={measuredStatsByKey}
             onToolModelChange={handleToolModelChange}
             onToolReasoningChange={handleToolReasoningChange}
-            targetImage={targetImage}
+            targetImage={batchTickedIds.size > 0 ? null : targetImage}
+            batchSelectionMessage={batchSelectionMessage}
+            batchSelection={batchSelection}
+            batchTickedCount={batchTickedIds.size}
+            batchRun={batchRun}
+            isBatchRunning={batchRun !== null}
+            isInspectorPinned={isInspectorPinned}
+            onUnpinInspector={handleUnpinInspector}
             referenceImages={referenceItems}
             rightImage={rightItem}
             resultImages={resultItems}
@@ -3945,6 +4209,7 @@ export function ImageToolsWorkspace({
             onStripDragActivate={handleStripDragActivate}
             onVisibleStripItemIdsChange={handleVisibleStripItemIdsChange}
             onApplyTool={handleApplyTool}
+            onApplyBatchTool={handleApplyBatchTool}
             onCancelProcessing={handleCancelProcessing}
             onToolSelect={handleToolSelectWithConstraints}
             onParamChange={handleParamChange}

@@ -235,6 +235,9 @@ export const TOOLS: ToolDefinition[] = (
       },
       actionButtonLabel: "Apply Localized Characters",
       referenceImages: "1+",
+      // Batch-eligible: edits the single target image against the shared
+      // reference set and produces exactly one image result.
+      allowBatch: true,
     },
     {
       id: "make_gif",
@@ -332,6 +335,9 @@ export const TOOLS: ToolDefinition[] = (
         return `${styledPrompt}\n\nExtra instructions: ${extraInstructions}`;
       },
       referenceImages: "0+",
+      // Batch-eligible: single target image in, single image result out, with
+      // no derived multi-file output (see toolSupportsBatch in toolHelpers.ts).
+      allowBatch: true,
     },
     {
       id: "change_text",
@@ -357,6 +363,7 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) =>
         `Change the text "${params.match}" to "${params.replace}" in this image. Maintain the font style and background.`,
       referenceImages: "0",
+      allowBatch: true,
     },
     {
       id: "break_comic_into_images",
@@ -452,6 +459,7 @@ export const TOOLS: ToolDefinition[] = (
       },
       actionButtonLabel: "Make Coloring Page",
       referenceImages: "0",
+      allowBatch: true,
     },
     {
       id: "change_style",
@@ -476,6 +484,7 @@ export const TOOLS: ToolDefinition[] = (
         return applyArtStyleToPrompt(base, selectedStyleId);
       },
       referenceImages: "0",
+      allowBatch: true,
     },
 
     {
@@ -502,6 +511,7 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) =>
         `Add a stylized title "${params.title}" to this image. Use a ${params.style} font style that fits a children's book.`,
       referenceImages: "0",
+      allowBatch: true,
     },
 
     {
@@ -538,6 +548,7 @@ export const TOOLS: ToolDefinition[] = (
         return `Change the ethnicity of ${character} to ${ethnicityDetails}. Maintain the pose, clothing, and art style. Do not put the people in traditional clothing unless the original image had that. Just show them in everyday clothes common to this region, unless I direct you otherwise.`;
       },
       referenceImages: "0",
+      allowBatch: true,
     },
     {
       id: "custom",
@@ -555,6 +566,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => params.prompt,
       referenceImages: "0+",
+      allowBatch: true,
     },
     {
       id: "generate_pallet",
@@ -622,6 +634,7 @@ export const TOOLS: ToolDefinition[] = (
       // GPT-5.4 Image 2 as a secondary option. Other catalog models are hidden.
       modelIds: ["google/gemini-3-pro-image", "openai/gpt-5.4-image-2"],
       recommendedModelIds: ["google/gemini-3-pro-image"],
+      allowBatch: true,
     },
     {
       id: "remove_object",
@@ -640,6 +653,7 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) =>
         `Clean up the image by removing ${params.target}. Infill the area naturally to match the surrounding background.`,
       referenceImages: "0",
+      allowBatch: true,
     },
     {
       id: "remove_background",
@@ -650,6 +664,7 @@ export const TOOLS: ToolDefinition[] = (
       parameters: [],
       promptTemplate: () => `Replace the background with transparency.`,
       referenceImages: "0",
+      allowBatch: true,
     },
   ] as ToolDefinition[]
 ).map((tool) => {

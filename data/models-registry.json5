@@ -16,6 +16,7 @@
     badge: "Great but Expensive",
     description: "'Nano Banana Pro' Good for editing, as it preserves the original image.",
     pricing: "About $0.14 per image",
+    pricePerImageUsd: 0.14,
     // For "Break Comic into Images", prefer Gemini 3.1 Flash: Pro tends to
     // "sanitize" content while extracting (observed repeatedly: it redrew an
     // open-defecation panel onto a porcelain toilet).
@@ -44,6 +45,7 @@
     badge: "Great",
     description: "'Nano Banana 2'. Good for editing, as it preserves the original image. Not quite as good at instruction understanding as Gemini 3 Pro.",
     pricing: "About $0.07 per image",
+    pricePerImageUsd: 0.07,
     // Recommended for "Break Comic into Images": edit-framed cleanup with
     // Flash preserves the original artwork well (Pro tends to sanitize/redraw
     // scenes), and the tool fetches captions in a separate text call, so
@@ -79,6 +81,7 @@
     badge: "Cheaper",
     description: "'Nano Banana 2' lite. Cheaper, lighter sibling of Gemini 3.1 Flash. Good for editing, as it preserves the original image.",
     pricing: "About $0.035 per image (estimate)",
+    pricePerImageUsd: 0.035,
     // Mirror Flash's aspect-ratio support (same Gemini 3.1 Flash family).
     supportedAspectRatios: [
       "1:8",
@@ -106,6 +109,9 @@
     badge: "Good, but only for new images.",
     description: "Slow",
     pricing: "About $0.02 / 1k image",
+    // The display string above is ambiguous (per-image vs. per-1k-images); this
+    // treats it as the per-image figure until OpenRouter publishes exact pricing.
+    pricePerImageUsd: 0.02,
     // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
     // The current OpenRouter chat-completions path in this app can faithfully target
     // those three exact aspect ratios.
@@ -118,6 +124,7 @@
     badge: "TODO",
     description: "slower and more expensive than gemini flash",
     pricing: "About $0.24 / 1k image",
+    pricePerImageUsd: 0.24,
     // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
     // The current OpenRouter chat-completions path in this app can faithfully target
     // those three exact aspect ratios.

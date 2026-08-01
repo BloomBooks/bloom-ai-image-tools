@@ -31,6 +31,11 @@ Use the chrome-devtools in a terminal to drive and probe the running app.
 - Playwright starts its own dev server with `vp dev --host --port 3000`, so a separate dev server is usually unnecessary
 - To see all renderer console messages and failed network requests: set `E2E_VERBOSE=1` before `vp run e2e <file-name>`
 - For information on writing tests, see .github/skills/playwright/SKILL.md
+- The Local Dummy model (free, localhost-only) has window test hooks for deterministic
+  specs — delay, forced failure, forced 429, and batch-backoff override. They're defined
+  and documented at `applyDummyImageTestHooks` in services/openRouterService.ts (plus
+  `__bloomBatchRetryDelaysMsOverride` in lib/batchPool.ts); tests/batch-run.spec.ts shows
+  usage. This machine flakes above `--workers=2`.
 
 ## Component Hierarchy
 

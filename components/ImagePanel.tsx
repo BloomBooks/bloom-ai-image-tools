@@ -59,6 +59,10 @@ type SingleImagePanelProps = {
   dndDropId?: string;
   dndDragId?: string;
   needsImage?: boolean;
+  /** When set, replaces the normal empty-state (upload prompt / placeholder
+   *  graphic) with this centered message. Used for the "Image to Edit" panel
+   *  while one or more book images are ticked for a batch run. */
+  emptyStateMessage?: string;
 };
 
 type GridImagePanelProps = {
@@ -234,6 +238,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     dndDragId,
     isAnyDndDragging = false,
     needsImage = false,
+    emptyStateMessage,
   } = props;
 
   const starState =
@@ -250,6 +255,17 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     isDropZone: boolean;
     disabled: boolean;
   }) => {
+    if (emptyStateMessage) {
+      return (
+        <Box
+          data-testid="image-panel-empty-state-message"
+          sx={{ textAlign: "center", p: 3, fontSize: "0.95rem", fontWeight: 600 }}
+        >
+          {emptyStateMessage}
+        </Box>
+      );
+    }
+
     if (dropZone && !holderDisabled) {
       return (
         <Box

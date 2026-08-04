@@ -8,6 +8,7 @@ import {
   CircularProgress,
   FormControlLabel,
   FormHelperText,
+  LinearProgress,
   MenuItem,
   Paper,
   Skeleton,
@@ -17,6 +18,7 @@ import {
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import type {
+  BatchRunState,
   MeasuredStats,
   ModelReasoningLevel,
   ToolDefinition,
@@ -36,10 +38,15 @@ import {
 } from "../../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
 import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
-import { getModelInfoById, resolveToolModelId } from "../../lib/modelsCatalog";
+import {
+  getEstimatedCostPerImageUsd,
+  getModelInfoById,
+  resolveToolModelId,
+} from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
-import { ToolModelPicker } from "./ToolModelPicker";
+import { ToolModelPicker, formatCost } from "./ToolModelPicker";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
+import { kWarningColor } from "../materialUITheme";
 
 // Must match the catalog id in data/models-registry.json5 (the stable,
 // non-preview key now that OpenRouter has retired the "-preview" key). Keep in
@@ -91,6 +98,9 @@ const getOrderedSizeOptions = (
 
 interface ToolPanelProps {
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
+  /** Batch runner entry point (PLAN-batch-processing.md WP4): fired instead of
+   *  onApplyTool while one or more book images are ticked. */
+  onApplyBatchTool: (toolId: string, params: Record<string, string>) => void;
   isProcessing: boolean;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
@@ -108,6 +118,15 @@ interface ToolPanelProps {
   onParamChange: (toolId: string, paramName: string, value: string) => void;
   selectedArtStyleId: string | null;
   onArtStyleChange: (styleId: string) => void;
+  /** Count of book images currently ticked for a batch run (see
+   *  PLAN-batch-processing.md WP3). >0 morphs the action button's label and
+   *  cost estimate for any tool card that supports batch. */
+  batchTickedCount?: number;
+  /** Live batch progress (PLAN-batch-processing.md WP5). While set and
+   *  `isProcessing` is true, the active tool card's action-button area shows
+   *  a determinate progress bar + Cancel instead of the generic
+   *  "Click to Cancel" button. */
+  batchRun?: BatchRunState | null;
 }
 type IdleFriendlyWindow = Window & {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
@@ -384,6 +403,7 @@ const ParamTextInput = React.memo(function ParamTextInputComponent({
 
 const ImageToolComponent: React.FC<ToolPanelProps> = ({
   onApplyTool,
+  onApplyBatchTool,
   isProcessing,
   onCancelProcessing,
   onToolSelect,
@@ -401,6 +421,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   onParamChange,
   selectedArtStyleId,
   onArtStyleChange,
+  batchTickedCount = 0,
+  batchRun = null,
 }) => {
   const muiTheme = useTheme();
   const selectionTimingRef = useRef<string | null>(null);
@@ -839,13 +861,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
+    // Any tick means batch semantics for this tool, even N=1 (see Agreed UX in
+    // PLAN-batch-processing.md): the ticked images stand in for a single target
+    // image, so the usual "needs a target image" gate doesn't apply.
+    const isBatchModeForTool = batchTickedCount > 0 && !!tool.allowBatch;
     const requiresOpenRouter =
       tool.id !== "remove_background" &&
       !tool.localOnly &&
       !canUseLocalDummyModelWithoutApiKey(resolveToolModelId(tool, modelByTool));
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
-    const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage;
+    const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage && !isBatchModeForTool;
     const missingRequired = hasUnfilledRequiredParams(tool);
     const requiresDescriptionOrReference =
       tool.id === "game_theme_generator" &&
@@ -866,6 +892,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       needsReference ||
       requiresDescriptionOrReference ||
       missingRequired;
+
+    // "Make Coloring Page for 7 Images" when the tool has its own verb, else
+    // the generic "Apply Changes to N Images" (see Agreed UX / WP3 notes).
+    const batchButtonLabel = tool.actionButtonLabel
+      ? `${tool.actionButtonLabel} for ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`
+      : `Apply Changes to ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`;
+    const estimatedCostPerImage = isBatchModeForTool
+      ? getEstimatedCostPerImageUsd(tool, modelByTool)
+      : null;
+    const estimatedBatchCost =
+      estimatedCostPerImage != null ? estimatedCostPerImage * batchTickedCount : null;
 
     const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
     const cardBorderColor = isSelected ? theme.colors.focus : "transparent";
@@ -1017,6 +1054,51 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                     <span>{submitDisabledReason}</span>
                     <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                   </FormHelperText>
+                ) : isProcessing && batchRun ? (
+                  // A batch run in progress morphs the action-button area into
+                  // a determinate progress bar + Cancel (PLAN-batch-processing.md
+                  // WP5), replacing the generic "Click to Cancel" button.
+                  <Stack spacing={1}>
+                    <Typography
+                      variant="body2"
+                      data-testid="batch-progress-label"
+                      sx={{ textAlign: "center", color: kWarningColor }}
+                    >
+                      Processed {batchRun.completed} of {batchRun.total}
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={batchRun.total > 0 ? (batchRun.completed / batchRun.total) * 100 : 0}
+                      data-testid="batch-progress-bar"
+                      sx={{
+                        borderRadius: 999,
+                        height: 6,
+                        backgroundColor: "rgba(214, 86, 73, 0.25)",
+                        "& .MuiLinearProgress-bar": {
+                          backgroundColor: kWarningColor,
+                        },
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      fullWidth
+                      data-testid="batch-progress-cancel-button"
+                      onClick={onCancelProcessing}
+                      sx={{
+                        minHeight: 40,
+                        fontWeight: 400,
+                        color: kWarningColor,
+                        borderColor: kWarningColor,
+                        "&:hover": {
+                          borderColor: kWarningColor,
+                          backgroundColor: "rgba(214, 86, 73, 0.12)",
+                        },
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </Stack>
                 ) : (
                   <>
                     <Button
@@ -1037,6 +1119,31 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                           onCancelProcessing();
                           return;
                         }
+                        if (isBatchModeForTool) {
+                          // Ticking images runs a separate, sequential
+                          // per-image code path (WP4) rather than the
+                          // single-image apply flow below — there's no target
+                          // image and no submit event to read a FormData from,
+                          // so build the payload straight off paramsByTool
+                          // (every field type but text/textarea already
+                          // commits synchronously; those commit on
+                          // change/blur, same source handleSubmit uses to
+                          // seed its own payload before FormData overrides).
+                          const batchPayload: Record<string, string> = {
+                            ...paramsByTool[tool.id],
+                          };
+                          tool.parameters.forEach((param) => {
+                            if (param.type === "art-style") {
+                              batchPayload[param.name] =
+                                batchPayload[param.name] ??
+                                param.defaultValue ??
+                                selectedArtStyleId ??
+                                "";
+                            }
+                          });
+                          onApplyBatchTool(tool.id, batchPayload);
+                          return;
+                        }
                         event.currentTarget.closest("form")?.requestSubmit();
                       }}
                       sx={{
@@ -1054,6 +1161,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                           <CircularProgress size={18} color="inherit" />
                           Click to Cancel
                         </>
+                      ) : isBatchModeForTool ? (
+                        <span>{batchButtonLabel}</span>
                       ) : (
                         <>
                           <span>
@@ -1064,6 +1173,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         </>
                       )}
                     </Button>
+                    {isBatchModeForTool && estimatedBatchCost != null && (
+                      <FormHelperText
+                        data-testid="batch-cost-estimate"
+                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Estimated cost: {formatCost(estimatedBatchCost)}
+                      </FormHelperText>
+                    )}
                     {submitDisabledReason && !isProcessing && (
                       <FormHelperText
                         sx={{

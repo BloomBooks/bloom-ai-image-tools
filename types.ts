@@ -54,6 +54,13 @@ export interface ModelInfo {
   name: string;
   description: string;
   pricing: string;
+  /**
+   * Numeric per-image price in USD, parallel to the human-readable `pricing`
+   * string. Batch cost estimates (N ticked images × this value) need a number
+   * to multiply, so this exists rather than parsing `pricing` at display time.
+   * Omitted for models with no fixed per-image price (e.g. free/local models).
+   */
+  pricePerImageUsd?: number;
   default?: boolean;
   badge?: string;
   initialReasoningLevel?: ModelReasoningLevel;
@@ -151,6 +158,12 @@ export interface ToolDefinition {
   hiddenAspectRatioDefault?: string;
   /** Tools without a size picker can still request a specific output size tier. */
   hiddenSizeDefault?: string;
+  /**
+   * Eligible for the batch-processing flow: the tool edits a single target
+   * image and produces exactly one image result (no `derivedResultMode`
+   * split/animation, no multi-file output). See `toolSupportsBatch`.
+   */
+  allowBatch?: boolean;
 }
 
 export interface EthnicityCategory {
@@ -217,7 +230,7 @@ export interface ImageRecordData {
   sourceSummary?: string | null;
   resolution?: { width: number; height: number };
   isStarred?: boolean;
-  origin?: "generated" | "uploaded" | "bookImages";
+  origin?: "generated" | "uploaded" | "bookImages" | "bookOriginal";
   /**
    * Credits of this image's IP source: supplied by the host for book images,
    * and copied from the edit target when a result is created by editing it.
@@ -276,6 +289,17 @@ export interface GenerationTimingState {
   lastDurationMs: number | null;
   promptDurationsByKey: Record<string, number>;
   toolDurationsByKey: Record<string, number>;
+}
+
+/** Progress of an in-flight batch run (PLAN-batch-processing.md WP4/WP5/WP7).
+ *  Cleared once the run finishes; `AppState.isProcessing` (not this) gates
+ *  re-entrancy. Up to `BATCH_CONCURRENCY` (lib/batchPool.ts) images can be
+ *  in flight at once, hence `currentIncomingIds` being plural. */
+export interface BatchRunState {
+  total: number;
+  completed: number;
+  failedIncomingIds: string[];
+  currentIncomingIds: string[];
 }
 
 export type ThumbnailStripId = "history" | "characters" | "starred" | "reference" | "bookImages";

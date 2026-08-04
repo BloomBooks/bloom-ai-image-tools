@@ -1,14 +1,37 @@
 import React, { useMemo } from "react";
-import { Button, ButtonBase, IconButton, Tooltip } from "@mui/material";
+import { Button, ButtonBase, Checkbox, CircularProgress, IconButton, Tooltip } from "@mui/material";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
 import { theme } from "../../themes";
+import { kWarningColor } from "../materialUITheme";
 import { STRIP_ACTIVE_BORDER_COLOR, STRIP_BORDER, STRIP_BORDER_COLOR } from "./stripStyleConstants";
 import { ImageRecord, ThumbnailStripId } from "../../types";
 import { Icon, Icons, PasteIcon } from "../Icons";
 import { ImageSlot } from "../ImageSlot";
 import { handlePaste as pasteImageFromClipboard } from "../../lib/clipboardUtils";
+
+/** Batch-selection wiring for the book-images strip (see PLAN-batch-processing.md
+ *  WP3/WP5): which incoming ids may be ticked, which are ticked, and the
+ *  toggle callback, plus (while a run is active) which one is currently
+ *  processing and which have failed. Only meaningful when the active tool
+ *  supports batch (`toolSupportsBatch`) and the strip is in hosted
+ *  book-images mode. */
+export interface BookImageBatchSelection {
+  eligibleIds: Set<string>;
+  tickedIds: Set<string>;
+  onToggle: (incomingId: string) => void;
+  /** Incoming ids currently being processed by an in-flight batch run (up to
+   *  `BATCH_CONCURRENCY`, lib/batchPool.ts); each gets a spinner overlay on
+   *  its "Current" slot. */
+  activeIncomingIds?: Set<string>;
+  /** Incoming ids that failed during the current (or most recently ticked)
+   *  batch run; get an error badge on their "Current" slot while the run is
+   *  still active. */
+  failedIncomingIds?: Set<string>;
+}
 
 interface ThumbnailStripProps {
   stripId: ThumbnailStripId;
@@ -52,6 +75,8 @@ interface ThumbnailStripProps {
   onRequestHistoryAccess?: () => void;
   onVisibleItemIdsChange?: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   isAnyDndDragging?: boolean;
+  /** bookImages strip only: present when the active tool supports batch runs. */
+  batchSelection?: BookImageBatchSelection;
 }
 
 const stripShellStyles: React.CSSProperties = {
@@ -221,6 +246,101 @@ const getReplacementCompatibilityIndicators = (
 
   return indicators;
 };
+
+// A small checkbox overlay for ticking a book image into a batch run. Both
+// states must be visible over arbitrary artwork without drawing a box: a
+// hollow circle when unticked, a filled checked-circle when ticked, each with
+// a drop shadow instead of a border (per the app's no-borders-over-images
+// rule).
+const BatchTickToggle: React.FC<{
+  incomingId: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (incomingId: string) => void;
+}> = ({ incomingId, checked, disabled, onToggle }) => (
+  <Checkbox
+    checked={checked}
+    disabled={disabled}
+    onClick={(event) => event.stopPropagation()}
+    // The thumb underneath is a dnd-kit draggable whose pointer listeners
+    // would otherwise swallow the press (killing MUI's ripple/active states
+    // and sometimes starting a drag instead of a tick).
+    onPointerDown={(event) => event.stopPropagation()}
+    onMouseDown={(event) => event.stopPropagation()}
+    onChange={() => onToggle(incomingId)}
+    icon={<RadioButtonUncheckedIcon sx={{ fontSize: 20 }} />}
+    checkedIcon={<CheckCircleIcon sx={{ fontSize: 20 }} />}
+    title={disabled ? "This image can't be added to the batch" : "Add to batch"}
+    inputProps={
+      { "data-testid": `batch-tick-${incomingId}` } as React.InputHTMLAttributes<HTMLInputElement>
+    }
+    sx={{
+      position: "absolute",
+      top: 2,
+      left: 2,
+      zIndex: 3,
+      padding: "3px",
+      color: theme.colors.textMuted,
+      filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
+      // Quiet until pointed at: half-transparent at rest, full strength on
+      // hover; a checked tick stays at full strength since it carries state.
+      opacity: disabled ? 0.15 : 0.5,
+      transition: "color 120ms, background-color 120ms, opacity 120ms",
+      "&:hover": {
+        color: theme.colors.textPrimary,
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
+        opacity: 1,
+      },
+      "&.Mui-checked": {
+        color: theme.colors.accent,
+        opacity: 1,
+      },
+      "&.Mui-disabled": {
+        color: theme.colors.textMuted,
+      },
+    }}
+  />
+);
+
+// Shown over the "Current" slot of the book image the batch runner is
+// processing right now (PLAN-batch-processing.md WP5).
+const BatchActiveSpinnerOverlay: React.FC = () => (
+  <div
+    data-testid="batch-active-spinner"
+    style={{
+      position: "absolute",
+      inset: 0,
+      zIndex: 4,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(15, 23, 42, 0.35)",
+      pointerEvents: "none",
+    }}
+  >
+    <CircularProgress size={22} sx={{ color: kWarningColor }} />
+  </div>
+);
+
+// Shown over the "Current" slot of a book image whose batch run failed, for
+// the duration of the run (the end-of-run summary message covers it after).
+const BatchFailedBadge: React.FC = () => (
+  <div
+    data-testid="batch-failed-badge"
+    title="This image failed to process; it stays ticked so you can retry"
+    style={{
+      position: "absolute",
+      top: 2,
+      right: 2,
+      zIndex: 4,
+      display: "flex",
+      color: theme.colors.danger,
+      filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
+    }}
+  >
+    <Icon path={Icons.AlertTriangle} width={18} height={18} />
+  </div>
+);
 
 const BookImageStripLabels: React.FC = () => (
   <div
@@ -704,6 +824,9 @@ const BookImagePairThumb: React.FC<{
   onToggleStar: () => void;
   onRemove?: () => void;
   onClearReplacement: () => void;
+  /** Present only when the active tool supports batch runs (see
+   *  BookImageBatchSelection); renders a tick checkbox over the "Current" slot. */
+  batchSelection?: BookImageBatchSelection;
 }> = ({
   stripId,
   item,
@@ -719,6 +842,7 @@ const BookImagePairThumb: React.FC<{
   onSelectReplacement,
   onRemove,
   onClearReplacement,
+  batchSelection,
 }) => {
   const currentDroppable = useDroppable({
     id: buildBookImageCurrentSlotId(item.id),
@@ -798,6 +922,7 @@ const BookImagePairThumb: React.FC<{
           {...currentDraggable.attributes}
           {...currentDraggable.listeners}
           style={{
+            position: "relative",
             padding: 6,
             backgroundColor: currentDroppable.isOver
               ? theme.colors.dropZone
@@ -808,6 +933,16 @@ const BookImagePairThumb: React.FC<{
             opacity: currentDraggable.isDragging ? 0.35 : 1,
           }}
         >
+          {batchSelection && (
+            <BatchTickToggle
+              incomingId={item.id}
+              checked={batchSelection.tickedIds.has(item.id)}
+              disabled={!batchSelection.eligibleIds.has(item.id)}
+              onToggle={batchSelection.onToggle}
+            />
+          )}
+          {batchSelection?.activeIncomingIds?.has(item.id) && <BatchActiveSpinnerOverlay />}
+          {batchSelection?.failedIncomingIds?.has(item.id) && <BatchFailedBadge />}
           <ImageSlot
             image={item}
             variant="thumb"
@@ -1148,6 +1283,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   onRequestHistoryAccess,
   onVisibleItemIdsChange,
   isAnyDndDragging = false,
+  batchSelection,
 }) => {
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
   const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
@@ -1391,6 +1527,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 }}
                 onToggleStar={() => onToggleStar(item.id)}
                 onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}
+                batchSelection={batchSelection}
                 onClearReplacement={() => onAssignReplacement?.(item.id, null)}
               />
             ))}

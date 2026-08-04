@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TOOLS } from "../../components/tools/tools-registry";
+import { toolSupportsBatch } from "../toolHelpers";
 
 describe("ethnicity tool prompt", () => {
   it("targets all characters when no specific character is provided", () => {
@@ -133,5 +134,54 @@ describe("ethnicity tool prompt", () => {
     expect(
       changeStyleTool?.parameters.find((param) => param.name === "styleId")?.excludeArtStyleIds,
     ).toContain("coloring-book-page");
+  });
+
+  it("flags allowBatch on exactly the single-image-in/single-image-out edit tools", () => {
+    const batchEligibleToolIds = TOOLS.filter((tool) => toolSupportsBatch(tool))
+      .map((tool) => tool.id)
+      .sort();
+
+    expect(batchEligibleToolIds).toEqual(
+      [
+        "apply_localized_characters",
+        "change_style",
+        "change_text",
+        "coloring_book",
+        "custom",
+        "enhance_drawing",
+        "ethnicity",
+        "improve_drawing",
+        "remove_background",
+        "remove_object",
+        "stylized_title",
+      ].sort(),
+    );
+  });
+
+  it("never flags allowBatch on tools with a derived multi-output result", () => {
+    const derivedResultTools = TOOLS.filter((tool) => tool.derivedResultMode);
+
+    expect(derivedResultTools.length).toBeGreaterThan(0);
+    for (const tool of derivedResultTools) {
+      expect(toolSupportsBatch(tool)).toBe(false);
+    }
+  });
+
+  it("excludes generation-only, PDF, and cast-extraction tools from batch", () => {
+    const explicitlyExcludedIds = [
+      "generate_image",
+      "break_into_pieces",
+      "extract_cast_of_characters",
+      "make_gif",
+      "break_comic_into_images",
+      "pdf_to_images",
+      "generate_pallet",
+    ];
+
+    for (const toolId of explicitlyExcludedIds) {
+      const tool = TOOLS.find((candidate) => candidate.id === toolId);
+      expect(tool).toBeDefined();
+      expect(toolSupportsBatch(tool)).toBe(false);
+    }
   });
 });

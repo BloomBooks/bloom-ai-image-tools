@@ -7,7 +7,7 @@ import {
   ThumbnailStripConfig,
   THUMBNAIL_STRIP_CONFIGS,
 } from "../../lib/thumbnailStrips";
-import { ThumbnailStrip } from "./ThumbnailStrip";
+import { BookImageBatchSelection, ThumbnailStrip } from "./ThumbnailStrip";
 import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 
 interface ThumbnailStripsCollectionProps {
@@ -49,6 +49,8 @@ interface ThumbnailStripsCollectionProps {
   onTogglePin: (stripId: ThumbnailStripId) => void;
   onDragActivateStrip: (stripId: ThumbnailStripId) => void;
   isAnyDndDragging?: boolean;
+  /** bookImages strip only: present when the active tool supports batch runs. */
+  batchSelection?: BookImageBatchSelection;
 }
 
 export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
@@ -77,6 +79,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   onTogglePin,
   onDragActivateStrip,
   isAnyDndDragging = false,
+  batchSelection,
 }) => {
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
   const pinnedStripIds = new Set(snapshot.pinnedStripIds);
@@ -172,6 +175,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         onAssignCurrent={onAssignCurrent}
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
+        batchSelection={stripId === "bookImages" ? batchSelection : undefined}
       />
     );
   };

@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/core";
 import {
   AppState,
+  BatchRunState,
   GenerationProgressState,
   ImageRecord,
   MeasuredStats,
@@ -30,6 +31,7 @@ import {
 import { ImageTool } from "./tools/ImageTool";
 import { Workspace } from "./Workspace";
 import { ThumbnailStripsCollection } from "./thumbnailStrips/ThumbnailStripsCollection";
+import type { BookImageBatchSelection } from "./thumbnailStrips/ThumbnailStrip";
 import { theme } from "../themes";
 import { emitDragDebugLog, isDragDebugEnabled } from "./dragConstants";
 import { Icon, Icons } from "./Icons";
@@ -447,6 +449,9 @@ interface ImageToolsPanelBar {
   onVisibleStripItemIdsChange: (stripId: ThumbnailStripId, visibleItemIds: string[]) => void;
   selectedArtStyleId: string | null;
   onApplyTool: (toolId: string, params: Record<string, string>) => void;
+  /** Batch runner entry point (PLAN-batch-processing.md WP4), used instead of
+   *  onApplyTool whenever one or more book images are ticked. */
+  onApplyBatchTool: (toolId: string, params: Record<string, string>) => void;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
@@ -480,6 +485,26 @@ interface ImageToolsPanelBar {
   previewModifierActive?: boolean;
   previewSelectionImageIds?: string[];
   onDismissError: () => void;
+  /** bookImages strip only: present when the active tool supports batch runs. */
+  batchSelection?: BookImageBatchSelection;
+  /** Count of ticked book images; morphs the tool's action button and cost estimate. */
+  batchTickedCount?: number;
+  /** Set while one or more book images are ticked; shown in place of the
+   *  "Image to Edit" panel's image. */
+  batchSelectionMessage?: string | null;
+  /** True for the whole duration of a batch run (PLAN-batch-processing.md
+   *  WP4): suppresses the Result pane's loading overlay so completed results
+   *  stay inspectable while later images process. */
+  isBatchRunning?: boolean;
+  /** Live batch progress (PLAN-batch-processing.md WP5); drives the tool
+   *  card's progress bar in place of the generic "Click to Cancel" button. */
+  batchRun?: BatchRunState | null;
+  /** True once the user has clicked a strip item to inspect it mid-run; the
+   *  Result pane then stops following new completions until un-pinned. */
+  isInspectorPinned?: boolean;
+  /** Un-pins the inspector so the Result pane resumes following the latest
+   *  batch completion. */
+  onUnpinInspector?: () => void;
 }
 
 export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
@@ -511,6 +536,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onVisibleStripItemIdsChange,
   selectedArtStyleId,
   onApplyTool,
+  onApplyBatchTool,
   onCancelProcessing,
   onToolSelect,
   onParamChange,
@@ -542,6 +568,13 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   previewModifierActive = false,
   previewSelectionImageIds = [],
   onDismissError,
+  batchSelection,
+  batchTickedCount = 0,
+  batchSelectionMessage = null,
+  isBatchRunning = false,
+  batchRun = null,
+  isInspectorPinned = false,
+  onUnpinInspector,
 }) => {
   const majorElementGap = { xs: 1.5, md: 3.75 } as const;
   const hasTargetImage = !!targetImage;
@@ -760,6 +793,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
         <Box sx={{ display: "flex" }}>
           <ImageTool
             onApplyTool={onApplyTool}
+            onApplyBatchTool={onApplyBatchTool}
             isProcessing={appState.isProcessing}
             onCancelProcessing={onCancelProcessing}
             onToolSelect={onToolSelect}
@@ -777,6 +811,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             onParamChange={onParamChange}
             selectedArtStyleId={selectedArtStyleId}
             onArtStyleChange={onArtStyleChange}
+            batchTickedCount={batchTickedCount}
+            batchRun={batchRun}
           />
         </Box>
 
@@ -894,6 +930,10 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               generationProgress={generationProgress}
               activeToolId={activeToolId}
               onToggleHistoryStar={onToggleHistoryStar}
+              batchSelectionMessage={batchSelectionMessage}
+              isBatchRunning={isBatchRunning}
+              isInspectorPinned={isInspectorPinned}
+              onUnpinInspector={onUnpinInspector}
             />
 
             <ThumbnailStripsCollection
@@ -921,6 +961,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onActivateStrip={onStripActivate}
               onTogglePin={onStripPinToggle}
               onDragActivateStrip={onStripDragActivate}
+              batchSelection={batchSelection}
             />
           </Box>
 

@@ -18,7 +18,7 @@ export interface HistoryEntry {
   durationMs: number;
   cost: number;
   resolution?: { width: number; height: number };
-  origin?: "generated" | "uploaded" | "bookImages";
+  origin?: "generated" | "uploaded" | "bookImages" | "bookOriginal";
   isStarred?: boolean;
   sourceStyleId?: string | null;
   sourceSummary?: string | null;

@@ -4071,7 +4071,7 @@ export function ImageToolsWorkspace({
                   letterSpacing: "0.28em",
                   textTransform: "uppercase",
                   backgroundColor: theme.colors.accent,
-                  color: theme.colors.surface,
+                  color: theme.colors.textOnAccent,
                   boxShadow: theme.colors.accentShadow,
                   transition: "transform 150ms ease, background-color 150ms ease",
                   "&:hover": {

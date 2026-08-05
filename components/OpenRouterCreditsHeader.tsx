@@ -50,6 +50,7 @@ export type OpenRouterCreditsHeaderProps = {
     accent: string;
     accentHover: string;
     accentShadow: string;
+    textOnAccent: string;
     surface: string;
     surfaceAlt: string;
     border: string;
@@ -93,7 +94,7 @@ export function OpenRouterCreditsHeader({
           letterSpacing: "0.28em",
           textTransform: "uppercase",
           backgroundColor: appColors.accent,
-          color: appColors.surface,
+          color: appColors.textOnAccent,
           boxShadow: appColors.accentShadow,
           transformOrigin: "center",
           animation: isWiggling ? `${wiggle} 560ms ease` : "none",

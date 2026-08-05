@@ -19,10 +19,16 @@ Vite+ manages the Node.js runtime from `.node-version` and the pnpm version from
 
 1. Install dependencies: `vp install`
 2. Run the dev demo: `vp dev`
-3. Build the npm package: `vp run build:lib`
-4. Build the demo bundle (optional): `vp build`
+3. Build the library: `vp run build:lib` → `dist/`
+4. Build the hosted app: `vp run build:app` → `dist-app/` (this is what Bloom ships)
+5. Build the demo bundle (optional): `vp build` → `demo-dist/`
 
 ## Consuming the Component
+
+> **Not published to npm.** The library build works and is importable from a local
+> checkout or via `yarn`/`pnpm link`, but there is no registry release yet, so the
+> `pnpm add` below is aspirational. Bloom does not use this path — see
+> [How Bloom hosts this editor](#how-bloom-hosts-this-editor).
 
 ```bash
 pnpm add bloom-ai-image-tools
@@ -66,36 +72,76 @@ overlay iframe loads **this repo's running Vite dev server**:
 A Windows junction (`BloomEditor` → the Bloom worktree) is sometimes used to view/edit
 both repos in one place; it's git-ignored and not part of the consumption path.
 
-### Production (npm, mirrors how Bloom consumes `bloom-player`)
+### Production (immutable `dist-v*` git tag)
 
 In a Release build `GetEditorUrl()` returns `{ServerUrl}/bloom/aiImageEditor/index.html`,
-i.e. the editor served **same-origin** from Bloom's own server (no CORS). To wire that up:
+i.e. the editor served **same-origin** from Bloom's own server (no CORS).
 
-1. **Publish this package** (ships `dist-app/` — see `files` in `package.json`). The app
-   build bakes in `--base=/bloom/aiImageEditor/` so its asset URLs resolve at that mount.
-2. **Add the dependency in Bloom** (`src/BloomBrowserUI/package.json`):
-   `"bloom-ai-image-tools": "^x.y.z"`.
+Bloom gets that build from a **git tag, not npm.** Bloom cannot build this project on
+install (it would need Vite+ on the build machine — `prepare` runs `vp config`), so it
+consumes a prebuilt `dist-app/`. Each `dist-v*` tag holds `dist-app/` plus a minimal,
+script-free `package.json`, so the package manager installs it as static files with no
+build step. The tag content is an orphan commit; `master` stays clean. Tags are
+**immutable**, and different Bloom branches can pin different editor builds. See the
+header comment in `.github/workflows/publish-dist.yml`.
+
+To wire that up:
+
+1. **Publish a tag** — see [Versioning & Releases](#versioning--releases). That gives you
+   `dist-v<version>`. The app build bakes in `--base=/bloom/aiImageEditor/` so its asset
+   URLs resolve at that mount.
+2. **Point Bloom at the tag** (`src/BloomBrowserUI/package.json`), pinning the exact ref —
+   not a semver range, since the tag _is_ the version:
+   ```jsonc
+   "bloom-ai-image-tools": "github:BloomBooks/bloom-ai-image-tools#dist-v0.1.2"
+   ```
 3. **Copy the app into Bloom's served output at build time**, exactly like the existing
    `bp-to-output` step for `bloom-player`, e.g.:
    ```jsonc
    // src/BloomBrowserUI/package.json scripts
    "aiimageeditor-to-output": "cpx \"./node_modules/bloom-ai-image-tools/dist-app/**/*\" ../../output/browser/aiImageEditor -v --clean"
    ```
-   During dev you can `yarn link` this package instead of installing a published version.
+   During dev you can link this package instead of pinning a tag.
 
-> Not done yet: steps 2–3 wait until the first npm publish (a `package.json` range
-> pointing at an unpublished version would break Bloom's install). The editor side
-> (step 1) is ready.
+To get a new editor build into Bloom, publish a new tag and bump the pinned ref. Tags
+never move, so re-installing against an unchanged ref can never change what Bloom gets.
 
 ## Versioning & Releases
 
-We use [Changesets](https://github.com/changesets/changesets) for semver management. Typical workflow:
+We use [Changesets](https://github.com/changesets/changesets) for semver management, but
+**releasing is on demand — nothing publishes automatically when you merge.** No workflow
+here has a push trigger; `Release` and `Publish dist-app tag` are both
+`workflow_dispatch`.
 
-1. Create a changeset describing your change: `vp run changeset`
-2. Merge the generated PR. The `Release` GitHub Action will bump versions and publish to npm.
-3. Manual publishing (rare): `vp run release`
+In your PR:
 
-Ensure `NPM_TOKEN` is configured in the repo secrets for the workflow to succeed.
+1. Record the semver bump: `vp run changeset`, and commit the generated markdown file
+   alongside your code.
+
+Then, when you want Bloom to be able to pick the change up:
+
+2. Bump the version on `master`. This consumes the pending changeset files and writes
+   `CHANGELOG.md`:
+
+   ```bash
+   git pull
+   # GITHUB_TOKEN lets the changelog link to PRs/authors; deps must be installed.
+   GITHUB_TOKEN=$(gh auth token) npx changeset version
+   git commit -am "Version Packages: <new version>" && git push
+   ```
+
+3. Publish the tag: `gh workflow run "Publish dist-app tag"` (or the Actions tab). It
+   builds `dist-app/` and publishes `dist-v<version>`, taking the version from
+   `package.json`. Publishing is **refused if that tag already exists** — tags are
+   immutable, so bump the version first or pass a distinct `tag` input.
+
+4. Point Bloom at the new tag — step 2 of
+   [Production](#production-immutable-dist-v-git-tag).
+
+**npm:** this package has never been published to the registry. The `Release` workflow
+(dispatch-only) runs Changesets' action plus `vp run release` → `pnpm publish`, and needs a
+valid `NPM_TOKEN` in repo secrets. Don't dispatch it unless you intend a first npm
+publish; Bloom does not need it.
 
 ## Tests
 

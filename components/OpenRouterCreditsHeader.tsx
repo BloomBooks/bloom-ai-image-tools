@@ -48,7 +48,6 @@ export type OpenRouterCreditsHeaderProps = {
 
   appColors: {
     accent: string;
-    accentHover: string;
     accentShadow: string;
     textOnAccent: string;
     surface: string;
@@ -98,10 +97,15 @@ export function OpenRouterCreditsHeader({
           boxShadow: appColors.accentShadow,
           transformOrigin: "center",
           animation: isWiggling ? `${wiggle} 560ms ease` : "none",
-          transition: "transform 150ms ease, background-color 150ms ease",
+          transition: "transform 150ms ease, opacity 150ms ease",
+          // Deliberately not accentHover: that is darker than the page behind it, so a
+          // filled pill sitting on the dark app background loses its shape on hover and
+          // only the label is left floating. Dimming the accent keeps the button a button.
+          // Same treatment as the identically-labelled CTA in OpenRouterWelcomeDialog.
           "&:hover": {
             transform: "translateY(-2px)",
-            backgroundColor: appColors.accentHover,
+            backgroundColor: appColors.accent,
+            opacity: 0.9,
           },
         }}
       >

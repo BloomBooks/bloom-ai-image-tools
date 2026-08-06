@@ -4073,10 +4073,13 @@ export function ImageToolsWorkspace({
                   backgroundColor: theme.colors.accent,
                   color: theme.colors.textOnAccent,
                   boxShadow: theme.colors.accentShadow,
-                  transition: "transform 150ms ease, background-color 150ms ease",
+                  transition: "transform 150ms ease, opacity 150ms ease",
+                  // Not accentHover — see the note on the connect CTA in
+                  // OpenRouterCreditsHeader; it is darker than the page behind it.
                   "&:hover": {
                     transform: "translateY(-2px)",
-                    backgroundColor: theme.colors.accentHover,
+                    backgroundColor: theme.colors.accent,
+                    opacity: 0.9,
                   },
                 }}
               >

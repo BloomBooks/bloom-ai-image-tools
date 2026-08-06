@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/crayon-scribble-pFhpZc_f.png`;export{e as default};

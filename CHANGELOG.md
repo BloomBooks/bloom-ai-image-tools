@@ -1,5 +1,11 @@
 # bloom-ai-image-tools
 
+## 0.1.3
+
+### Patch Changes
+
+- [`a4eb1a4`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/a4eb1a4841fcc69354dc92469b46c8ce674eeee5) Thanks [@hatton](https://github.com/hatton)! - Keep the "Connect to AI Image Generators" and "Connect history folder" buttons visible on hover. They swapped to `accentHover`, which is darker than the app background, so the pill dissolved into the page and left the label floating. They now dim the accent instead, matching the identically-labelled CTA in the OpenRouter welcome dialog.
+
 ## 0.1.2
 
 ### Patch Changes

@@ -308,6 +308,7 @@ const buildRecoveredHistoryEntry = (entry: {
   isStarred: false,
   origin: "generated",
 });
+
 /**
  * How a generation attempt ended, for analytics. Kept to a small set of values rather than the
  * error text, which is unbounded and can quote the model or the user. "no api key", "rate

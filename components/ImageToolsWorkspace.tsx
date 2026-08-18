@@ -2204,20 +2204,28 @@ export function ImageToolsWorkspace({
       batch,
       attemptNumber: ++generationAttemptCountRef.current,
     };
+    // Isolated from the generation itself. These calls sit either side of the await, so a host
+    // whose analytics code threw would otherwise be caught by the catch below: the success case
+    // would be reported as a failure AND rethrown, losing an image the user had already paid
+    // for, and the failure case would replace the real error with the analytics one. Telling the
+    // host about a generation must never be able to affect the generation.
+    const report = (properties: Record<string, string | number | boolean>) => {
+      try {
+        onTrackEvent?.("AI Editor Generate", { ...common, ...properties });
+      } catch (error) {
+        console.warn("onTrackEvent host callback failed", error);
+      }
+    };
     try {
       const result = await runToolOnImage(args);
-      onTrackEvent?.("AI Editor Generate", {
-        ...common,
+      report({
         result: "success",
         durationSeconds: Math.round(result.durationMs / 1000),
         costUSD: Number.isFinite(result.cost) ? Number(result.cost.toFixed(4)) : 0,
       });
       return result;
     } catch (error) {
-      onTrackEvent?.("AI Editor Generate", {
-        ...common,
-        result: classifyGenerationFailure(error),
-      });
+      report({ result: classifyGenerationFailure(error) });
       throw error;
     }
   };

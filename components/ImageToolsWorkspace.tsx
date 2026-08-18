@@ -2180,9 +2180,10 @@ export function ImageToolsWorkspace({
     [fsBinding, persistHistoryImage],
   );
 
-  // Counts generation attempts within this editor session, so the host can tell a first try
-  // from a tenth -- someone still generating on their tenth attempt is telling us something
-  // about output quality that a plain total never would.
+  // Counts generation attempts that actually reached a model, within this editor session, so the
+  // host can tell a first try from a tenth -- someone still generating on their tenth attempt is
+  // telling us something about output quality that a plain total never would. Attempts stopped
+  // before anything was sent (no API key) deliberately do not consume a number.
   const generationAttemptCountRef = useRef(0);
 
   /**
@@ -2195,6 +2196,13 @@ export function ImageToolsWorkspace({
     args: RunToolOnImageArgs,
     batch: boolean,
   ): Promise<RunToolOnImageResult> => {
+    // Not every "generation" costs anything: remove_background is done locally, and the free
+    // Local Dummy model can be picked for any tool. Counting those alongside paid ones would
+    // inflate the totals and drag average cost down. They are tagged rather than skipped -- the
+    // usage is still worth knowing, it just has to be filterable. The rule for a local-only tool
+    // is the one modelsCatalog uses, remove_background included; the model-level case is caught
+    // by spentCredits on success, which is the only thing that knows for certain.
+    const runsLocally = args.tool.id === "remove_background" || !!args.tool.localOnly;
     const common = {
       tool: args.tool.id,
       model: args.toolModel?.id ?? "",
@@ -2202,7 +2210,7 @@ export function ImageToolsWorkspace({
       sourceKind: args.targetImage ? "existing image" : "blank",
       referenceCount: args.constrainedReferences.length,
       batch,
-      attemptNumber: ++generationAttemptCountRef.current,
+      runsLocally,
     };
     // Isolated from the generation itself. These calls sit either side of the await, so a host
     // whose analytics code threw would otherwise be caught by the catch below: the success case
@@ -2220,12 +2228,29 @@ export function ImageToolsWorkspace({
       const result = await runToolOnImage(args);
       report({
         result: "success",
-        durationSeconds: Math.round(result.durationMs / 1000),
+        attemptNumber: ++generationAttemptCountRef.current,
+        durationSeconds: Number.isFinite(result.durationMs)
+          ? Math.round(result.durationMs / 1000)
+          : 0,
         costUSD: Number.isFinite(result.cost) ? Number(result.cost.toFixed(4)) : 0,
+        // The one field that knows whether real OpenRouter credit was actually spent.
+        spentCredits: !!result.shouldRefreshCredits,
       });
       return result;
     } catch (error) {
-      report({ result: classifyGenerationFailure(error) });
+      const outcome = classifyGenerationFailure(error);
+      // A missing API key is thrown before anything is sent, so it must not consume an attempt
+      // number. Otherwise clicking Apply a few times without credentials would push every later,
+      // real generation up the count and blunt exactly the "still trying on the tenth go" signal
+      // the number exists for. The event is still worth sending -- it says someone tried to
+      // generate and was stopped by the key -- it just reports the count so far.
+      report({
+        result: outcome,
+        attemptNumber:
+          outcome === "no api key"
+            ? generationAttemptCountRef.current
+            : ++generationAttemptCountRef.current,
+      });
       throw error;
     }
   };

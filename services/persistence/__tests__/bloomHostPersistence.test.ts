@@ -64,6 +64,7 @@ const createBridge = () => {
     log() {},
     openExternalUrl() {},
     saveCredentials() {},
+    trackEvent() {},
     async getFile(name) {
       return fileStore.get(name) ?? null;
     },

@@ -266,6 +266,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         initialApiKey={initPayload.apiKey || ""}
         demoOnly={initPayload.demoOnly ?? false}
         onCredentialsChange={(creds) => bridge.saveCredentials(creds)}
+        onTrackEvent={(event, properties) => bridge.trackEvent(event, properties)}
         bookImages={hostBookImages}
         bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"

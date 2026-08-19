@@ -16,7 +16,7 @@
  *   on the channel "bloom-ai-image-tools". That is `createIframeBloomHostBridge()`.
  *
  *   Bytes never travel over postMessage. Control messages (init / ready / commit /
- *   cancel / log / open-external / saveCredentials / ack) go over the channel; image and JSON file
+ *   cancel / log / open-external / saveCredentials / analytics / ack) go over the channel; image and JSON file
  *   contents move over plain HTTP to Bloom's local server via getFile/putFile/
  *   deleteFile, using `httpBase` + `sessionToken` from the init payload. This keeps
  *   large images off the message bus and lets the host fetch result bytes from the
@@ -162,6 +162,14 @@ export interface IBloomHostControl {
     authMethod: "oauth" | "manual" | null;
     openRouterUser?: string | null;
   }) => void;
+  /** Report an analytics event for the host to record (Bloom forwards it to Segment). Fire
+   *  and forget: there is no ack, and a host that does not implement it is fine -- the editor
+   *  must never depend on this having gone anywhere.
+   *
+   *  NEVER pass prompt text, parameter values, image names, or anything else the user typed or
+   *  lifted out of their book: a prompt can contain arbitrary content. Counts, enum choices,
+   *  durations, costs and model ids only. */
+  trackEvent: (event: string, properties?: Record<string, string | number | boolean>) => void;
 }
 
 /** File store for the book's .ai-image-editor/ folder (HTTP-backed in the iframe
@@ -225,6 +233,14 @@ type IframeMessage =
         apiKey: string | null;
         authMethod: "oauth" | "manual" | null;
         openRouterUser?: string | null;
+      };
+    }
+  | {
+      channel: "bloom-ai-image-tools";
+      type: "analytics";
+      payload: {
+        event: string;
+        properties?: Record<string, string | number | boolean>;
       };
     };
 
@@ -432,6 +448,13 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
         },
       });
     },
+    trackEvent(event, properties) {
+      postToParent({
+        channel: iframeChannel,
+        type: "analytics",
+        payload: { event, properties },
+      });
+    },
     async getFile(name) {
       if (!httpBase || !sessionToken) {
         throw new Error("Bloom host bridge is not initialized.");
@@ -538,6 +561,11 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
     saveCredentials() {
       // No real host to persist to in standalone/harness mode; the editor keeps the
       // key in its own state (and localStorage) as usual.
+    },
+    trackEvent(event, properties) {
+      // No analytics service in standalone/harness mode; log it so a developer can see
+      // exactly what a real host would have been sent.
+      console.info(`[BloomHarness] analytics: ${event}`, properties);
     },
     async getFile(name) {
       return fileStore.get(name) ?? null;

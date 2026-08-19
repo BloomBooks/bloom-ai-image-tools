@@ -98,7 +98,12 @@ import {
   normalizeGenerationTiming,
   updateGenerationTiming,
 } from "../lib/generationTiming";
-import { MissingApiKeyError, runToolOnImage, RunToolOnImageResult } from "../lib/runToolOnImage";
+import {
+  MissingApiKeyError,
+  runToolOnImage,
+  RunToolOnImageArgs,
+  RunToolOnImageResult,
+} from "../lib/runToolOnImage";
 import {
   BATCH_CONCURRENCY,
   BATCH_RATE_LIMIT_MAX_RETRIES,
@@ -303,6 +308,23 @@ const buildRecoveredHistoryEntry = (entry: {
   isStarred: false,
   origin: "generated",
 });
+
+/**
+ * How a generation attempt ended, for analytics. Kept to a small set of values rather than the
+ * error text, which is unbounded and can quote the model or the user. "no api key", "rate
+ * limited" and "insufficient credits" are separated out because each points at a different fix.
+ */
+const classifyGenerationFailure = (error: unknown): string => {
+  if (error instanceof MissingApiKeyError) return "no api key";
+  const name = error instanceof DOMException ? error.name : (error as any)?.name;
+  if (name === "AbortError") return "cancelled";
+  if (error instanceof OpenRouterApiError) {
+    if (error.reason === "rate-limited") return "rate limited";
+    if (error.reason === "insufficient-credits") return "insufficient credits";
+  }
+  return "error";
+};
+
 export interface ImageToolsWorkspaceProps {
   persistence: ImageToolsStatePersistence;
   /** A non-editable key injected by the environment (the E2E `E2E_OPENROUTER_API_KEY`
@@ -359,6 +381,10 @@ export interface ImageToolsWorkspaceProps {
   thumbnailStripConfigOverrides?: Partial<
     Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
   >;
+  /** Report an analytics event to the host, which decides what to do with it (Bloom sends it
+   *  on to Segment). Optional: with no host to tell, nothing is recorded and nothing breaks.
+   *  Never pass prompt text or anything else the user typed -- see IBloomHostControl. */
+  onTrackEvent?: (event: string, properties?: Record<string, string | number | boolean>) => void;
 }
 
 export function ImageToolsWorkspace({
@@ -385,6 +411,7 @@ export function ImageToolsWorkspace({
   bookImagesActionTip,
   bookImagesActionTestId,
   thumbnailStripConfigOverrides,
+  onTrackEvent,
 }: ImageToolsWorkspaceProps) {
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
   // Tuner) so primary-colored UI and brand-tinted text re-skin from one color.
@@ -2153,6 +2180,81 @@ export function ImageToolsWorkspace({
     [fsBinding, persistHistoryImage],
   );
 
+  // Counts generation attempts that actually reached a model, within this editor session, so the
+  // host can tell a first try from a tenth -- someone still generating on their tenth attempt is
+  // telling us something about output quality that a plain total never would. Attempts stopped
+  // before anything was sent (no API key) deliberately do not consume a number.
+  const generationAttemptCountRef = useRef(0);
+
+  /**
+   * Run one generation, telling the host how the attempt went. Only the generation call is
+   * wrapped, not the whole handler, so there is exactly one event per attempt: a later
+   * post-processing failure is not a failed generation -- the model already ran and was paid
+   * for. Retries inside a batch run legitimately arrive as separate attempts.
+   */
+  const runToolOnImageTracked = async (
+    args: RunToolOnImageArgs,
+    batch: boolean,
+  ): Promise<RunToolOnImageResult> => {
+    // Not every "generation" costs anything: remove_background is done locally, and the free
+    // Local Dummy model can be picked for any tool. Counting those alongside paid ones would
+    // inflate the totals and drag average cost down. They are tagged rather than skipped -- the
+    // usage is still worth knowing, it just has to be filterable. The rule for a local-only tool
+    // is the one modelsCatalog uses, remove_background included; the model-level case is caught
+    // by spentCredits on success, which is the only thing that knows for certain.
+    const runsLocally = args.tool.id === "remove_background" || !!args.tool.localOnly;
+    const common = {
+      tool: args.tool.id,
+      model: args.toolModel?.id ?? "",
+      // Whether they are editing a picture that was already there or making one from nothing.
+      sourceKind: args.targetImage ? "existing image" : "blank",
+      referenceCount: args.constrainedReferences.length,
+      batch,
+      runsLocally,
+    };
+    // Isolated from the generation itself. These calls sit either side of the await, so a host
+    // whose analytics code threw would otherwise be caught by the catch below: the success case
+    // would be reported as a failure AND rethrown, losing an image the user had already paid
+    // for, and the failure case would replace the real error with the analytics one. Telling the
+    // host about a generation must never be able to affect the generation.
+    const report = (properties: Record<string, string | number | boolean>) => {
+      try {
+        onTrackEvent?.("AI Editor Generate", { ...common, ...properties });
+      } catch (error) {
+        console.warn("onTrackEvent host callback failed", error);
+      }
+    };
+    try {
+      const result = await runToolOnImage(args);
+      report({
+        result: "success",
+        attemptNumber: ++generationAttemptCountRef.current,
+        durationSeconds: Number.isFinite(result.durationMs)
+          ? Math.round(result.durationMs / 1000)
+          : 0,
+        costUSD: Number.isFinite(result.cost) ? Number(result.cost.toFixed(4)) : 0,
+        // The one field that knows whether real OpenRouter credit was actually spent.
+        spentCredits: !!result.shouldRefreshCredits,
+      });
+      return result;
+    } catch (error) {
+      const outcome = classifyGenerationFailure(error);
+      // A missing API key is thrown before anything is sent, so it must not consume an attempt
+      // number. Otherwise clicking Apply a few times without credentials would push every later,
+      // real generation up the count and blunt exactly the "still trying on the tenth go" signal
+      // the number exists for. The event is still worth sending -- it says someone tried to
+      // generate and was stopped by the key -- it just reports the count so far.
+      report({
+        result: outcome,
+        attemptNumber:
+          outcome === "no api key"
+            ? generationAttemptCountRef.current
+            : ++generationAttemptCountRef.current,
+      });
+      throw error;
+    }
+  };
+
   const handleApplyTool = async (toolId: string, params: Record<string, string>) => {
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
@@ -2262,23 +2364,26 @@ export function ImageToolsWorkspace({
 
       let runResult: RunToolOnImageResult;
       try {
-        runResult = await runToolOnImage({
-          tool,
-          toolModel,
-          requiresEditImage,
-          targetImage,
-          params,
-          constrainedReferences,
-          reasoningByTool,
-          generationTiming: generationTimingRef.current,
-          resolvedApiKey: effectiveApiKey,
-          useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
-          signal: abortController.signal,
-          onProgressStart: (estimatedDurationMs) => {
-            setGenerationProgress({ startedAt: getNowMs(), estimatedDurationMs });
+        runResult = await runToolOnImageTracked(
+          {
+            tool,
+            toolModel,
+            requiresEditImage,
+            targetImage,
+            params,
+            constrainedReferences,
+            reasoningByTool,
+            generationTiming: generationTimingRef.current,
+            resolvedApiKey: effectiveApiKey,
+            useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
+            signal: abortController.signal,
+            onProgressStart: (estimatedDurationMs) => {
+              setGenerationProgress({ startedAt: getNowMs(), estimatedDurationMs });
+            },
+            onPhase: setPhase,
           },
-          onPhase: setPhase,
-        });
+          false,
+        );
       } catch (error) {
         if (error instanceof MissingApiKeyError) {
           setGenerationProgress(null);
@@ -2858,23 +2963,26 @@ export function ImageToolsWorkspace({
           null;
         const sourceSummary = formatSourceSummary(1, constrainedReferences.length);
 
-        const runResult = await runToolOnImage({
-          tool,
-          toolModel,
-          requiresEditImage: true,
-          targetImage,
-          params,
-          constrainedReferences,
-          reasoningByTool,
-          generationTiming: generationTimingRef.current,
-          resolvedApiKey: effectiveApiKey,
-          useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
-          signal: abortController.signal,
-          // No right-panel loading overlay for batch runs (WP5 owns the
-          // dedicated progress bar); these are deliberate no-ops.
-          onProgressStart: () => {},
-          onPhase: () => {},
-        });
+        const runResult = await runToolOnImageTracked(
+          {
+            tool,
+            toolModel,
+            requiresEditImage: true,
+            targetImage,
+            params,
+            constrainedReferences,
+            reasoningByTool,
+            generationTiming: generationTimingRef.current,
+            resolvedApiKey: effectiveApiKey,
+            useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
+            signal: abortController.signal,
+            // No right-panel loading overlay for batch runs (WP5 owns the
+            // dedicated progress bar); these are deliberate no-ops.
+            onProgressStart: () => {},
+            onPhase: () => {},
+          },
+          true,
+        );
 
         shouldRefreshCredits = shouldRefreshCredits || runResult.shouldRefreshCredits;
 

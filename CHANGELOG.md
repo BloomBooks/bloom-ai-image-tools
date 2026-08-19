@@ -1,5 +1,21 @@
 # bloom-ai-image-tools
 
+## 0.1.4
+
+### Patch Changes
+
+- Report each generation to the host, so Bloom can see what the AI editor costs and whether it works
+
+  The editor now hands an analytics event to whatever host it is running in, via
+  `IBloomHostControl.trackEvent`, for each tool run: which tool and model, whether the result came
+  from a local run or a paid API call, whether credits were spent, how long it took, the outcome, and
+  which attempt it was. Bloom is the party that actually sends anything anywhere, and it accepts only
+  known events carrying known properties -- prompt text is deliberately not among them.
+
+  The reporting is isolated from the work it observes: a host whose analytics callback throws or
+  rejects can no longer fail a generation the user has already paid for. Failed and never-sent
+  generations are kept out of the cost figures rather than skewing them.
+
 ## 0.1.3
 
 ### Patch Changes

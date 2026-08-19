@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/chalkboard-sketch-D_xte86Y.png`;export{e as default};

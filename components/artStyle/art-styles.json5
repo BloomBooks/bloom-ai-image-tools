@@ -216,13 +216,6 @@
     sampleImageUrl: "art-styles/clay-stopmotion.png",
   },
   {
-    id: "paper-cut-collage",
-    name: "Paper Cut Collage",
-    promptDetail: "Assemble the illustration from layered, hand-cut construction paper with visible edges, stacked shadows, and tactile craft-room charm.",
-    description: "Playful geometric shapes, offset drop-shadows, and torn-paper edges that feel handmade and tactile.",
-    sampleImageUrl: "art-styles/paper-cut-collage.png",
-  },
-  {
     id: "paper-cutout-collage",
     name: "Paper Cutout & Collage",
     promptDetail: "Paper cutout collage illustration, layered textured paper, visible scissor edges, mixed media textures, bold simplified shapes, overlap and depth, vibrant acrylic colors on paper, tactile handmade feel.",

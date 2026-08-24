@@ -51,14 +51,6 @@
     sampleImageUrl: "art-styles/clear-line-flat-color.png",
   },
   {
-    id: "line-art-vector",
-    name: "Vector Illustration Outlines",
-    promptDetail: "Rebuild the artwork as clean vector paths with uniform strokes, smooth bezier curves, and flat spot colors aligned to the sketch’s composition.",
-    description: "Crisp vector lines and fills with print-ready precision inspired by modern clip art.",
-    categories: ["Line Art"],
-    sampleImageUrl: "art-styles/line-art-vector.png",
-  },
-  {
     id: "flat-instructional",
     name: "Flat Instructional",
     promptDetail: "Flat instructional illustration, isolated objects, neutral lighting, no cast shadows, side-profile or front-on view (no extreme angles), clear separation between objects, realistic colors but simplified details.",

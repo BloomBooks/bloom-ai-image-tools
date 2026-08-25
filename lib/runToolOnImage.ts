@@ -45,6 +45,12 @@ export interface RunToolOnImageArgs {
   requiresEditImage: boolean;
   /** The image being edited, or null for tools that don't require one (editImage: false). */
   targetImage: ImageRecord | null;
+  /**
+   * Page label of the book image slot this run is for ("Page 1 - Image 3"),
+   * when there is one. Passed straight to editImage, where only the Local
+   * Dummy model uses it (see EditImageOptions.targetSlotPageLabel).
+   */
+  targetSlotPageLabel?: string | null;
   params: Record<string, string>;
   /** Reference images already limited to the tool's reference-count cap. */
   constrainedReferences: ImageRecord[];
@@ -107,6 +113,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     toolModel,
     requiresEditImage,
     targetImage,
+    targetSlotPageLabel,
     params,
     constrainedReferences,
     reasoningByTool,
@@ -281,6 +288,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     imageConfig,
     reasoningLevel: reasoningLevelForRequest,
     imageLabels,
+    targetSlotPageLabel,
   };
   const result = await editImage(
     sourceImages,

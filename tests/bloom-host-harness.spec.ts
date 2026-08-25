@@ -286,4 +286,91 @@ test.describe("Bloom host harness", () => {
     await expect(page.getByRole("menuitem").first()).toBeVisible();
     await expect(page.getByText("Local Dummy (No AI)")).toHaveCount(0);
   });
+
+  // A narrow window is what makes these meaningful: the harness's six book
+  // images then need more width than the strip has, so the launched one starts
+  // out beyond the right-hand edge. `empty-slot` launches on book-image-5, far
+  // enough along the strip to be off-screen at this width.
+  test.describe("scrolling the launched book image into view", () => {
+    test.use({ viewport: { width: 520, height: 720 } });
+
+    /**
+     * Geometry of the book-images strip: the item's box, and the box and scroll
+     * state of the scroller it sits in. Found by walking up from the item to the
+     * first overflowing ancestor, so no production markup exists just for tests.
+     */
+    const readStripGeometry = async (page: import("@playwright/test").Page, itemId: string) =>
+      page.evaluate((id) => {
+        const item = document.querySelector(`[data-strip-item-id="${id}"]`) as HTMLElement | null;
+        let scroller = item?.parentElement ?? null;
+        while (scroller && getComputedStyle(scroller).overflowX !== "auto") {
+          scroller = scroller.parentElement;
+        }
+        if (!item || !scroller) {
+          throw new Error(`Could not find the strip item ${id} or its scroller.`);
+        }
+        const itemBox = item.getBoundingClientRect();
+        const scrollerBox = scroller.getBoundingClientRect();
+        return {
+          scrollLeft: scroller.scrollLeft,
+          scrollWidth: scroller.scrollWidth,
+          clientWidth: scroller.clientWidth,
+          itemLeft: itemBox.left,
+          itemRight: itemBox.right,
+          scrollerLeft: scrollerBox.left,
+          scrollerRight: scrollerBox.right,
+        };
+      }, itemId);
+
+    const scrollStripToStart = async (page: import("@playwright/test").Page, itemId: string) =>
+      page.evaluate((id) => {
+        const item = document.querySelector(`[data-strip-item-id="${id}"]`) as HTMLElement | null;
+        let scroller = item?.parentElement ?? null;
+        while (scroller && getComputedStyle(scroller).overflowX !== "auto") {
+          scroller = scroller.parentElement;
+        }
+        if (!scroller) {
+          throw new Error("Could not find the strip scroller.");
+        }
+        scroller.scrollLeft = 0;
+      }, itemId);
+
+    test("scrolls the launched book image into view on open", async ({ page }) => {
+      await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
+      await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+      await expect(page.locator('[data-strip-item-id="book-image-5"]')).toHaveCount(1);
+
+      const geometry = await readStripGeometry(page, "book-image-5");
+
+      // Sanity check: if everything already fitted, the assertions below would
+      // pass without the strip having scrolled at all, proving nothing.
+      expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+      expect(geometry.scrollLeft).toBeGreaterThan(0);
+
+      // The launched item sits inside the visible part of the strip.
+      expect(geometry.itemLeft).toBeGreaterThanOrEqual(geometry.scrollerLeft - 1);
+      expect(geometry.itemRight).toBeLessThanOrEqual(geometry.scrollerRight + 1);
+    });
+
+    test("leaves the strip where the user later scrolled it", async ({ page }) => {
+      await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
+      await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+      await expect(page.locator('[data-strip-item-id="book-image-5"]')).toHaveCount(1);
+      expect((await readStripGeometry(page, "book-image-5")).scrollLeft).toBeGreaterThan(0);
+
+      // The user scrolls back to the start to look at the first images.
+      await scrollStripToStart(page, "book-image-5");
+      expect(await readStripGeometry(page, "book-image-5")).toMatchObject({ scrollLeft: 0 });
+
+      // Anything that re-renders the strip must not drag it back to the
+      // launched image. Picking a different book image and typing a prompt are
+      // the everyday cases; the prompt's value confirms a re-render really
+      // happened, so a passing result here is not just a test that did nothing.
+      await page.getByTestId("book-image-current-slot-book-image-1").click();
+      await page.getByTestId("input-prompt").fill("a goat");
+      await expect(page.getByTestId("input-prompt")).toHaveValue("a goat");
+
+      expect((await readStripGeometry(page, "book-image-5")).scrollLeft).toBe(0);
+    });
+  });
 });

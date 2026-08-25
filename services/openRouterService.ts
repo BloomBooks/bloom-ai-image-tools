@@ -2,6 +2,7 @@ import type { ModelReasoningLevel } from "../types";
 import { getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
 import { getModelNameById, getRequestModelIds } from "../lib/modelsCatalog";
+import { layoutDummyText, pickDummyTextColor } from "../lib/dummyImageText";
 
 /**
  * Detects OpenRouter errors that mean "this particular model key cannot serve
@@ -112,6 +113,14 @@ export interface EditImageOptions {
    * (e.g. a character called "Maria"). Use null/"" for unlabeled images.
    */
   imageLabels?: (string | null | undefined)[];
+  /**
+   * The page label of the book image slot this run is for ("Page 1 - Image 3").
+   * Only the Local Dummy model reads it, to draw the label on the image it
+   * makes up, so a page of dummy results says which slot each one belongs to.
+   * Absent in standalone mode and whenever there is no target slot; the dummy
+   * then falls back to drawing the prompt.
+   */
+  targetSlotPageLabel?: string | null;
 }
 
 export interface GenerateTextOptions {
@@ -486,13 +495,63 @@ const applyDummyImageTestHooks = async (signal?: AbortSignal): Promise<void> => 
   }
 };
 
-// Produces a deterministic, no-network result image for local UI testing.
+/** Margin around the text, as a fraction of the shorter image side. */
+const DUMMY_TEXT_MARGIN_FRACTION = 0.06;
+
+/**
+ * Draws `text` across the given box, as large as it will fit (wrapping onto as
+ * many lines as it takes), in a color picked at random from the dark, saturated
+ * range that stays legible on the white dummy background. This is what makes
+ * two dummy results tell apart. Does nothing when the text is empty or the box
+ * is too small for any text.
+ */
+const drawDummyText = (
+  context: CanvasRenderingContext2D,
+  text: string,
+  boxLeft: number,
+  boxTop: number,
+  boxWidth: number,
+  boxHeight: number,
+) => {
+  const margin = Math.round(Math.min(boxWidth, boxHeight) * DUMMY_TEXT_MARGIN_FRACTION);
+  const availableWidth = boxWidth - margin * 2;
+  const availableHeight = boxHeight - margin * 2;
+
+  const fontFor = (fontSize: number) => `bold ${fontSize}px sans-serif`;
+  const layout = layoutDummyText(text, availableWidth, availableHeight, (candidate, fontSize) => {
+    context.font = fontFor(fontSize);
+    return context.measureText(candidate).width;
+  });
+  if (!layout) {
+    return;
+  }
+
+  context.save();
+  context.font = fontFor(layout.fontSize);
+  context.fillStyle = pickDummyTextColor();
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  const centerX = boxLeft + boxWidth / 2;
+  const blockHeight = layout.lines.length * layout.lineHeight;
+  const firstLineCenterY = boxTop + boxHeight / 2 - blockHeight / 2 + layout.lineHeight / 2;
+  layout.lines.forEach((line, index) => {
+    context.fillText(line, centerX, firstLineCenterY + index * layout.lineHeight);
+  });
+  context.restore();
+};
+
+// Produces a no-network result image for local UI testing.
 // When a source image is supplied (i.e. an edit tool with a target), the result
 // is derived from that image — tinted with a "DUMMY EDIT" banner — so the output
 // is visibly a transformation of the image being edited (handy for exercising
 // the Replace buttons without spending an API call). With no source it falls
 // back to the generic three-figure cast sheet.
+// Either way `textToDraw` is painted over the top (see drawDummyText), so each
+// result says which book image it is for instead of every dummy image looking
+// the same. Its color is the one thing here that is not deterministic.
 const createLocalDummyImage = async (
+  textToDraw: string,
   aspectRatio?: string,
   sourceImage?: string,
 ): Promise<string> => {
@@ -526,6 +585,9 @@ const createLocalDummyImage = async (
     context.textBaseline = "middle";
     context.font = `${Math.round(bannerHeight * 0.42)}px sans-serif`;
     context.fillText("DUMMY EDIT (no AI)", sourceWidth / 2, sourceHeight - bannerHeight / 2);
+
+    // Keep the text clear of the banner, so both stay readable.
+    drawDummyText(context, textToDraw, 0, 0, sourceWidth, sourceHeight - bannerHeight);
 
     return canvas.toDataURL("image/png");
   }
@@ -574,6 +636,8 @@ const createLocalDummyImage = async (
     bottoms: "#63baa8",
     hair: "#3c2415",
   });
+
+  drawDummyText(context, textToDraw, 0, 0, width, height);
 
   return canvas.toDataURL("image/png");
 };
@@ -632,7 +696,14 @@ export const editImage = async (
   if (canUseLocalDummyModelWithoutApiKey(modelToUse)) {
     await applyDummyImageTestHooks(options?.signal);
     const sourceImage = (base64Images || []).find((image) => !!image);
-    const dummyImage = await createLocalDummyImage(options?.imageConfig?.aspectRatio, sourceImage);
+    // The slot's page label says which book image this result is for, which is
+    // what a tester wants to read off a dummy image. Without one (standalone
+    // mode, or no target slot) the prompt at least keeps results distinct.
+    const dummyImage = await createLocalDummyImage(
+      options?.targetSlotPageLabel?.trim() || prompt,
+      options?.imageConfig?.aspectRatio,
+      sourceImage,
+    );
     return {
       imageData: dummyImage,
       images: [dummyImage],

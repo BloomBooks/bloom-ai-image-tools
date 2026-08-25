@@ -688,6 +688,23 @@ export function ImageToolsWorkspace({
     },
     [bookImageSlotIds, launchedEmptyBookSlotId],
   );
+
+  /**
+   * The page label ("Page 1 - Image 3") of the book slot a run is for, taken
+   * from the book image the host sent for that slot. Only the Local Dummy
+   * model uses it, to draw the label on the image it makes up; it is null in
+   * standalone mode, where there are no book images at all.
+   */
+  const resolveTargetSlotPageLabel = useCallback(
+    (item: ImageRecord | null | undefined): string | null => {
+      const slotId = resolveIncomingSlotId(item);
+      if (!slotId) {
+        return null;
+      }
+      return resolvedBookImageEntries.find((entry) => entry.id === slotId)?.pageLabel ?? null;
+    },
+    [resolveIncomingSlotId, resolvedBookImageEntries],
+  );
   const previewDialogItems = useMemo<ImagePreviewDialogItem[]>(
     () =>
       previewDialogImageIdGroups
@@ -2409,6 +2426,7 @@ export function ImageToolsWorkspace({
             toolModel,
             requiresEditImage,
             targetImage,
+            targetSlotPageLabel: resolveTargetSlotPageLabel(targetImage),
             params,
             constrainedReferences,
             reasoningByTool,
@@ -3008,6 +3026,7 @@ export function ImageToolsWorkspace({
             toolModel,
             requiresEditImage: true,
             targetImage,
+            targetSlotPageLabel: resolveTargetSlotPageLabel(targetImage),
             params,
             constrainedReferences,
             reasoningByTool,
@@ -4343,6 +4362,7 @@ export function ImageToolsWorkspace({
             targetImage={batchTickedIds.size > 0 ? null : targetImage}
             batchSelectionMessage={batchSelectionMessage}
             batchSelection={batchSelection}
+            launchedBookImageId={selectedBookImageId ?? null}
             batchTickedCount={batchTickedIds.size}
             batchRun={batchRun}
             isBatchRunning={batchRun !== null}

@@ -51,6 +51,9 @@ interface ThumbnailStripsCollectionProps {
   isAnyDndDragging?: boolean;
   /** bookImages strip only: present when the active tool supports batch runs. */
   batchSelection?: BookImageBatchSelection;
+  /** bookImages strip only: the book image the user launched the editor on
+   *  (the host's selectedBookImageId), which gets the launched highlight. */
+  launchedBookImageId?: string | null;
 }
 
 export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps> = ({
@@ -80,6 +83,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   onDragActivateStrip,
   isAnyDndDragging = false,
   batchSelection,
+  launchedBookImageId = null,
 }) => {
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
   const pinnedStripIds = new Set(snapshot.pinnedStripIds);
@@ -176,6 +180,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         onVisibleItemIdsChange={onVisibleItemIdsChange}
         isAnyDndDragging={isAnyDndDragging}
         batchSelection={stripId === "bookImages" ? batchSelection : undefined}
+        launchedBookImageId={stripId === "bookImages" ? launchedBookImageId : null}
       />
     );
   };

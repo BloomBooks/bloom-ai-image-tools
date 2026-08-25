@@ -77,6 +77,9 @@ interface ThumbnailStripProps {
   isAnyDndDragging?: boolean;
   /** bookImages strip only: present when the active tool supports batch runs. */
   batchSelection?: BookImageBatchSelection;
+  /** bookImages strip only: the book image the user launched the editor on
+   *  (the host's selectedBookImageId), which gets the launched highlight. */
+  launchedBookImageId?: string | null;
 }
 
 const stripShellStyles: React.CSSProperties = {
@@ -106,6 +109,14 @@ const buildBookImageCurrentSlotId = (incomingId: string | null) =>
   `bookImageCurrent:${incomingId ?? "new"}`;
 
 const BOOK_IMAGE_PAIR_RADIUS = 0;
+
+/**
+ * The book image the user launched the editor on gets a border twice as wide as
+ * every other pair's, in the brighter member of the accent family, because all
+ * else being equal that is the image the user thinks they are working on.
+ */
+const BOOK_IMAGE_PAIR_BORDER_WIDTH = 1;
+const BOOK_IMAGE_PAIR_LAUNCHED_BORDER_WIDTH = BOOK_IMAGE_PAIR_BORDER_WIDTH * 2;
 
 const ASPECT_RATIO_TOLERANCE = 0.05;
 
@@ -815,6 +826,8 @@ const BookImagePairThumb: React.FC<{
   isSelected: boolean;
   isReplacementSelected: boolean;
   isPreviewSelected: boolean;
+  /** True for the one book image the user launched the editor on. */
+  isLaunchedBookImage: boolean;
   previewModifierActive: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
@@ -834,6 +847,7 @@ const BookImagePairThumb: React.FC<{
   isSelected,
   isReplacementSelected,
   isPreviewSelected,
+  isLaunchedBookImage,
   previewModifierActive,
   allowRemove,
   removeDisabledReason: _removeDisabledReason,
@@ -904,6 +918,7 @@ const BookImagePairThumb: React.FC<{
     <div
       data-testid={`thumbnail-strip-item-${stripId}`}
       data-strip-item-id={item.id}
+      data-launched-book-image={isLaunchedBookImage ? "true" : undefined}
       style={{
         width: BOOK_IMAGE_PAIR_WIDTH,
         flexShrink: 0,
@@ -916,7 +931,11 @@ const BookImagePairThumb: React.FC<{
           flexDirection: "column",
           borderRadius: BOOK_IMAGE_PAIR_RADIUS,
           overflow: "hidden",
-          border: `1px solid ${theme.colors.border}`,
+          borderStyle: "solid",
+          borderWidth: isLaunchedBookImage
+            ? BOOK_IMAGE_PAIR_LAUNCHED_BORDER_WIDTH
+            : BOOK_IMAGE_PAIR_BORDER_WIDTH,
+          borderColor: isLaunchedBookImage ? theme.colors.focus : theme.colors.border,
           backgroundColor: theme.colors.surface,
           boxShadow: theme.colors.panelShadow,
         }}
@@ -1323,6 +1342,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   onVisibleItemIdsChange,
   isAnyDndDragging = false,
   batchSelection,
+  launchedBookImageId = null,
 }) => {
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
   const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
@@ -1349,6 +1369,33 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   );
 
   const orderedItemIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
+
+  /**
+   * Which launched book image we have already scrolled to. A book with more
+   * images than fit across the strip would otherwise open with the highlighted
+   * one off to the right, where the user never sees the very image they
+   * launched on. We do this ONCE: re-running on every render would drag the
+   * strip back each time the user scrolled somewhere else.
+   */
+  const scrolledLaunchedItemIntoViewRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!launchedBookImageId || scrolledLaunchedItemIntoViewRef.current === launchedBookImageId) {
+      return;
+    }
+    const node = stripContentRef.current?.querySelector<HTMLElement>(
+      `[data-strip-item-id="${launchedBookImageId}"]`,
+    );
+    // An inactive strip is display:none, so it has no layout and scrolling it
+    // would silently do nothing. Leave the job pending until the strip is shown.
+    if (!node || node.offsetParent === null) {
+      return;
+    }
+    scrolledLaunchedItemIntoViewRef.current = launchedBookImageId;
+    // "nearest" on both axes: bring the item just inside the strip's own
+    // scroller, and leave every other scrollable ancestor (the page) alone.
+    node.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [isActive, launchedBookImageId, orderedItemIds]);
+
   const showCharacterStack = stripId === "characters" && orderedItemIds.length > 0;
   // The characters strip always offers a paste/upload placeholder on the left
   // (after the cast button), even when there are no characters yet.
@@ -1553,6 +1600,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 isSelected={item.id === selectedId}
                 isReplacementSelected={replacementItemsByIncomingId[item.id]?.id === selectedId}
                 isPreviewSelected={previewSelectionIdSet.has(item.id)}
+                isLaunchedBookImage={item.id === launchedBookImageId}
                 previewModifierActive={previewModifierActive}
                 allowRemove={allowRemove}
                 removeDisabledReason={removeDisabledReasonById?.[item.id]}

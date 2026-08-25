@@ -487,6 +487,9 @@ interface ImageToolsPanelBar {
   onDismissError: () => void;
   /** bookImages strip only: present when the active tool supports batch runs. */
   batchSelection?: BookImageBatchSelection;
+  /** The book image the user launched the editor on (the host's
+   *  selectedBookImageId); highlighted in the bookImages strip. */
+  launchedBookImageId?: string | null;
   /** Count of ticked book images; morphs the tool's action button and cost estimate. */
   batchTickedCount?: number;
   /** Set while one or more book images are ticked; shown in place of the
@@ -569,6 +572,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   previewSelectionImageIds = [],
   onDismissError,
   batchSelection,
+  launchedBookImageId = null,
   batchTickedCount = 0,
   batchSelectionMessage = null,
   isBatchRunning = false,
@@ -962,6 +966,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onTogglePin={onStripPinToggle}
               onDragActivateStrip={onStripDragActivate}
               batchSelection={batchSelection}
+              launchedBookImageId={launchedBookImageId}
             />
           </Box>
 

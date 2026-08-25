@@ -38,11 +38,22 @@ import { HistoryImageSidecar, ImageCredits } from "../../types";
 export interface IBloomHostBookImage {
   id: string;
   src: string;
+  /** Where the slot sits, as the host names it for a reader: "Page 2", or a page's
+   *  own name such as "Front Cover". A page that offers more than one slot says
+   *  which one this is: "Page 2 - Canvas Background" for the picture behind the
+   *  page, "Page 2 - Image 2" for the ones on top of it. The editor shows this
+   *  above the slot, because slots can look identical — every empty one shows the
+   *  same graphic — and this is then the only thing that tells the user which slot
+   *  is which. */
   pageLabel?: string;
   width?: number;
   height?: number;
-  /** True when the slot is an empty placeholder; the editor shows its own
-   *  placeholder graphic instead of trying to load the book's placeHolder.png. */
+  /** True when the slot is EMPTY (in Bloom, an image placeholder). The editor
+   *  shows its own placeholder graphic instead of trying to load the book's
+   *  placeHolder.png, and treats the slot as holding no image at all: it cannot be
+   *  dragged, edited, referenced, copied or downloaded. Launching on such a slot
+   *  (selectedBookImageId) opens the "Create an Image" tool instead of filling the
+   *  "Image to Edit" panel. */
   isPlaceholder?: boolean;
   /** The image's current IP credits as stored in the book. The editor carries
    *  these along edit chains and returns per-result credits on commit. */

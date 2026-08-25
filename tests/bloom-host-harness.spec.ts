@@ -4,6 +4,9 @@ import { resetImageToolsPersistence } from "./playwright_helpers";
 const HARNESS_ROUTE = "/?mode=bloom-harness";
 const SEEDED_CURRENT_RESULT_ROUTE = "/?mode=bloom-harness&seed=current-result";
 const STALE_REOPEN_ROUTE = "/?mode=bloom-harness&seed=stale-reopen";
+// Launches on the harness's empty placeholder slot (book-image-5), as Bloom does when the
+// user picks "Edit with AI..." on an image placeholder.
+const EMPTY_SLOT_LAUNCH_ROUTE = "/?mode=bloom-harness&seed=empty-slot";
 
 test.describe("Bloom host harness", () => {
   test.beforeEach(async ({ page }) => {
@@ -15,7 +18,7 @@ test.describe("Bloom host harness", () => {
     // Init completion is signalled by the Book Images strip rendering (the status
     // chip text is intentionally left blank in the shell).
     await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
-    await expect(page.locator('[data-testid^="book-image-outgoing-slot-"]')).toHaveCount(5);
+    await expect(page.locator('[data-testid^="book-image-outgoing-slot-"]')).toHaveCount(6);
     // With no replacement assigned yet, the strip shows the explanatory tip in
     // place of the Replace button (one or the other, never both).
     await expect(page.getByTestId("bloom-host-commit-book-images-tip")).toBeVisible();
@@ -30,6 +33,30 @@ test.describe("Bloom host harness", () => {
       .first();
     await expect(placeholderImg).toHaveAttribute("src", /^data:image\/svg\+xml/);
     await expect(placeholderImg).not.toHaveAttribute("src", /placeHolder\.png/);
+
+    // Every slot says where it is in the book. Two of them are empty and show the same
+    // graphic, so the label is the only thing that tells them apart.
+    await expect(page.getByTestId("book-image-page-label-book-image-1")).toHaveText("Page 1");
+    await expect(page.getByTestId("book-image-page-label-book-image-5")).toHaveText(
+      "Page 5 - Canvas Background",
+    );
+    await expect(page.getByTestId("book-image-page-label-book-image-6")).toHaveText(
+      "Page 5 - Image 1",
+    );
+
+    // The whole label has to be readable. "Page 5 - Canvas Background" is wider than a
+    // thumbnail, so it must wrap and make its band taller rather than being cut off: the
+    // tail is the part that tells one slot from another.
+    const clipping = await page
+      .getByTestId("book-image-page-label-book-image-5")
+      .evaluate((element) => ({
+        widthOverflow: element.scrollWidth - element.clientWidth,
+        heightOverflow: element.scrollHeight - element.clientHeight,
+        lines: Math.round(element.clientHeight / 14),
+      }));
+    expect(clipping.widthOverflow).toBeLessThanOrEqual(0);
+    expect(clipping.heightOverflow).toBeLessThanOrEqual(0);
+    expect(clipping.lines).toBeGreaterThan(1);
 
     const firstCurrentSlot = page.getByTestId("book-image-current-slot-book-image-1");
     const secondOutgoingSlot = page.getByTestId("book-image-outgoing-slot-book-image-2");
@@ -105,6 +132,51 @@ test.describe("Bloom host harness", () => {
     await expect(targetImg).toHaveAttribute("src", /paper-cut/);
   });
 
+  test("an empty book slot cannot be dragged into Image to Edit", async ({ page }) => {
+    // An empty slot holds no artwork, only our placeholder graphic. If the strip let the
+    // user drag it into "Image to Edit", the AI would receive that graphic as if it were
+    // the picture to work from (BL-16744).
+    const targetPanel = page.getByTestId("target-panel");
+    const targetImg = targetPanel.locator("img").first();
+    await expect(targetImg).toHaveAttribute("src", /paper-cut/);
+
+    const emptySlot = page.getByTestId("book-image-current-slot-book-image-5");
+    const from = await emptySlot.boundingBox();
+    const to = await targetPanel.boundingBox();
+    expect(from).toBeTruthy();
+    expect(to).toBeTruthy();
+    if (!from || !to) return;
+
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+    await page.mouse.up();
+
+    // The panel still holds the image it opened with.
+    await expect(targetImg).toHaveAttribute("src", /paper-cut/);
+    await expect(targetPanel.locator("img")).toHaveCount(1);
+  });
+
+  test("launched on an empty slot, opens Create an Image with nothing to edit", async ({
+    page,
+  }) => {
+    // Bloom offers "Edit with AI..." on an image placeholder (BL-16744). There is no
+    // image to edit, so the editor must not load the slot's placeholder graphic into the
+    // "Image to Edit" panel; it opens the tool that makes an image from a description.
+    await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
+    await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+
+    // The Create an Image tool is the active one: its card only shows its action button
+    // while it is selected, and the "More" group opens to reveal it.
+    const createTool = page.locator('[data-tool-id="generate_image"]');
+    await expect(createTool.getByRole("button", { name: "Generate Image" })).toBeVisible();
+
+    // A "create" tool has no target panel at all, so the empty slot went nowhere near
+    // "Image to Edit". The preceding test proves the panel does appear on a normal
+    // launch, so its absence here is the empty-slot behavior, not a broken harness.
+    await expect(page.getByTestId("target-panel")).toHaveCount(0);
+  });
+
   test("on reopen, refreshes originals from the book and clears replacements", async ({ page }) => {
     // Seeded prior-session state has a stale book-image-1 record and an assigned
     // replacement. The host must show the current book image and an empty outgoing slot.
@@ -167,6 +239,36 @@ test.describe("Bloom host harness", () => {
     await expect(payload).toContainText('"resultId"');
     // The generated result inherited its edit source's credits.
     await expect(payload).toContainText('"creator": "Pat Papercut"');
+  });
+
+  test("an image created for an empty slot commits back into that slot", async ({ page }) => {
+    test.setTimeout(60_000);
+    // The other half of BL-16744: the point of launching on an empty slot is to put the
+    // created image there, so the result must carry that slot and "Use this Image" must
+    // commit it to it. Without that the button never appears and the user has to drag
+    // the result onto the strip by hand.
+    await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
+    await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+
+    // Create an Image is already the active tool; switch it to the local dummy model so
+    // the generation runs without AI or a key.
+    await page.getByTestId("tool-model-picker-generate_image").click();
+    await page.getByText("Local Dummy (No AI)").click();
+    await page.keyboard.press("Escape");
+
+    await page.getByTestId("input-prompt").fill("A dummy picture for the empty slot");
+    await page.getByRole("button", { name: /Generate Image/i }).click();
+
+    const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
+    await expect(commitCurrentButton).toBeVisible({ timeout: 30_000 });
+    await commitCurrentButton.click();
+
+    const payload = page.getByTestId("bloom-harness-commit-payload");
+    // book-image-5 is the harness's empty placeholder slot.
+    await expect(payload).toContainText('"incomingId": "book-image-5"');
+    await expect(payload).toContainText('"resultId"');
+    // A created image is a new work: it must not inherit anyone's credits.
+    await expect(payload).toContainText('"credits": null');
   });
 
   test("hides the dummy model when the host does not enable developer tools", async ({ page }) => {

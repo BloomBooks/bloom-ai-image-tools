@@ -107,6 +107,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       (initPayload?.bookImages || []).map((image) => ({
         id: image.id,
         src: image.src,
+        pageLabel: image.pageLabel ?? null,
         isPlaceholder: image.isPlaceholder,
         credits: image.credits ?? null,
       })),

@@ -277,12 +277,19 @@ export const BloomHostHarness: React.FC = () => {
                 credits: HARNESS_BOOK_IMAGE_CREDITS[`book-image-${index + 1}`] ?? null,
               }),
             ),
-            // An empty placeholder slot: the editor should show its own placeholder
-            // graphic rather than try to load the book's placeHolder.png.
+            // Two empty placeholder slots on ONE page: the editor shows its own
+            // placeholder graphic rather than trying to load the book's
+            // placeHolder.png, and the two are told apart only by their labels.
             {
               id: "book-image-5",
               src: "https://bloom-book.invalid/placeHolder.png",
-              pageLabel: "Page 5",
+              pageLabel: "Page 5 - Canvas Background",
+              isPlaceholder: true,
+            },
+            {
+              id: "book-image-6",
+              src: "https://bloom-book.invalid/placeHolder.png",
+              pageLabel: "Page 5 - Image 1",
               isPlaceholder: true,
             },
           ],
@@ -294,7 +301,10 @@ export const BloomHostHarness: React.FC = () => {
           httpBase: HARNESS_UNUSED_HTTP_BASE,
           sessionToken: "harness-session",
           // Simulate launching on a specific image: it should land in "Image to Edit".
-          selectedBookImageId: "book-image-3",
+          // `?seed=empty-slot` launches on the EMPTY slot instead, as Bloom does when
+          // the user picks "Edit with AI..." on an image placeholder: nothing goes into
+          // "Image to Edit" and the editor opens on "Create an Image".
+          selectedBookImageId: seedMode === "empty-slot" ? "book-image-5" : "book-image-3",
           showDeveloperTools,
         },
         initialFiles,
@@ -309,7 +319,7 @@ export const BloomHostHarness: React.FC = () => {
           setReadyCount((count) => count + 1);
         },
       }),
-    [initialFiles, historyImages, showDeveloperTools],
+    [initialFiles, historyImages, showDeveloperTools, seedMode],
   );
 
   React.useEffect(() => {

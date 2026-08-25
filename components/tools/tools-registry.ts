@@ -94,10 +94,17 @@ const appendOptionalInstructions = (
   return `${basePrompt}\n\n${prefix} ${trimmedInstructions}`;
 };
 
+/**
+ * The tool that makes a brand-new image from a description, with no source image.
+ * Named here because the workspace opens on it when the host launches us on an empty
+ * book slot, which has nothing to edit.
+ */
+export const CREATE_IMAGE_TOOL_ID = "generate_image";
+
 export const TOOLS: ToolDefinition[] = (
   [
     {
-      id: "generate_image",
+      id: CREATE_IMAGE_TOOL_ID,
       title: "Create an Image",
       description: "",
       group: "more",

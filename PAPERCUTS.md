@@ -22,3 +22,9 @@ Note: when resolving a git merge conflict here, keep both sides' entries unless 
 - **Cut:** `npx playwright test tests/batch-run.spec.ts` at the default worker count fails 3–5 of 7 tests nondeterministically (different set each run); the same file passes 7/7 with `--workers=1`. The specs pace themselves with `__bloomDummyDelayMs` (800–3000 ms) against 2 s action / 5 s expect timeouts, and `fullyParallel: true` + headed browsers pushes real completions past those windows under load.
 - **Idea:** either serialize this file (`test.describe.configure({ mode: "serial" })` or a project-level `workers: 1` for the dummy-delay specs) or widen the tight expect timeouts where a dummy delay is in play.
 - **Context:** found while fixing the missing-original-in-history bug on branch batch-processing, 2026-08-01; wasted several runs distinguishing real regressions from load flakes.
+
+## 2026-08-25 — bloom-host-harness.spec fails 10/10 at the default worker count
+
+- **Cut:** `npx playwright test tests/bloom-host-harness.spec.ts` starts 10 workers against the one dev server and every test times out in `beforeEach` (`page.goto` never settles), so the file reads as totally broken. The same file passes 10/10 with `--workers=2`, and any single test passes on its own. Same class as the batch-run entry above, but this one fails _all_ of them, which looks like a real regression rather than flake.
+- **Idea:** cap workers for the specs that share the harness dev server (project-level `workers`, or `test.describe.configure({ mode: "serial" })`), so a plain run of the file is trustworthy.
+- **Context:** found while verifying the empty-slot work (BL-16744) before publishing a dist tag, 2026-08-25.

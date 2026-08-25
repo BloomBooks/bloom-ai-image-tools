@@ -21,7 +21,7 @@ import { ImageToolsBar } from "./ImageToolsBar";
 import { OpenRouterApiError, OPENROUTER_KEYS_URL } from "../services/openRouterService";
 import { BREAK_COMIC_MERGE_MARGIN_RATIO } from "../lib/breakComic";
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
-import { TOOLS } from "./tools/tools-registry";
+import { CREATE_IMAGE_TOOL_ID, TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import {
@@ -342,6 +342,8 @@ export interface ImageToolsWorkspaceProps {
   bookImages?: Array<{
     id: string;
     src: string;
+    /** How the host names this slot for a reader, e.g. "Page 2 - Image 2". */
+    pageLabel?: string | null;
     isPlaceholder?: boolean;
     credits?: ImageCredits | null;
   }>;
@@ -547,24 +549,37 @@ export function ImageToolsWorkspace({
     });
     return ids;
   }, [bookImages]);
+  // The host can launch us on an EMPTY book slot — Bloom's "Edit with AI..." on an image
+  // placeholder. There is no image to edit, so we put nothing in the "Image to Edit" panel
+  // and never treat the slot's placeholder graphic as a source; we open the "Create an
+  // Image" tool instead (see the auto-select effect below). We do remember the slot,
+  // because the image the user is about to create belongs in it.
+  const launchedEmptyBookSlotId =
+    selectedBookImageId && placeholderBookImageIds.has(selectedBookImageId)
+      ? selectedBookImageId
+      : null;
   const resolvedBookImageEntries = useMemo(() => {
     if (bookImages.length) {
       return bookImages
         .map((image, index) => ({
           id: image.id?.trim(),
           url: image.src?.trim(),
+          pageLabel: image.pageLabel ?? null,
           isPlaceholder: image.isPlaceholder,
           credits: image.credits ?? null,
           index,
         }))
         .filter(({ id, url }) => Boolean(id) && Boolean(url))
-        .map(({ id, url, isPlaceholder, credits, index }) => ({
+        .map(({ id, url, pageLabel, isPlaceholder, credits, index }) => ({
           ...buildBookImageEntry(url as string, index),
           id: id as string,
           credits,
+          pageLabel,
           // Empty book slots: show our own placeholder graphic rather than the
-          // book's placeHolder.png (which isn't served as a book file).
-          ...(isPlaceholder ? { imageData: imagePlaceholder } : {}),
+          // book's placeHolder.png (which isn't served as a book file), and mark
+          // the record as holding no image, which is what keeps it out of the
+          // "Image to Edit" panel and the reference slots.
+          ...(isPlaceholder ? { imageData: imagePlaceholder, isEmptyBookSlot: true } : {}),
         }));
     }
 
@@ -659,14 +674,19 @@ export function ImageToolsWorkspace({
   const resolveIncomingSlotId = useCallback(
     (item: ImageRecord | null | undefined): string | undefined => {
       if (!item) {
-        return undefined;
+        // No image to edit. That is the normal state for a "create" tool, and when the
+        // host launched us on an empty book slot the image being created belongs in that
+        // slot. Carrying it here is what makes the result's "Use this" button appear and
+        // put the new image where the user asked for it; without it a created image had
+        // no slot at all and the user had to drag it onto the strip by hand.
+        return launchedEmptyBookSlotId ?? undefined;
       }
       if (bookImageSlotIds.includes(item.id)) {
         return item.id;
       }
       return item.incomingSlotId;
     },
-    [bookImageSlotIds],
+    [bookImageSlotIds, launchedEmptyBookSlotId],
   );
   const previewDialogItems = useMemo<ImagePreviewDialogItem[]>(
     () =>
@@ -921,7 +941,8 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     // When the host opens the editor on a book image, drop that image straight
     // into the "Image to Edit" target so the user can apply a tool without
-    // dragging it across first. Done once per launch.
+    // dragging it across first. An EMPTY slot is the one exception: it has no
+    // image, so we open the "Create an Image" tool instead. Done once per launch.
     if (
       bookImagesStripMode !== "host" ||
       !isHydrated ||
@@ -940,7 +961,19 @@ export function ImageToolsWorkspace({
         ? selectedBookImageId
         : null;
 
+    // An empty slot has nothing to edit, so open the tool that makes an image from a
+    // description instead of loading a placeholder graphic into the target panel. The
+    // slot itself is remembered as launchedEmptyBookSlotId, so the created image can go
+    // straight into it.
+    const launchedOnAnEmptySlot = !!explicitId && placeholderBookImageIds.has(explicitId);
+    if (launchedOnAnEmptySlot) {
+      setActiveToolId(CREATE_IMAGE_TOOL_ID);
+    }
+
     setState((prev) => {
+      if (launchedOnAnEmptySlot) {
+        return prev.targetImageId ? { ...prev, targetImageId: null } : prev;
+      }
       if (explicitId) {
         // Honor the launched-on image even if a target was restored from a prior
         // session — the user clicked that image expecting to edit it.
@@ -952,7 +985,13 @@ export function ImageToolsWorkspace({
       }
       return { ...prev, targetImageId: resolvedBookImageEntries[0].id };
     });
-  }, [resolvedBookImageEntries, bookImagesStripMode, isHydrated, selectedBookImageId]);
+  }, [
+    resolvedBookImageEntries,
+    bookImagesStripMode,
+    isHydrated,
+    selectedBookImageId,
+    placeholderBookImageIds,
+  ]);
 
   useEffect(() => {
     // If the bookImages strip is momentarily empty (e.g. during initial mount
@@ -3297,14 +3336,30 @@ export function ImageToolsWorkspace({
     [fsBinding, persistHistoryImage, appendHistoryEntry],
   );
 
-  const handleSetTargetImage = useCallback((id: string) => {
-    setState((prev) => ({
-      ...prev,
-      targetImageId: id,
-      referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
-      rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
-    }));
-  }, []);
+  // An empty book slot is not an image (see ImageRecordData.isEmptyBookSlot), so it can
+  // be neither edited nor used as a reference. The strip already refuses to drag one;
+  // this is the backstop that stops any other route from landing one in a panel, where
+  // it would send a placeholder graphic to the AI as if it were artwork.
+  const isEmptyBookSlotId = useCallback(
+    (id: string | null | undefined): boolean =>
+      !!id && !!stateRef.current.history.find((item) => item.id === id)?.isEmptyBookSlot,
+    [],
+  );
+
+  const handleSetTargetImage = useCallback(
+    (id: string) => {
+      if (isEmptyBookSlotId(id)) {
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        targetImageId: id,
+        referenceImageIds: prev.referenceImageIds.filter((refId) => refId !== id),
+        rightPanelImageId: prev.rightPanelImageId === id ? null : prev.rightPanelImageId,
+      }));
+    },
+    [isEmptyBookSlotId],
+  );
 
   const handleClearTargetImage = useCallback(() => {
     setState((prev) => ({ ...prev, targetImageId: null }));
@@ -3513,6 +3568,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleSetReferenceAt = (index: number, id: string) => {
+    if (isEmptyBookSlotId(id)) return;
     const mode = getToolReferenceMode(activeToolId);
     const { max } = getReferenceConstraints(mode);
 
@@ -3536,7 +3592,9 @@ export function ImageToolsWorkspace({
 
   const handleAddReferencesAt = useCallback(
     (index: number, ids: string[]) => {
-      const incomingIds = ids.filter((id) => state.history.some((item) => item.id === id));
+      const incomingIds = ids.filter(
+        (id) => state.history.some((item) => item.id === id) && !isEmptyBookSlotId(id),
+      );
       if (!incomingIds.length) {
         return;
       }
@@ -3563,7 +3621,7 @@ export function ImageToolsWorkspace({
         };
       });
     },
-    [activeToolId, state.history],
+    [activeToolId, state.history, isEmptyBookSlotId],
   );
 
   const handleSetRightPanel = (id: string) => {

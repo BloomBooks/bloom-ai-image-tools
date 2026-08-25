@@ -232,6 +232,21 @@ export interface ImageRecordData {
   isStarred?: boolean;
   origin?: "generated" | "uploaded" | "bookImages" | "bookOriginal";
   /**
+   * True for a book slot the host reported as EMPTY (in Bloom, an image
+   * placeholder). Such a record is NOT an image: it carries a placeholder
+   * graphic purely so the strip can show that the slot exists. Nothing may
+   * offer it as something to edit, reference, copy or download, and it is not
+   * draggable — there is nothing there to drag.
+   */
+  isEmptyBookSlot?: boolean;
+  /**
+   * Where this book slot sits, as the host names it — e.g. "Page 2",
+   * "Page 2 - Image 2", "Front Cover". Several slots can look identical (every
+   * empty one shows the same graphic), so this is the only thing that tells the
+   * user which slot is which.
+   */
+  pageLabel?: string | null;
+  /**
    * Credits of this image's IP source: supplied by the host for book images,
    * and copied from the edit target when a result is created by editing it.
    * Absent/null = no known credits. A result that is not derived from a

@@ -803,7 +803,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                       maxWidth: "100%",
                       objectFit: variant === "thumb" ? "cover" : "contain",
                       display: "block",
-                      ...TRANSPARENCY_BACKGROUND_STYLE,
+                      // An empty book slot is showing our placeholder graphic, not
+                      // artwork, so the checkerboard would be saying "this picture has
+                      // transparent parts" about a picture that isn't there. Plain white.
+                      ...(image.isEmptyBookSlot
+                        ? { backgroundColor: "#ffffff" }
+                        : TRANSPARENCY_BACKGROUND_STYLE),
                     }}
                     draggable={!!draggableImageId}
                     onDragStart={handleImageDragStart}

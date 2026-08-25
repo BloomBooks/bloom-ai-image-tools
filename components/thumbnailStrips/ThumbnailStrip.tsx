@@ -852,8 +852,13 @@ const BookImagePairThumb: React.FC<{
     },
     disabled: !allowRemove,
   });
+  // An empty slot holds no image (see ImageRecordData.isEmptyBookSlot), so there is
+  // nothing to drag out of it. Leaving it draggable let the user drop a placeholder
+  // graphic into "Image to Edit", or onto another slot as its replacement.
+  const isEmptySlot = !!item.isEmptyBookSlot;
   const currentDraggable = useDraggable({
     id: `bookImageCurrentItem:${item.id}`,
+    disabled: isEmptySlot,
     data: {
       kind: "image",
       imageId: item.id,
@@ -929,10 +934,43 @@ const BookImagePairThumb: React.FC<{
               : isSelected
                 ? theme.colors.accentSubtle
                 : theme.colors.surface,
-            cursor: "grab",
+            cursor: isEmptySlot ? "default" : "grab",
             opacity: currentDraggable.isDragging ? 0.35 : 1,
           }}
         >
+          {item.pageLabel && (
+            <div
+              data-testid={`book-image-page-label-${item.id}`}
+              // Slots can look identical -- every empty one shows the same graphic -- so
+              // without this the user cannot tell which one they are filling.
+              style={{
+                position: "absolute",
+                // Inside the picture, 2px down from its top edge. The slot pads its
+                // picture by 6px, so top: 0 would float the label above the picture.
+                top: 8,
+                left: 6,
+                right: 6,
+                zIndex: 2,
+                padding: "2px 6px",
+                fontSize: 10,
+                lineHeight: 1.4,
+                fontWeight: 600,
+                letterSpacing: "0.03em",
+                textAlign: "center",
+                color: theme.colors.textPrimary,
+                backgroundColor: "rgba(8, 10, 20, 0.62)",
+                // The label wraps and the band grows downwards to fit it. A truncated
+                // label is worse than a tall one: it is the only thing telling two
+                // identical-looking slots apart, and it is the tail that differs
+                // ("Page 1 - Canvas Background" against "Page 1 - Image 1").
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+                pointerEvents: "none",
+              }}
+            >
+              {item.pageLabel}
+            </div>
+          )}
           {batchSelection && (
             <BatchTickToggle
               incomingId={item.id}
@@ -957,8 +995,9 @@ const BookImagePairThumb: React.FC<{
             controls={{
               upload: false,
               paste: false,
-              copy: true,
-              download: true,
+              // Nothing to copy or save out of an empty slot.
+              copy: !isEmptySlot,
+              download: !isEmptySlot,
               remove: allowRemove,
             }}
             onRemove={allowRemove ? onRemove : undefined}

@@ -1,0 +1,1 @@
+import{t as e}from"./paper-cut-collage-BwrOn0rj.js";export{e as default};

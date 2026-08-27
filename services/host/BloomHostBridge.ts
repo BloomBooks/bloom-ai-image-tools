@@ -58,6 +58,23 @@ export interface IBloomHostBookImage {
   /** The image's current IP credits as stored in the book. The editor carries
    *  these along edit chains and returns per-result credits on commit. */
   credits?: ImageCredits | null;
+  /**
+   * The resolution this slot wants, computed by the host from the size the
+   * image container occupies on the page and the book's output medium (paper at
+   * 300dpi, or a digital device class). The editor offers it as the Upscale
+   * tool's "Auto" option; with the field absent or null there is no Auto option
+   * and the selector starts at HD.
+   *
+   * `memo` is free text explaining how the host arrived at the number, e.g.
+   * "1234 x 567 in order to achieve 300dpi for this 30mm x 20mm image
+   * container". The editor shows it verbatim under the selector and never
+   * parses it, so the host may word it however reads best.
+   *
+   * Omit the field when the container's size is unknown. Note that the numbers
+   * are a request, not a promise: image models accept only coarse size tiers,
+   * so a real model's output will not match exactly.
+   */
+  suggestedTarget?: { width: number; height: number; memo?: string } | null;
 }
 
 export interface IBloomHostReferenceImage {

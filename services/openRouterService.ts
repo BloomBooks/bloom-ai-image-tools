@@ -100,6 +100,14 @@ export interface ImageConfig {
   aspectRatio?: string;
   /** Size: "512k", "1k", "2k", "4k" */
   size?: string;
+  /**
+   * The exact pixel size the user asked for (the Upscale tool's selector).
+   * Real providers never see it: they accept only the coarse tier tokens above,
+   * so `size` is what the request carries. Only the local dummy model
+   * reproduces these dimensions, which is what makes the selector testable
+   * without spending on a model.
+   */
+  targetDimensions?: { width: number; height: number };
 }
 
 export interface EditImageOptions {
@@ -444,6 +452,9 @@ declare global {
     __bloomDummyFailOnCallNumber?: number;
     __bloomDummyRateLimitOnCallNumbers?: number[];
     __bloomDummyDelayMs?: number;
+    /** Read-only for tests: the text the last dummy image drew, or null when it
+     * drew none (the labelless stick person). */
+    __bloomDummyLastText?: string | null;
   }
 }
 
@@ -544,16 +555,66 @@ const drawDummyText = (
 // Produces a no-network result image for local UI testing.
 // When a source image is supplied (i.e. an edit tool with a target), the result
 // is derived from that image — tinted with a "DUMMY EDIT" banner — so the output
+// A random saturated color, distinct per call, so labelless dummy results do
+// not all look identical.
+const randomDummyColor = (): string => `hsl(${Math.floor(Math.random() * 360)}, 70%, 45%)`;
+
+// A literal stick person — circle head, line body/arms/legs — each part in its
+// own random color. Drawn centered, sized to the canvas.
+const drawDummyStickPerson = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void => {
+  const cx = width / 2;
+  const unit = Math.min(width, height) / 8;
+  const headRadius = unit * 0.8;
+  const headCenterY = height / 2 - unit * 2;
+  context.lineWidth = Math.max(3, Math.round(unit * 0.18));
+  context.lineCap = "round";
+
+  context.strokeStyle = randomDummyColor();
+  context.beginPath();
+  context.arc(cx, headCenterY, headRadius, 0, Math.PI * 2);
+  context.stroke();
+
+  const neckY = headCenterY + headRadius;
+  const hipY = neckY + unit * 2.4;
+  context.strokeStyle = randomDummyColor();
+  context.beginPath();
+  context.moveTo(cx, neckY);
+  context.lineTo(cx, hipY);
+  context.stroke();
+
+  context.strokeStyle = randomDummyColor();
+  context.beginPath();
+  context.moveTo(cx - unit * 1.4, neckY + unit * 1.4);
+  context.lineTo(cx, neckY + unit * 0.5);
+  context.lineTo(cx + unit * 1.4, neckY + unit * 1.4);
+  context.stroke();
+
+  context.strokeStyle = randomDummyColor();
+  context.beginPath();
+  context.moveTo(cx - unit * 1.1, hipY + unit * 2);
+  context.lineTo(cx, hipY);
+  context.lineTo(cx + unit * 1.1, hipY + unit * 2);
+  context.stroke();
+};
+
 // is visibly a transformation of the image being edited (handy for exercising
-// the Replace buttons without spending an API call). With no source it falls
-// back to the generic three-figure cast sheet.
-// Either way `textToDraw` is painted over the top (see drawDummyText), so each
-// result says which book image it is for instead of every dummy image looking
-// the same. Its color is the one thing here that is not deterministic.
+// the Replace buttons without spending an API call). With no source it draws
+// the generic three-figure cast sheet when there is a label to say which book
+// image the result is for, and a single stick person in random colors when
+// there is not (a prompt is the wrong thing to paint: a composed generation
+// prompt is paragraphs long and would fill the whole picture with text).
+// `textToDraw` is painted over the top (see drawDummyText), so each result
+// says which book image it is for instead of every dummy image looking the
+// same. Color is the one thing here that is not deterministic.
 const createLocalDummyImage = async (
-  textToDraw: string,
+  textToDraw: string | null,
   aspectRatio?: string,
   sourceImage?: string,
+  targetDimensions?: { width: number; height: number },
 ): Promise<string> => {
   if (typeof document === "undefined") {
     throw new Error("Local dummy model requires a browser environment.");
@@ -561,38 +622,48 @@ const createLocalDummyImage = async (
 
   if (sourceImage) {
     const image = await loadImageElement(sourceImage);
-    const sourceWidth = image.naturalWidth || 1024;
-    const sourceHeight = image.naturalHeight || 1024;
+    // A requested size (the Upscale tool) is honored exactly — that is the
+    // whole point of the dummy for that tool. Otherwise the result keeps the
+    // source's size, as every other tool expects.
+    const outputWidth = targetDimensions?.width || image.naturalWidth || 1024;
+    const outputHeight = targetDimensions?.height || image.naturalHeight || 1024;
     const canvas = document.createElement("canvas");
-    canvas.width = sourceWidth;
-    canvas.height = sourceHeight;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
     const context = canvas.getContext("2d");
     if (!context) {
       throw new Error("Canvas context unavailable for local dummy model.");
     }
 
-    context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+    context.drawImage(image, 0, 0, outputWidth, outputHeight);
     // Obvious, deterministic tint so the result clearly differs from the source.
     context.fillStyle = "rgba(11, 35, 38, 0.35)";
-    context.fillRect(0, 0, sourceWidth, sourceHeight);
+    context.fillRect(0, 0, outputWidth, outputHeight);
 
-    // Accent banner with a label, so it reads as a deliberate (fake) edit.
-    const bannerHeight = Math.max(48, Math.round(sourceHeight * 0.12));
+    // Accent banner with a label, so it reads as a deliberate (fake) edit. With
+    // a requested size the banner names it, so a test can read the size the
+    // dummy was asked for off the image itself.
+    const bannerHeight = Math.max(48, Math.round(outputHeight * 0.12));
+    const bannerText = targetDimensions
+      ? `DUMMY EDIT (no AI) ${outputWidth} x ${outputHeight}`
+      : "DUMMY EDIT (no AI)";
     context.fillStyle = "rgba(11, 35, 38, 0.82)";
-    context.fillRect(0, sourceHeight - bannerHeight, sourceWidth, bannerHeight);
+    context.fillRect(0, outputHeight - bannerHeight, outputWidth, bannerHeight);
     context.fillStyle = "#ffffff";
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.font = `${Math.round(bannerHeight * 0.42)}px sans-serif`;
-    context.fillText("DUMMY EDIT (no AI)", sourceWidth / 2, sourceHeight - bannerHeight / 2);
+    context.fillText(bannerText, outputWidth / 2, outputHeight - bannerHeight / 2);
 
     // Keep the text clear of the banner, so both stay readable.
-    drawDummyText(context, textToDraw, 0, 0, sourceWidth, sourceHeight - bannerHeight);
+    if (textToDraw) {
+      drawDummyText(context, textToDraw, 0, 0, outputWidth, outputHeight - bannerHeight);
+    }
 
     return canvas.toDataURL("image/png");
   }
 
-  const { width, height } = resolveLocalDummyDimensions(aspectRatio);
+  const { width, height } = targetDimensions ?? resolveLocalDummyDimensions(aspectRatio);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -603,6 +674,14 @@ const createLocalDummyImage = async (
 
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
+
+  // No label to show (standalone mode, or a generation with no target slot):
+  // a stick person in random colors keeps results distinct without painting a
+  // paragraphs-long generation prompt across the picture.
+  if (!textToDraw) {
+    drawDummyStickPerson(context, width, height);
+    return canvas.toDataURL("image/png");
+  }
 
   const baselineY = Math.round(height * 0.8);
   const figureScale = Math.min(width / 1280, height / 960);
@@ -697,12 +776,18 @@ export const editImage = async (
     await applyDummyImageTestHooks(options?.signal);
     const sourceImage = (base64Images || []).find((image) => !!image);
     // The slot's page label says which book image this result is for, which is
-    // what a tester wants to read off a dummy image. Without one (standalone
-    // mode, or no target slot) the prompt at least keeps results distinct.
+    // what a tester wants to read off a dummy image. Without one, an edit falls
+    // back to the prompt (an edit prompt is short and keeps results distinct),
+    // but a generation does not: its composed prompt is paragraphs long, and
+    // the dummy draws a stick person instead.
+    const slotLabel = options?.targetSlotPageLabel?.trim() || null;
+    const dummyText = sourceImage ? slotLabel || prompt : slotLabel;
+    window.__bloomDummyLastText = dummyText;
     const dummyImage = await createLocalDummyImage(
-      options?.targetSlotPageLabel?.trim() || prompt,
+      dummyText,
       options?.imageConfig?.aspectRatio,
       sourceImage,
+      options?.imageConfig?.targetDimensions,
     );
     return {
       imageData: dummyImage,

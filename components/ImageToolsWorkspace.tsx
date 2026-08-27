@@ -346,6 +346,9 @@ export interface ImageToolsWorkspaceProps {
     pageLabel?: string | null;
     isPlaceholder?: boolean;
     credits?: ImageCredits | null;
+    /** Resolution the host says this slot wants, plus its explanatory memo
+     *  (see IBloomHostBookImage.suggestedTarget). */
+    suggestedTarget?: { width: number; height: number; memo?: string | null } | null;
   }>;
   /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
   selectedBookImageId?: string;
@@ -567,13 +570,15 @@ export function ImageToolsWorkspace({
           pageLabel: image.pageLabel ?? null,
           isPlaceholder: image.isPlaceholder,
           credits: image.credits ?? null,
+          suggestedTarget: image.suggestedTarget ?? null,
           index,
         }))
         .filter(({ id, url }) => Boolean(id) && Boolean(url))
-        .map(({ id, url, pageLabel, isPlaceholder, credits, index }) => ({
+        .map(({ id, url, pageLabel, isPlaceholder, credits, suggestedTarget, index }) => ({
           ...buildBookImageEntry(url as string, index),
           id: id as string,
           credits,
+          suggestedTarget,
           pageLabel,
           // Empty book slots: show our own placeholder graphic rather than the
           // book's placeHolder.png (which isn't served as a book file), and mark
@@ -628,6 +633,47 @@ export function ImageToolsWorkspace({
       return filtered.size === prev.size ? prev : filtered;
     });
   }, [eligibleBatchBookImageIds]);
+
+  // A book image arrives as a host-served URL, so neither its pixel size nor
+  // its file format is known until the bytes are fetched. Both are needed
+  // before any run — the Upscale selector labels its HD/2K/4K options from the
+  // pixel size, and "Remove fuzziness" defaults on for a JPEG source — so
+  // back-fill them onto the record as soon as an image lands in the panel.
+  const targetImageNeedingMetadata = (() => {
+    if (!state.targetImageId) return null;
+    const target = state.history.find((item) => item.id === state.targetImageId);
+    if (!target || target.isEmptyBookSlot || !target.imageData) return null;
+    if (target.resolution && target.sourceMime !== undefined) return null;
+    return target;
+  })();
+  // Keyed on the id alone: one fetch per image, not one per history change.
+  const targetImageIdForMetadata = targetImageNeedingMetadata?.id ?? null;
+  useEffect(() => {
+    const target = targetImageNeedingMetadata;
+    if (!target) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const dataUrl = await ensureDataUrl(target.imageData);
+        const resolution = target.resolution ?? (await getImageDimensions(dataUrl));
+        const sourceMime = target.sourceMime ?? getMimeTypeFromUrl(dataUrl);
+        if (cancelled) return;
+        setState((prev) => ({
+          ...prev,
+          history: prev.history.map((item) =>
+            item.id === targetImageIdForMetadata ? { ...item, resolution, sourceMime } : item,
+          ),
+        }));
+      } catch {
+        // A source we cannot fetch simply keeps its unknown size/format.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetImageIdForMetadata]);
 
   const handleToggleBatchTick = useCallback(
     (incomingId: string) => {
@@ -2123,6 +2169,7 @@ export function ImageToolsWorkspace({
           sourceSummary: `${file.name} (page ${page.pageNumber} of ${pages.length})`,
           resolution: page.dimensions,
           isStarred: false,
+          sourceMime: getMimeTypeFromUrl(page.dataUrl),
           origin: "uploaded",
         };
         if (fsBinding) {
@@ -2206,6 +2253,9 @@ export function ImageToolsWorkspace({
 
       const imageData = await ensureDataUrl(source.imageData);
       const resolution = source.resolution ?? (await getImageDimensions(imageData));
+      // ensureDataUrl embeds the fetched blob's MIME in the data URL, so this is
+      // the first point at which a host-served book image's format is knowable.
+      const sourceMime = source.sourceMime ?? getMimeTypeFromUrl(imageData);
       let snapshot: ImageRecord = {
         id: uuid(),
         parentId: null,
@@ -2227,6 +2277,8 @@ export function ImageToolsWorkspace({
         origin: "bookOriginal",
         name: source.name ?? null,
         credits: source.credits ?? null,
+        sourceMime,
+        suggestedTarget: source.suggestedTarget ?? null,
       };
       if (fsBinding) {
         snapshot = await persistHistoryImage(snapshot);
@@ -2427,6 +2479,7 @@ export function ImageToolsWorkspace({
             requiresEditImage,
             targetImage,
             targetSlotPageLabel: resolveTargetSlotPageLabel(targetImage),
+            hostSuggestedTarget: targetImage?.suggestedTarget ?? null,
             params,
             constrainedReferences,
             reasoningByTool,
@@ -2549,6 +2602,7 @@ export function ImageToolsWorkspace({
           sourceSummary,
           resolution,
           isStarred: false,
+          sourceMime: getMimeTypeFromUrl(imageData),
           // Credits carry only when the source image was actually edited; a
           // reference-only or from-scratch generation is a new work and must
           // not inherit anyone's credits.
@@ -3027,6 +3081,7 @@ export function ImageToolsWorkspace({
             requiresEditImage: true,
             targetImage,
             targetSlotPageLabel: resolveTargetSlotPageLabel(targetImage),
+            hostSuggestedTarget: targetImage?.suggestedTarget ?? null,
             params,
             constrainedReferences,
             reasoningByTool,
@@ -3089,6 +3144,7 @@ export function ImageToolsWorkspace({
           sourceSummary,
           resolution,
           isStarred: false,
+          sourceMime: getMimeTypeFromUrl(runResult.processedImageData),
           credits: targetImage.credits ?? null,
         };
 
@@ -3257,7 +3313,7 @@ export function ImageToolsWorkspace({
   const handleUpload = useCallback(
     async (file: File, targetPanel: "target" | "right") => {
       try {
-        const { dataUrl, dimensions } = await prepareImageBlob(file);
+        const { dataUrl, dimensions, mimeType } = await prepareImageBlob(file);
         let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
@@ -3273,6 +3329,7 @@ export function ImageToolsWorkspace({
           promptUsed: "Original Upload",
           resolution: dimensions,
           isStarred: false,
+          sourceMime: mimeType,
         };
 
         if (fsBinding) {
@@ -3319,7 +3376,7 @@ export function ImageToolsWorkspace({
   const handleAddCharacterImage = useCallback(
     async (file: File) => {
       try {
-        const { dataUrl, dimensions } = await prepareImageBlob(file);
+        const { dataUrl, dimensions, mimeType } = await prepareImageBlob(file);
         let newItem: ImageRecord = {
           id: uuid(),
           parentId: null,
@@ -3334,6 +3391,7 @@ export function ImageToolsWorkspace({
           promptUsed: "Original Upload",
           resolution: dimensions,
           isStarred: false,
+          sourceMime: mimeType,
         };
 
         if (fsBinding) {
@@ -3392,7 +3450,7 @@ export function ImageToolsWorkspace({
       if (max === 0) return;
 
       try {
-        const { dataUrl, dimensions } = await prepareImageBlob(file);
+        const { dataUrl, dimensions, mimeType } = await prepareImageBlob(file);
 
         let newItem: ImageRecord = {
           id: uuid(),
@@ -3409,6 +3467,7 @@ export function ImageToolsWorkspace({
           promptUsed: "Original Upload",
           resolution: dimensions,
           isStarred: false,
+          sourceMime: mimeType,
         };
 
         if (fsBinding) {

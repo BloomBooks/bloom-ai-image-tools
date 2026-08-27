@@ -23,6 +23,13 @@ import {
 } from "./aspectRatios";
 import { ensureDataUrl, getImageDimensions } from "./imageUtils";
 import { pickSizeTokenForLongEdge } from "./imageSizes";
+import {
+  findTargetResolutionParam,
+  formatUpscaleDimensions,
+  RESOLVED_TARGET_PIXELS_PARAM,
+  resolveUpscaleTarget,
+  type UpscaleHostTarget,
+} from "./upscale";
 import { getGifSheetAspectRatio, parseGifFrameCount } from "./gifAnimationPrompt";
 import { getRequestedAspectRatioValue } from "./toolHelpers";
 import {
@@ -51,6 +58,12 @@ export interface RunToolOnImageArgs {
    * Dummy model uses it (see EditImageOptions.targetSlotPageLabel).
    */
   targetSlotPageLabel?: string | null;
+  /**
+   * The resolution the host says the target image's book slot wants, which is
+   * the Upscale tool's "Auto" option (see IBloomHostBookImage.suggestedTarget).
+   * Per-image, so the batch runner must pass each image's own.
+   */
+  hostSuggestedTarget?: UpscaleHostTarget | null;
   params: Record<string, string>;
   /** Reference images already limited to the tool's reference-count cap. */
   constrainedReferences: ImageRecord[];
@@ -114,6 +127,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     requiresEditImage,
     targetImage,
     targetSlotPageLabel,
+    hostSuggestedTarget,
     params,
     constrainedReferences,
     reasoningByTool,
@@ -129,7 +143,23 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     targetImage?.resolution ??
     (targetImage?.imageData ? await getImageDimensions(targetImage.imageData) : undefined);
 
-  const basePrompt = tool.promptTemplate(params);
+  // The Upscale selector persists a tier token ("hd"), so this is the first
+  // point that knows the pixels it stands for — needed by both the prompt's
+  // size sentence and the size token the request carries.
+  const targetResolutionParam = findTargetResolutionParam(tool.parameters);
+  const upscaleTarget = targetResolutionParam
+    ? resolveUpscaleTarget(
+        params[targetResolutionParam.name],
+        targetImageResolution,
+        hostSuggestedTarget,
+      )
+    : null;
+
+  const basePrompt = tool.promptTemplate(
+    upscaleTarget
+      ? { ...params, [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget) }
+      : params,
+  );
   let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
   if (tool.derivedResultMode === "animated-gif") {
     // The sheet's canvas shape follows the frame-count's grid layout
@@ -172,6 +202,13 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
         toolModel?.supportedAspectRatios,
       );
     }
+  }
+
+  if (upscaleTarget) {
+    // Real models accept only tier tokens, so the exact request becomes the
+    // smallest tier that isn't a downscale of it. The aspect ratio stays on
+    // auto (the source's shape) — upscaling must not reframe the picture.
+    requestedSize = pickSizeTokenForLongEdge(Math.max(upscaleTarget.width, upscaleTarget.height));
   }
 
   const promptWithoutAspectRatio =
@@ -269,6 +306,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
       toolModel?.supportedAspectRatios,
     ),
     size: requestedSize,
+    ...(upscaleTarget ? { targetDimensions: upscaleTarget } : {}),
   };
 
   if (tool.autoSizeFromInput) {

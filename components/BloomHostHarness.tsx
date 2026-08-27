@@ -62,6 +62,26 @@ const HARNESS_BOOK_IMAGE_CREDITS: Record<string, ImageCredits> = {
   },
 };
 
+// Resolutions a real Bloom would compute for some slots from the size their
+// image container occupies on the page (see IBloomHostBookImage.suggestedTarget).
+// Slots absent from this map deliberately have none, so the harness exercises
+// both the "Auto" and the no-Auto paths of the Upscale selector.
+const HARNESS_BOOK_IMAGE_SUGGESTED_TARGETS: Record<
+  string,
+  { width: number; height: number; memo?: string }
+> = {
+  "book-image-1": {
+    width: 1417,
+    height: 945,
+    memo: "Upscale the existing 600 x 400 image to 1417 x 945 in order to supply 300 dpi for this 120mm x 80mm image container.",
+  },
+  "book-image-3": {
+    width: 1063,
+    height: 1417,
+    memo: "Upscale the existing 492 x 700 image to 1063 x 1417 in order to supply 300 dpi for this 90mm x 120mm image container.",
+  },
+};
+
 // Default harness history: the host enumerates `.ai-image-editor/history/` and
 // supplies each image with its `<id>.json` sidecar — except the last entry, an
 // "orphan" dropped in by hand with no sidecar, which is still recovered.
@@ -275,6 +295,8 @@ export const BloomHostHarness: React.FC = () => {
                 // Some slots carry IP credits (as a real book would), others
                 // don't — the specs assert both cases round-trip on commit.
                 credits: HARNESS_BOOK_IMAGE_CREDITS[`book-image-${index + 1}`] ?? null,
+                suggestedTarget:
+                  HARNESS_BOOK_IMAGE_SUGGESTED_TARGETS[`book-image-${index + 1}`] ?? null,
               }),
             ),
             // Two empty placeholder slots on ONE page: the editor shows its own

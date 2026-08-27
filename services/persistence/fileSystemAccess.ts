@@ -351,6 +351,10 @@ const imageRecordFromHistoryEntry = (
   caption: entry.caption ?? null,
   name: entry.name ?? null,
   credits: entry.credits ?? null,
+  // The sidecar already records the stored bytes' MIME, which is the format the
+  // image arrived as, so the info panel's Format row and the JPEG default for
+  // "Remove fuzziness" survive a reload of a folder-backed history.
+  sourceMime: entry.imageMime ?? null,
   resolution: entry.resolution,
   isStarred: entry.isStarred ?? false,
   origin: entry.origin,

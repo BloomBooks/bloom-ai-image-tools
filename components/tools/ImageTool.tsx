@@ -44,6 +44,12 @@ import {
   resolveToolModelId,
 } from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
+import {
+  buildUpscaleOptions,
+  findTargetResolutionParam,
+  resolveUpscaleTarget,
+  type UpscaleHostTarget,
+} from "../../lib/upscale";
 import { ToolModelPicker, formatCost } from "./ToolModelPicker";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
 import { kWarningColor } from "../materialUITheme";
@@ -107,6 +113,14 @@ interface ToolPanelProps {
   referenceImageCount: number;
   hasTargetImage: boolean;
   targetImageResolution?: { width: number; height: number } | null;
+  /** Identity of the image in the "Image to Edit" panel. The JPEG default for
+   *  "Remove fuzziness" is re-derived once per image, keyed on this. */
+  targetImageId?: string | null;
+  /** MIME type the target image arrived as, when known. */
+  targetImageMime?: string | null;
+  /** The resolution the host says the target image's book slot wants, which is
+   *  the Upscale selector's "Auto" option. */
+  targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
@@ -410,6 +424,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   referenceImageCount,
   hasTargetImage,
   targetImageResolution,
+  targetImageId,
+  targetImageMime,
+  targetImageSuggestedTarget,
   isAuthenticated,
   modelByTool,
   reasoningByTool,
@@ -530,6 +547,25 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     [onParamChange],
   );
 
+  // "Remove fuzziness" defaults on for a JPEG source (JPEG is where the
+  // artifacts come from) and off for anything else. Derived once per target
+  // image, so a user's own toggle stands until they switch images. An undefined
+  // mime means "not determined yet" (a book image's bytes are still being
+  // fetched), which must not be read as "not a JPEG".
+  const fuzzinessDefaultAppliedForImageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!targetImageId || targetImageMime === undefined) return;
+    if (fuzzinessDefaultAppliedForImageIdRef.current === targetImageId) return;
+    fuzzinessDefaultAppliedForImageIdRef.current = targetImageId;
+
+    const nextValue = String(targetImageMime === "image/jpeg");
+    TOOLS.forEach((tool) => {
+      if (!findTargetResolutionParam(tool.parameters)) return;
+      if (!tool.parameters.some((param) => param.name === "removeFuzziness")) return;
+      onParamChange(tool.id, "removeFuzziness", nextValue);
+    });
+  }, [targetImageId, targetImageMime, onParamChange]);
+
   const defaultTools = useMemo(
     () => TOOLS.filter((tool) => (tool.group ?? "default") === "default"),
     [],
@@ -559,7 +595,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       if (param.optional) {
         return false;
       }
-      if (param.type === "checkbox") {
+      // Both always resolve to a value: a checkbox is either ticked or not, and
+      // the resolution selector falls back to HD for any token it doesn't know.
+      if (param.type === "checkbox" || param.type === "target-resolution") {
         return false;
       }
       if (param.type === "art-style") {
@@ -774,6 +812,60 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         );
       }
 
+      if (param.type === "target-resolution") {
+        const options = buildUpscaleOptions(targetImageResolution, targetImageSuggestedTarget);
+        // The stored token can name an option this image doesn't offer (a slot
+        // with no host target, after one that had it), so fall back to the
+        // first option rather than showing an empty select.
+        const selectedToken = options.some((option) => option.token === value)
+          ? value
+          : options[0]?.token || "hd";
+        const memo = targetImageSuggestedTarget?.memo?.trim();
+        return (
+          <Stack key={param.name} spacing={0.75}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: muiTheme.palette.text.secondary,
+              }}
+            >
+              {param.label}
+            </Typography>
+            <TextField
+              select
+              value={selectedToken}
+              onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
+              name={param.name}
+              fullWidth
+              size="small"
+              // With nothing to upscale the labels carry no dimensions, so
+              // there is nothing to choose between yet. Batch ticks stand in
+              // for a target image, same as the run button's own gate.
+              disabled={isProcessing || (!hasTargetImage && batchTickedCount === 0)}
+              inputProps={{ "data-testid": inputTestId }}
+              SelectProps={{
+                MenuProps: { disablePortal: false },
+                displayEmpty: false,
+              }}
+            >
+              {options.map((option) => (
+                <MenuItem key={option.token} value={option.token}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            {memo && (
+              <FormHelperText data-testid="upscale-target-memo" sx={{ m: 0 }}>
+                {memo}
+              </FormHelperText>
+            )}
+          </Stack>
+        );
+      }
+
       if (param.type === "select") {
         return (
           <TextField
@@ -823,6 +915,9 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       modelByTool,
       handleParamChange,
       targetImageResolution,
+      targetImageSuggestedTarget,
+      hasTargetImage,
+      batchTickedCount,
     ],
   );
 
@@ -850,6 +945,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       return (
         paramsByTool[tool.id]?.[sizeParam.name] || sizeParam.defaultValue || DEFAULT_SIZE_TOKEN
       );
+    }
+    const targetResolutionParam = findTargetResolutionParam(tool.parameters);
+    if (targetResolutionParam) {
+      const resolved = resolveUpscaleTarget(
+        paramsByTool[tool.id]?.[targetResolutionParam.name] ?? targetResolutionParam.defaultValue,
+        targetImageResolution,
+        targetImageSuggestedTarget,
+      );
+      if (resolved) {
+        return pickSizeTokenForLongEdge(Math.max(resolved.width, resolved.height));
+      }
     }
     if (tool.autoSizeFromInput && targetImageResolution?.width && targetImageResolution?.height) {
       return pickSizeTokenForLongEdge(

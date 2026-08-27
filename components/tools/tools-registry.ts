@@ -8,6 +8,7 @@ import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
 import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
 import GifBoxOutlinedIcon from "@mui/icons-material/GifBoxOutlined";
 import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
+import PhotoSizeSelectLargeOutlinedIcon from "@mui/icons-material/PhotoSizeSelectLargeOutlined";
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
@@ -18,6 +19,7 @@ import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "..
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
 import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
 import { BREAK_COMIC_EDIT_PROMPT } from "../../lib/breakComic";
+import { RESOLVED_TARGET_PIXELS_PARAM } from "../../lib/upscale";
 import {
   buildGifAnimationSheetPrompt,
   DEFAULT_GIF_ENDING_OPTION,
@@ -73,6 +75,9 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "improve_drawing",
   "remove_object",
   "stylized_title",
+  // Upscale reproduces the same picture bigger, so the output shape always
+  // follows the source; offering a shape picker would invite a crop.
+  "upscale",
 ]);
 
 const shouldExposeAspectRatio = (tool: ToolDefinition) =>
@@ -641,6 +646,52 @@ export const TOOLS: ToolDefinition[] = (
       // GPT-5.4 Image 2 as a secondary option. Other catalog models are hidden.
       modelIds: ["google/gemini-3-pro-image", "openai/gpt-5.4-image-2"],
       recommendedModelIds: ["google/gemini-3-pro-image"],
+      allowBatch: true,
+    },
+    {
+      id: "upscale",
+      title: "Upscale",
+      description: "Ask for the same picture at a higher resolution.",
+      group: "enhance",
+      icon: PhotoSizeSelectLargeOutlinedIcon,
+      parameters: [
+        {
+          name: "targetResolution",
+          label: "Target Resolution",
+          type: "target-resolution",
+          // "auto" is the host's computed target for the book slot. When there
+          // is none, the selector has no Auto option and resolveUpscaleTarget
+          // reads this stale token as HD.
+          defaultValue: "auto",
+        },
+        {
+          name: "removeFuzziness",
+          label: "Remove fuzziness",
+          type: "checkbox",
+          defaultValue: "false",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const parts = [
+          "Reproduce this exact image at a higher resolution. Do not change the composition, subjects, colors, style, framing, or any content. Add only the fine detail, sharpness, and clean edges that a genuinely higher-resolution version of this same picture would have.",
+        ];
+        if (params.removeFuzziness === "true") {
+          parts.push(
+            "The source has JPEG compression artifacts (blockiness, ringing, mosquito noise around edges, banding in gradients). Remove these artifacts and restore smooth gradients and crisp edges without inventing new content.",
+          );
+        }
+        // Filled by the run path, which is the only place that knows the
+        // resolved pixel target (the selector stores a tier token).
+        const resolvedTargetPixels = params[RESOLVED_TARGET_PIXELS_PARAM]?.trim();
+        if (resolvedTargetPixels) {
+          parts.push(
+            `The output should be approximately ${resolvedTargetPixels} pixels (same shape as the input).`,
+          );
+        }
+        return parts.join("\n\n");
+      },
+      referenceImages: "0",
       allowBatch: true,
     },
     {

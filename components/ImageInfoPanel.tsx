@@ -6,6 +6,7 @@ import { TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
 import { copyTextToClipboard } from "../lib/textClipboard";
+import { formatMimeLabel } from "../lib/imageUtils";
 
 const rowStyle: React.CSSProperties = {
   display: "grid",
@@ -150,6 +151,12 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     {
       label: "Resolution",
       value: item.resolution ? `${item.resolution.width} x ${item.resolution.height}` : null,
+      testId: "history-resolution",
+    },
+    {
+      label: "Format",
+      value: formatMimeLabel(item.sourceMime),
+      testId: "history-format",
     },
   ];
 

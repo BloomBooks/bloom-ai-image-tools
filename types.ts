@@ -3,7 +3,15 @@ import type { ElementType, ReactNode } from "react";
 export interface ToolParameter {
   name: string;
   label: string;
-  type: "text" | "select" | "textarea" | "art-style" | "aspect-ratio" | "size" | "checkbox";
+  type:
+    | "text"
+    | "select"
+    | "textarea"
+    | "art-style"
+    | "aspect-ratio"
+    | "size"
+    | "checkbox"
+    | "target-resolution";
   options?: string[];
   placeholder?: string;
   defaultValue?: string;
@@ -254,6 +262,20 @@ export interface ImageRecordData {
    * upload) must NOT inherit credits from anywhere — never fabricate.
    */
   credits?: ImageCredits | null;
+  /**
+   * The resolution the host says this image's page slot wants, with a memo
+   * explaining how it got the number (see IBloomHostBookImage.suggestedTarget).
+   * Carried on book images and their pre-edit snapshots only: it describes a
+   * book slot, so a generated result has none and the Upscale tool then offers
+   * no "Auto" option.
+   */
+  suggestedTarget?: { width: number; height: number; memo?: string | null } | null;
+  /**
+   * MIME type of the bytes this image arrived as ("image/jpeg"), shown as the
+   * info panel's Format row and used to auto-check "Remove fuzziness" for JPEG
+   * sources. Absent when the format was never determined.
+   */
+  sourceMime?: string | null;
 }
 
 /** @deprecated Use ImageRecordData. */

@@ -77,6 +77,40 @@ export const getImageFileExtensionFromMimeType = (mimeType: string | null | unde
   }
 };
 
+/**
+ * Short human-facing name for an image MIME type, for the info panel's Format
+ * row. An unrecognized type is shown as its subtype in upper case rather than
+ * hidden, so an unusual source still says what it is.
+ */
+export const formatMimeLabel = (mimeType: string | null | undefined): string | null => {
+  const normalized = (mimeType || "").trim().toLowerCase();
+  if (!normalized) return null;
+
+  switch (normalized) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "JPEG";
+    case "image/png":
+      return "PNG";
+    case "image/webp":
+      return "WebP";
+    case "image/gif":
+      return "GIF";
+    case "image/svg+xml":
+      return "SVG";
+    case "image/avif":
+      return "AVIF";
+    case "image/bmp":
+      return "BMP";
+    case "image/tiff":
+      return "TIFF";
+    default: {
+      const subtype = normalized.includes("/") ? normalized.split("/")[1] : normalized;
+      return subtype ? subtype.toUpperCase() : null;
+    }
+  }
+};
+
 export type PreparedImageBlob = {
   dataUrl: string;
   mimeType: string | null;

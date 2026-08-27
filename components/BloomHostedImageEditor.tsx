@@ -110,6 +110,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         pageLabel: image.pageLabel ?? null,
         isPlaceholder: image.isPlaceholder,
         credits: image.credits ?? null,
+        suggestedTarget: image.suggestedTarget ?? null,
       })),
     [initPayload?.bookImages],
   );

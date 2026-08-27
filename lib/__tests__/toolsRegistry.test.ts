@@ -34,7 +34,7 @@ describe("ethnicity tool prompt", () => {
       .sort((left, right) => left.title.localeCompare(right.title))
       .map((tool) => tool.id);
 
-    expect(enhanceToolIds).toEqual(["custom", "enhance_drawing", "improve_drawing"]);
+    expect(enhanceToolIds).toEqual(["custom", "enhance_drawing", "improve_drawing", "upscale"]);
   });
 
   it("keeps extract cast further instructions subordinate to the reference images", () => {
@@ -136,6 +136,46 @@ describe("ethnicity tool prompt", () => {
     ).toContain("coloring-book-page");
   });
 
+  it("asks the upscale tool for a faithful reproduction, with no shape picker", () => {
+    const upscaleTool = TOOLS.find((tool) => tool.id === "upscale");
+
+    expect(upscaleTool).toBeDefined();
+    expect(upscaleTool?.group).toBe("enhance");
+    expect(upscaleTool?.editImage).not.toBe(false);
+    expect(upscaleTool?.referenceImages).toBe("0");
+    // The output shape always follows the source, so no Shape picker.
+    expect(upscaleTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
+    expect(upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.type).toBe(
+      "target-resolution",
+    );
+    expect(
+      upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.defaultValue,
+    ).toBe("auto");
+    expect(upscaleTool?.parameters.find((param) => param.name === "removeFuzziness")?.type).toBe(
+      "checkbox",
+    );
+
+    const basePrompt = upscaleTool?.promptTemplate?.({
+      targetResolution: "hd",
+      removeFuzziness: "false",
+    });
+    expect(basePrompt).toContain("Reproduce this exact image at a higher resolution");
+    expect(basePrompt).toContain("Do not change the composition");
+    expect(basePrompt).not.toContain("JPEG compression artifacts");
+    expect(basePrompt).not.toContain("approximately");
+
+    const fuzzinessPrompt = upscaleTool?.promptTemplate?.({
+      targetResolution: "hd",
+      removeFuzziness: "true",
+      resolvedTargetPixels: "1620 x 1080",
+    });
+    expect(fuzzinessPrompt).toContain("JPEG compression artifacts");
+    expect(fuzzinessPrompt).toContain("Remove these artifacts");
+    expect(fuzzinessPrompt).toContain(
+      "The output should be approximately 1620 x 1080 pixels (same shape as the input).",
+    );
+  });
+
   it("flags allowBatch on exactly the single-image-in/single-image-out edit tools", () => {
     const batchEligibleToolIds = TOOLS.filter((tool) => toolSupportsBatch(tool))
       .map((tool) => tool.id)
@@ -154,6 +194,7 @@ describe("ethnicity tool prompt", () => {
         "remove_background",
         "remove_object",
         "stylized_title",
+        "upscale",
       ].sort(),
     );
   });

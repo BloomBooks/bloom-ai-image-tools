@@ -41,6 +41,7 @@ import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHe
 import {
   getEstimatedCostPerImageUsd,
   getModelInfoById,
+  getSizeTokenOptionsForModel,
   resolveToolModelId,
 } from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
@@ -79,11 +80,14 @@ const isLocalizedTool = (toolId: string | null) =>
 const isTextTool = (toolId: string | null) =>
   TOOLS.some((tool) => tool.id === toolId && tool.group === "text");
 
+// The sizes to offer for the selected model, in the order to offer them.
+// Sizes above the model's ceiling are dropped: OpenRouter answers an over-large
+// image_size with a 400, so offering one only buys the user an error.
 const getOrderedSizeOptions = (
   options: string[] | undefined,
   selectedModelId: string | undefined,
 ) => {
-  const resolvedOptions = [...(options ?? [])];
+  const resolvedOptions = getSizeTokenOptionsForModel(options, selectedModelId);
   if (selectedModelId !== GEMINI_3_1_FLASH_MODEL_ID) {
     return resolvedOptions;
   }
@@ -773,9 +777,13 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const sizeOptions = getOrderedSizeOptions(param.options, toolModel?.id);
         const shouldPreferModelDefault =
           toolModel?.id === GEMINI_3_1_FLASH_MODEL_ID && (!value || value === param.defaultValue);
+        // A remembered choice can be above the current model's ceiling (the user
+        // picked 4k under one model, then switched). Fall back to the first
+        // offered size rather than showing a value the model would reject.
+        const rememberedSize = sizeOptions.includes(value) ? value : "";
         const sizeValue = shouldPreferModelDefault
           ? sizeOptions[0] || param.defaultValue || ""
-          : value || sizeOptions[0] || param.defaultValue || "";
+          : rememberedSize || sizeOptions[0] || param.defaultValue || "";
         return (
           <Stack key={param.name} spacing={1}>
             <Typography

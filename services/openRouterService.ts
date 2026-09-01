@@ -1,7 +1,13 @@
 import type { ModelReasoningLevel } from "../types";
 import { getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
-import { getModelNameById, getRequestModelIds } from "../lib/modelsCatalog";
+import {
+  getMaxImageSizeForModel,
+  getModelNameById,
+  getRequestModelIds,
+  resolveImageSizeTierForModel,
+} from "../lib/modelsCatalog";
+import { sizeTokenToImageSizeTier } from "../lib/imageSizes";
 import { layoutDummyText, pickDummyTextColor } from "../lib/dummyImageText";
 
 /**
@@ -722,26 +728,6 @@ const createLocalDummyImage = async (
 };
 
 /**
- * Maps size parameter to Gemini image_size format.
- * Gemini supports: "1K", "2K", "4K" (note: uppercase K required).
- * The UI exposes a 512k preset for Gemini 3.1 Flash, which maps to Gemini's
- * lowest supported image-size tier.
- */
-function mapSizeToGeminiImageSize(size?: string): string {
-  switch (size?.toLowerCase()) {
-    case "512k":
-      return "1K";
-    case "2k":
-      return "2K";
-    case "4k":
-      return "4K";
-    case "1k":
-    default:
-      return "1K";
-  }
-}
-
-/**
  * `.catch` handler for response-body reads: rethrow a cancellation so it
  * propagates, but treat any other read failure as an empty body (the callers
  * tolerate that and surface a clearer downstream error).
@@ -829,17 +815,20 @@ export const editImage = async (
   }
 
   // Build image generation parameters for different providers.
-  // - google/* (Gemini): uses image_config with image_size "1K"|"2K"|"4K"
-  // - openai/gpt-5.4-image*: uses image_config but only supports "1K"|"2K" (not "4K")
-  // - other OpenAI (gpt-image-1, DALL-E, etc.): uses size as pixel dimensions
+  // - google/* (Gemini) and openai/gpt-5.4-image*: use image_config, whose
+  //   image_size is one of "1K"|"2K"|"4K"
+  // - other OpenAI (gpt-image-1, DALL-E, etc.): use size as pixel dimensions
   const isGeminiModel = modelToUse.startsWith("google/");
   const isGpt54ImageModel = modelToUse.startsWith("openai/gpt-5.4-image");
   const usesImageConfig = isGeminiModel || isGpt54ImageModel;
 
   const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
-  const rawImageSize = mapSizeToGeminiImageSize(imageConfig?.size);
-  // gpt-5.4-image-2 caps at "2K"; cap any "4K" request to "2K" for those models
-  const resolvedImageSize = !isGeminiModel && rawImageSize === "4K" ? "2K" : rawImageSize;
+  // Each model key has its own image_size ceiling, and the ceiling belongs to
+  // the snapshot the key points at, not to the family: the stable Gemini keys
+  // reject "4K" that their own "-preview" snapshots accept, and Flash Lite
+  // takes "1K" alone. Read it from the catalog per candidate rather than
+  // guessing from the id, because a wrong guess is a 400, not a smaller image.
+  const requestedImageSize = sizeTokenToImageSizeTier(imageConfig?.size);
 
   // OpenAI-style size (pixel dimensions) for models that don't support image_config
   const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
@@ -869,11 +858,13 @@ export const editImage = async (
     // <=2520 tokens even at 4K, so this budget is almost entirely for thinking.)
     max_tokens: 64_000,
     // Provider-specific image size parameters — only include what the model accepts
+    // `image_config.image_size` is set per candidate inside the failover loop
+    // below, because a fallback key can have a lower ceiling than the primary.
     ...(usesImageConfig
       ? {
           image_config: {
             aspect_ratio: geminiAspectRatio,
-            image_size: resolvedImageSize,
+            image_size: requestedImageSize,
           },
         }
       : { size: openAISize }),
@@ -908,6 +899,17 @@ export const editImage = async (
     const hasFallbackModel = modelIndex < candidateModelIds.length - 1;
     const nextModelId = hasFallbackModel ? candidateModelIds[modelIndex + 1] : null;
     body.model = modelForRequest;
+    if (usesImageConfig) {
+      const sizeForRequest = resolveImageSizeTierForModel(modelForRequest, requestedImageSize);
+      if (sizeForRequest !== requestedImageSize) {
+        console.log(
+          `[openRouter] "${modelForRequest}" accepts at most ` +
+            `${getMaxImageSizeForModel(modelForRequest)}; sending ${sizeForRequest} ` +
+            `instead of the requested ${requestedImageSize}.`,
+        );
+      }
+      body.image_config.image_size = sizeForRequest;
+    }
     let modelUnavailable = false;
 
     for (let attempt = 0; attempt < MAX_IMAGE_ATTEMPTS; attempt += 1) {

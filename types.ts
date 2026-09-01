@@ -1,4 +1,5 @@
 import type { ElementType, ReactNode } from "react";
+import type { ImageSizeTier } from "./lib/imageSizes";
 
 export interface ToolParameter {
   name: string;
@@ -73,6 +74,15 @@ export interface ModelInfo {
   badge?: string;
   initialReasoningLevel?: ModelReasoningLevel;
   supportedAspectRatios?: string[];
+  /**
+   * Highest `image_config.image_size` tier this model accepts. A request above
+   * it is a 400 from OpenRouter, not a downscaled image, so the run path clamps
+   * to this value and the size picker hides the tiers above it. Measured per
+   * model key against OpenRouter; re-measure when a key moves to a new snapshot,
+   * because the ceiling belongs to the snapshot, not to the family. Omit only
+   * for models that ignore `image_config` altogether (they take pixel sizes).
+   */
+  maxImageSize?: ImageSizeTier;
 }
 
 export interface ArtStyleDefinition {

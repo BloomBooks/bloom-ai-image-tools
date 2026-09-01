@@ -7,7 +7,13 @@ import {
   LOCAL_DUMMY_MODEL_ID,
   withLocalModels,
 } from "./localModels";
-import { DEFAULT_SIZE_TOKEN } from "./imageSizes";
+import {
+  clampImageSizeTier,
+  DEFAULT_SIZE_TOKEN,
+  type ImageSizeTier,
+  IMAGE_SIZE_TIERS,
+  sizeTokenToImageSizeTier,
+} from "./imageSizes";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
   try {
@@ -43,6 +49,47 @@ export const getRequestModelIds = (modelId: string | null | undefined): string[]
   if (!id) return [];
   const fallbackId = getModelInfoById(id)?.fallbackId?.trim();
   return fallbackId && fallbackId !== id ? [id, fallbackId] : [id];
+};
+
+/**
+ * The largest `image_config.image_size` tier a model accepts, or null when the
+ * catalog does not say. Null means "do not clamp": an unknown id (an env
+ * override, or a key the registry has not caught up with) is better sent as
+ * asked than silently reduced.
+ */
+export const getMaxImageSizeForModel = (modelId: string | null | undefined): ImageSizeTier | null =>
+  getModelInfoById(modelId)?.maxImageSize ?? null;
+
+/**
+ * The tier to put in a request for this model: what the caller asked for,
+ * reduced to the model's ceiling. OpenRouter answers an over-large tier with a
+ * 400, so this must run before the request goes out.
+ */
+export const resolveImageSizeTierForModel = (
+  modelId: string | null | undefined,
+  requested: ImageSizeTier,
+): ImageSizeTier => clampImageSizeTier(requested, getMaxImageSizeForModel(modelId));
+
+/**
+ * The size tokens worth offering for a model: the tool's own options minus the
+ * ones above the model's ceiling. Keeps a user from picking a size that can
+ * only come back as an error.
+ */
+export const getSizeTokenOptionsForModel = (
+  options: string[] | null | undefined,
+  modelId: string | null | undefined,
+): string[] => {
+  const allOptions = options ?? [];
+  const maximum = getMaxImageSizeForModel(modelId);
+  if (!maximum) return [...allOptions];
+  const kept = allOptions.filter(
+    (token) =>
+      IMAGE_SIZE_TIERS.indexOf(sizeTokenToImageSizeTier(token)) <=
+      IMAGE_SIZE_TIERS.indexOf(maximum),
+  );
+  // Never offer an empty list: a tool whose options all sit above the ceiling
+  // still needs one choice, so keep the smallest one it declared.
+  return kept.length ? kept : allOptions.slice(0, 1);
 };
 
 export const MODEL_REASONING_LEVELS: ModelReasoningLevel[] = [

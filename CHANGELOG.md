@@ -1,5 +1,39 @@
 # bloom-ai-image-tools
 
+## 0.1.8
+
+### Patch Changes
+
+- [`4141087`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/41410870c5fea633c8ee97799b795d1583eb9cf4) Thanks [@hatton](https://github.com/hatton)! - Honor a host's demo mode as a limit on which model may run, not only on credentials.
+  `IBloomHostInitPayload.demoOnly` now means the session is limited to the demo model (the
+  free local dummy, which never calls OpenRouter): the hosted shell passes it to the new
+  `setDemoModelOnly()`, every tool's model list becomes that model alone whatever the host
+  says about developer tools, and `resolveToolModelId` cannot fall back to a paid model.
+  Bloom sends `demoOnly` when the collection's subscription does not cover AI image editing
+  -- a Playground book opens the editor regardless -- and withholds the OpenRouter key in
+  that case, so a paid model has neither an option in the picker nor a key to run on.
+
+- [`52c3522`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/52c3522d99572fa2ec1fe581aaf609b49f39e1fa) Thanks [@hatton](https://github.com/hatton)! - Fix "image_size '4K' is not supported" errors, and stop offering a size the chosen model
+  rejects. Each model key has its own `image_config.image_size` ceiling, and the ceiling
+  belongs to the dated snapshot the key points at rather than to the model family: measured
+  against OpenRouter on 2026-09-01, the stable `google/gemini-3-pro-image` and
+  `google/gemini-3.1-flash-image` keys reject 4K that their own `-preview` snapshots accept,
+  `google/gemini-3.1-flash-lite-image` takes 1K alone, and `openai/gpt-5.4-image-2` takes 1K
+  and 2K. The registry now records a `maxImageSize` per model. The request path reads it and
+  reduces an over-large request before it goes out, per candidate key, so a fallback with a
+  lower ceiling is handled too. The size selector hides the sizes above the ceiling, and a
+  remembered choice that the newly chosen model cannot serve falls back to an offered size.
+
+- [`a73e345`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/a73e345a49edb4b73ae9e9b7a335604bf17b747b) Thanks [@hatton](https://github.com/hatton)! - New "Upscale" tool under Enhance: it asks the model for the same picture at a higher
+  resolution, with a Target Resolution selector (Auto, HD, 2K, 4K) whose labels carry the
+  pixel size each option works out to for the image in hand. "Auto" appears only when the
+  Bloom host sent a resolution for the image's page slot, and the host's explanation of
+  that number is shown under the selector. "Remove fuzziness" adds JPEG-artifact removal to
+  the prompt and starts ticked when the image itself is a JPEG. Real models take only coarse
+  size tiers, so the request carries the smallest tier at or above the chosen size; the Local
+  Dummy model reproduces the exact pixels, which is what makes the selector testable. The
+  "Image to Edit info" panel gains a Format row.
+
 ## 0.1.7
 
 ### Patch Changes

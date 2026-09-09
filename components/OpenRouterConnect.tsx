@@ -35,10 +35,9 @@ interface OpenRouterConnectProps {
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
   onOpenExternalUrl: (url: string) => void;
-  /** When true (e.g. a Bloom Playground/template book), the editor is opened in a
-   *  shared "demo" context: the user may use any already-supplied key but must not
-   *  set, change, or clear OpenRouter credentials, so those controls are disabled. */
-  demoOnly?: boolean;
+  /** When true (a Bloom Playground book), the AI image generators cannot be used at
+   *  all, so the OpenRouter credential controls are disabled. */
+  playgroundMode?: boolean;
 }
 
 export function OpenRouterConnect({
@@ -47,7 +46,7 @@ export function OpenRouterConnect({
   onDisconnect,
   onProvideKey,
   onOpenExternalUrl,
-  demoOnly = false,
+  playgroundMode = false,
 }: OpenRouterConnectProps) {
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
@@ -74,7 +73,7 @@ export function OpenRouterConnect({
   };
 
   const handlePaste = async () => {
-    if (demoOnly) return;
+    if (playgroundMode) return;
     try {
       const text = await navigator.clipboard.readText();
       const trimmed = text.trim();
@@ -114,7 +113,7 @@ export function OpenRouterConnect({
   };
 
   const handleKeyBlur = () => {
-    if (usingEnvKey || demoOnly) {
+    if (usingEnvKey || playgroundMode) {
       return;
     }
     const trimmed = keyValue.trim();
@@ -217,10 +216,10 @@ export function OpenRouterConnect({
         Once you have an OpenRouter account, paste in an API key below.
       </Typography>
 
-      {demoOnly && (
+      {playgroundMode && (
         <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
-          This is a demo session: the AI tools are shown but cannot be run, so there is no
-          OpenRouter connection to make here.
+          In playground mode the AI image generators cannot be used, so there is no OpenRouter
+          connection to make here.
         </Typography>
       )}
 
@@ -244,7 +243,7 @@ export function OpenRouterConnect({
             }}
             onBlur={handleKeyBlur}
             placeholder="Paste OpenRouter key"
-            disabled={usingEnvKey || demoOnly}
+            disabled={usingEnvKey || playgroundMode}
             size="small"
             fullWidth
             sx={{
@@ -252,7 +251,7 @@ export function OpenRouterConnect({
               bgcolor: theme.colors.surface,
             }}
             InputProps={{
-              endAdornment: !usingEnvKey && !keyValue && !demoOnly && (
+              endAdornment: !usingEnvKey && !keyValue && !playgroundMode && (
                 <InputAdornment position="end">
                   <IconButton
                     size="small"
@@ -298,10 +297,10 @@ export function OpenRouterConnect({
                 type="button"
                 data-testid="openrouter-clear-key"
                 onClick={handleDisconnect}
-                disabled={demoOnly}
+                disabled={playgroundMode}
                 variant="outlined"
                 size="small"
-                sx={{ opacity: demoOnly ? 0.5 : 1 }}
+                sx={{ opacity: playgroundMode ? 0.5 : 1 }}
               >
                 Forget Key
               </Button>

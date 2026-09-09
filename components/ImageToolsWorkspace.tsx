@@ -42,6 +42,7 @@ import {
   resolveToolModelId,
 } from "../lib/modelsCatalog";
 import { OpenRouterWelcomeDialog } from "./OpenRouterWelcomeDialog";
+import { PlaygroundNoticeDialog } from "./PlaygroundNoticeDialog";
 import { OpenRouterCreditsHeader } from "./OpenRouterCreditsHeader";
 import { AIImageToolsSettingsDialog } from "./AIImageToolsSettingsDialog";
 import { ImagePreviewDialog, ImagePreviewDialogItem } from "./ImagePreviewDialog";
@@ -339,7 +340,7 @@ export interface ImageToolsWorkspaceProps {
   /** Demo session (a host without a subscription for AI image editing): the whole
    *  editor is on show, but nothing that would call OpenRouter can be run, and the
    *  OpenRouter credentials cannot be set, changed, or cleared. */
-  demoOnly?: boolean;
+  playgroundMode?: boolean;
   bookImageUrls?: string[];
   bookImages?: Array<{
     id: string;
@@ -398,7 +399,7 @@ export function ImageToolsWorkspace({
   persistence,
   envApiKey: envApiKeyProp = "",
   initialApiKey: initialApiKeyProp = "",
-  demoOnly = false,
+  playgroundMode = false,
   bookImageUrls = [],
   bookImages = [],
   selectedBookImageId,
@@ -504,6 +505,7 @@ export function ImageToolsWorkspace({
   });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isWelcomeDialogOpen, setIsWelcomeDialogOpen] = useState(false);
+  const [isPlaygroundNoticeOpen, setIsPlaygroundNoticeOpen] = useState(false);
   const hasShownWelcomeRef = useRef(false);
   // Guards the one-time auto-selection of the host's current book image into the
   // "Image to Edit" target (see the effect below).
@@ -1260,9 +1262,8 @@ export function ImageToolsWorkspace({
     if (
       isHydrated &&
       !effectiveApiKey &&
-      // A demo session has no connection to offer, so the invitation to make one
-      // would be a dead end.
-      !demoOnly &&
+      // Playground mode has no connection to offer, and says so in its own dialog.
+      !playgroundMode &&
       !canUseSelectedModelWithoutApiKey &&
       !hasShownWelcomeRef.current &&
       !shouldSkipWelcomeDialog &&
@@ -1271,7 +1272,15 @@ export function ImageToolsWorkspace({
       hasShownWelcomeRef.current = true;
       setIsWelcomeDialogOpen(true);
     }
-  }, [isHydrated, effectiveApiKey, demoOnly, canUseSelectedModelWithoutApiKey]);
+  }, [isHydrated, effectiveApiKey, playgroundMode, canUseSelectedModelWithoutApiKey]);
+
+  // Playground mode says its own piece instead, once per launch.
+  useEffect(() => {
+    if (isHydrated && playgroundMode && !hasShownWelcomeRef.current) {
+      hasShownWelcomeRef.current = true;
+      setIsPlaygroundNoticeOpen(true);
+    }
+  }, [isHydrated, playgroundMode]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -2381,9 +2390,9 @@ export function ImageToolsWorkspace({
     // the tool's first recommended model.
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
-    // A demo session shows the tools but never spends money on one. The button for
+    // Playground mode shows the tools but never spends money on one. The button for
     // such a tool is disabled, so this catches the other ways a form gets submitted.
-    if (demoOnly && toolRunCallsOpenRouter(tool, toolModel?.id)) {
+    if (playgroundMode && toolRunCallsOpenRouter(tool, toolModel?.id)) {
       return;
     }
 
@@ -3021,7 +3030,7 @@ export function ImageToolsWorkspace({
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool || !toolSupportsBatch(tool)) return;
     if (state.isProcessing) return;
-    if (demoOnly && toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool))) {
+    if (playgroundMode && toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool))) {
       return;
     }
 
@@ -3575,7 +3584,7 @@ export function ImageToolsWorkspace({
 
   const handleConnect = async () => {
     // Demo context (e.g. Bloom Playground book): credentials must not be changed.
-    if (demoOnly) return;
+    if (playgroundMode) return;
     try {
       setAuthLoading(true);
       setState((prev) => ({ ...prev, error: null }));
@@ -3634,7 +3643,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleDisconnect = () => {
-    if (demoOnly) return;
+    if (playgroundMode) return;
     setApiKey(null);
     setAuthMethod(null);
     // Clear the host's stored credentials too (sign-out).
@@ -3643,7 +3652,7 @@ export function ImageToolsWorkspace({
   };
 
   const handleProvideKey = (key: string) => {
-    if (demoOnly) return;
+    if (playgroundMode) return;
     const trimmed = key.trim();
     if (!trimmed) {
       setApiKey(null);
@@ -4245,7 +4254,9 @@ export function ImageToolsWorkspace({
       ? theme.colors.danger
       : theme.colors.accent;
 
-  const shouldShowConnectToOpenRouterCTA = !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
+  // Playground mode has no connection to offer, so the call to make one is left out.
+  const shouldShowConnectToOpenRouterCTA =
+    !playgroundMode && !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
   // A null limit means the connected key has no per-key spending cap; warn near the meter.
   const creditsKeyHasNoLimit = !!(
     effectiveApiKey &&
@@ -4472,7 +4483,7 @@ export function ImageToolsWorkspace({
             onVisibleStripItemIdsChange={handleVisibleStripItemIdsChange}
             onApplyTool={handleApplyTool}
             onApplyBatchTool={handleApplyBatchTool}
-            demoOnly={demoOnly}
+            playgroundMode={playgroundMode}
             onCancelProcessing={handleCancelProcessing}
             onToolSelect={handleToolSelectWithConstraints}
             onParamChange={handleParamChange}
@@ -4543,6 +4554,11 @@ export function ImageToolsWorkspace({
           }}
         />
 
+        <PlaygroundNoticeDialog
+          isOpen={isPlaygroundNoticeOpen}
+          onDismiss={() => setIsPlaygroundNoticeOpen(false)}
+        />
+
         <OpenRouterWelcomeDialog
           isOpen={isWelcomeDialogOpen}
           onConnect={() => {
@@ -4565,7 +4581,7 @@ export function ImageToolsWorkspace({
             onDisconnect: handleDisconnect,
             onProvideKey: handleProvideKey,
             onOpenExternalUrl: openExternalLink,
-            demoOnly,
+            playgroundMode,
           }}
           history={
             // When hosted in Bloom, the host supplies the history mechanism (the

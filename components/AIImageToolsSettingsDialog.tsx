@@ -31,7 +31,7 @@ interface OpenRouterSectionProps {
   onProvideKey: (key: string) => void;
   onOpenExternalUrl: (url: string) => void;
   /** Demo context (e.g. Bloom Playground book): credential-setting UI is disabled. */
-  demoOnly?: boolean;
+  playgroundMode?: boolean;
 }
 
 interface HistorySectionProps {
@@ -186,7 +186,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       onDisconnect={openRouter.onDisconnect}
                       onProvideKey={openRouter.onProvideKey}
                       onOpenExternalUrl={openRouter.onOpenExternalUrl}
-                      demoOnly={openRouter.demoOnly}
+                      playgroundMode={openRouter.playgroundMode}
                     />
                   </Stack>
                 </Box>

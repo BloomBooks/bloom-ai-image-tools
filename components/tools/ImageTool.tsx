@@ -129,9 +129,9 @@ interface ToolPanelProps {
    *  the Upscale selector's "Auto" option. */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
-  /** Demo session: the tools are all on show, but the ones that would spend money
+  /** Playground mode: the tools are all on show, but the ones that would spend money
    *  cannot be run. */
-  demoOnly?: boolean;
+  playgroundMode?: boolean;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
   measuredStatsByKey: Record<string, MeasuredStats>;
@@ -438,7 +438,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   targetImageMime,
   targetImageSuggestedTarget,
   isAuthenticated,
-  demoOnly = false,
+  playgroundMode = false,
   modelByTool,
   reasoningByTool,
   measuredStatsByKey,
@@ -987,7 +987,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     // image, so the usual "needs a target image" gate doesn't apply.
     const isBatchModeForTool = batchTickedCount > 0 && !!tool.allowBatch;
     const requiresOpenRouter = toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool));
-    const blockedByDemo = demoOnly && requiresOpenRouter;
+    const blockedByPlaygroundMode = playgroundMode && requiresOpenRouter;
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage && !isBatchModeForTool;
@@ -995,8 +995,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const requiresDescriptionOrReference =
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
-    const submitDisabledReason = blockedByDemo
-      ? "Not available in this demo"
+    const submitDisabledReason = blockedByPlaygroundMode
+      ? "Not available in playground mode"
       : needsTarget
         ? "Add an image to edit"
         : needsReference
@@ -1008,7 +1008,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               : undefined;
     const isSubmitDisabled =
       isProcessing ||
-      blockedByDemo ||
+      blockedByPlaygroundMode ||
       (requiresOpenRouter && !isAuthenticated) ||
       needsTarget ||
       needsReference ||

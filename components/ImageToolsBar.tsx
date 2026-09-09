@@ -454,7 +454,7 @@ interface ImageToolsPanelBar {
   onApplyBatchTool: (toolId: string, params: Record<string, string>) => void;
   /** Demo session: passed on to the tools, which then refuse to run anything that
    *  would cost money. */
-  demoOnly?: boolean;
+  playgroundMode?: boolean;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
@@ -543,7 +543,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   selectedArtStyleId,
   onApplyTool,
   onApplyBatchTool,
-  demoOnly = false,
+  playgroundMode = false,
   onCancelProcessing,
   onToolSelect,
   onParamChange,
@@ -812,7 +812,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             targetImageMime={targetImage?.sourceMime}
             targetImageSuggestedTarget={targetImage?.suggestedTarget ?? null}
             isAuthenticated={appState.isAuthenticated}
-            demoOnly={demoOnly}
+            playgroundMode={playgroundMode}
             modelByTool={modelByTool}
             reasoningByTool={reasoningByTool}
             measuredStatsByKey={measuredStatsByKey}

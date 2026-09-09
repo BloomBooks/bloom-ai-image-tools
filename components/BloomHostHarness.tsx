@@ -264,10 +264,10 @@ export const BloomHostHarness: React.FC = () => {
   const showDeveloperTools =
     typeof window === "undefined" ||
     new URLSearchParams(window.location.search).get("devtools") !== "off";
-  // `?demo=on` plays a Bloom whose subscription does not cover AI image editing.
-  const demoOnly =
+  // `?playground=on` plays a Bloom whose subscription does not cover AI image editing.
+  const playgroundMode =
     typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("demo") === "on";
+    new URLSearchParams(window.location.search).get("playground") === "on";
   const initialFiles = React.useMemo(() => {
     if (seedMode === "current-result") {
       return { "state.json": JSON.stringify(createSeededResultUiState()) };
@@ -332,7 +332,7 @@ export const BloomHostHarness: React.FC = () => {
           // "Image to Edit" and the editor opens on "Create an Image".
           selectedBookImageId: seedMode === "empty-slot" ? "book-image-5" : "book-image-3",
           showDeveloperTools,
-          demoOnly,
+          playgroundMode,
         },
         initialFiles,
         onCommit(replacements) {
@@ -346,7 +346,7 @@ export const BloomHostHarness: React.FC = () => {
           setReadyCount((count) => count + 1);
         },
       }),
-    [initialFiles, historyImages, showDeveloperTools, demoOnly, seedMode],
+    [initialFiles, historyImages, showDeveloperTools, playgroundMode, seedMode],
   );
 
   React.useEffect(() => {

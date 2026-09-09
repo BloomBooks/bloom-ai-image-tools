@@ -119,7 +119,7 @@ export interface IBloomHostInitPayload {
    *  Playground/template book opens the editor anyway). The user can then look around
    *  the editor, but every tool that would call OpenRouter is disabled, as is the
    *  OpenRouter credential UI. The host sends no apiKey in this case either. */
-  demoOnly?: boolean;
+  playgroundMode?: boolean;
   /** When true, the editor exposes developer-only affordances — currently the
    *  "Local Dummy (No AI)" model, a free deterministic engine offered on every
    *  tool for exercising edit flows without an AI call. The host sends true

@@ -36,8 +36,11 @@ import {
   getDefaultAspectRatioValue,
   resolveAspectRatioValue,
 } from "../../lib/aspectRatios";
-import { canUseLocalDummyModelWithoutApiKey } from "../../lib/localModels";
-import { getReferenceConstraints, toolRequiresEditImage } from "../../lib/toolHelpers";
+import {
+  getReferenceConstraints,
+  toolRequiresEditImage,
+  toolRunCallsOpenRouter,
+} from "../../lib/toolHelpers";
 import {
   getEstimatedCostPerImageUsd,
   getModelInfoById,
@@ -126,6 +129,9 @@ interface ToolPanelProps {
    *  the Upscale selector's "Auto" option. */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
+  /** Demo session: the tools are all on show, but the ones that would spend money
+   *  cannot be run. */
+  demoOnly?: boolean;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
   measuredStatsByKey: Record<string, MeasuredStats>;
@@ -432,6 +438,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   targetImageMime,
   targetImageSuggestedTarget,
   isAuthenticated,
+  demoOnly = false,
   modelByTool,
   reasoningByTool,
   measuredStatsByKey,
@@ -979,10 +986,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     // PLAN-batch-processing.md): the ticked images stand in for a single target
     // image, so the usual "needs a target image" gate doesn't apply.
     const isBatchModeForTool = batchTickedCount > 0 && !!tool.allowBatch;
-    const requiresOpenRouter =
-      tool.id !== "remove_background" &&
-      !tool.localOnly &&
-      !canUseLocalDummyModelWithoutApiKey(resolveToolModelId(tool, modelByTool));
+    const requiresOpenRouter = toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool));
+    const blockedByDemo = demoOnly && requiresOpenRouter;
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage && !isBatchModeForTool;
@@ -990,17 +995,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const requiresDescriptionOrReference =
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
-    const submitDisabledReason = needsTarget
-      ? "Add an image to edit"
-      : needsReference
-        ? "Add reference image"
-        : requiresDescriptionOrReference
-          ? "Add a description or reference image"
-          : missingRequired
-            ? "Fill in required fields"
-            : undefined;
+    const submitDisabledReason = blockedByDemo
+      ? "Not available in this demo"
+      : needsTarget
+        ? "Add an image to edit"
+        : needsReference
+          ? "Add reference image"
+          : requiresDescriptionOrReference
+            ? "Add a description or reference image"
+            : missingRequired
+              ? "Fill in required fields"
+              : undefined;
     const isSubmitDisabled =
       isProcessing ||
+      blockedByDemo ||
       (requiresOpenRouter && !isAuthenticated) ||
       needsTarget ||
       needsReference ||

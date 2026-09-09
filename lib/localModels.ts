@@ -36,20 +36,6 @@ export const setHostDeveloperToolsEnabled = (enabled: boolean | null) => {
   hostDeveloperToolsPreference = enabled;
 };
 
-// A host may open the editor in demo mode (Bloom does when the collection's
-// subscription does not cover AI image editing). The local dummy is then the only
-// model on offer: it is free, it never calls OpenRouter, and its output is visibly
-// a test image. The hosted shell sets this from IBloomHostInitPayload.demoOnly on
-// every init.
-let demoModelOnly = false;
-
-export const setDemoModelOnly = (enabled: boolean) => {
-  demoModelOnly = enabled;
-};
-
-/** Whether the host has limited this session to the demo (local dummy) model. */
-export const isDemoModelOnly = () => demoModelOnly;
-
 /**
  * Whether the local dummy model should be offered in tool model pickers.
  * The dummy runs entirely in-browser but stays localhost-only regardless;
@@ -58,11 +44,6 @@ export const isDemoModelOnly = () => demoModelOnly;
 export const isLocalDummyModelOffered = (hostname = getRuntimeHostname()) => {
   if (!isLocalhostHostname(hostname)) {
     return false;
-  }
-  // In demo mode it is the only model there is, so it is offered whatever the host
-  // says about developer tools.
-  if (demoModelOnly) {
-    return true;
   }
   return hostDeveloperToolsPreference ?? true;
 };

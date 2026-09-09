@@ -1,6 +1,7 @@
 import { ToolDefinition, ToolParams } from "../types";
 import { TOOLS } from "../components/tools/tools-registry";
 import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "./aspectRatios";
+import { LOCAL_DUMMY_MODEL_ID } from "./localModels";
 
 export type ReferenceMode = ToolDefinition["referenceImages"];
 
@@ -93,3 +94,17 @@ export const toolRequiresReferenceImage = (tool: ToolDefinition | null): boolean
 
 export const toolSupportsBatch = (tool: ToolDefinition | null | undefined): boolean =>
   Boolean(tool?.allowBatch);
+
+/**
+ * Whether running this tool on this model would send a request to OpenRouter, and so
+ * cost the user money. False for the tools that run in the browser (background removal,
+ * PDF import) and for the local dummy model.
+ */
+export const toolRunCallsOpenRouter = (
+  tool: ToolDefinition | null | undefined,
+  modelId: string | null | undefined,
+): boolean => {
+  if (!tool) return false;
+  if (tool.id === "remove_background" || tool.localOnly) return false;
+  return (modelId || "").trim() !== LOCAL_DUMMY_MODEL_ID;
+};

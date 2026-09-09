@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { TOOLS } from "../../components/tools/tools-registry";
-import { getRequestedAspectRatioValue, getRequestedImageSizeValue } from "../toolHelpers";
+import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
+import {
+  getRequestedAspectRatioValue,
+  getRequestedImageSizeValue,
+  toolRunCallsOpenRouter,
+} from "../toolHelpers";
 
 describe("tool aspect ratio defaults", () => {
   it("inherits the target image shape for edit tools without a shape picker", () => {
@@ -59,5 +64,30 @@ describe("tool aspect ratio defaults", () => {
     expect(
       getRequestedImageSizeValue(extractCastTool ?? null, {}, { width: 1500, height: 1237 }),
     ).toBeUndefined();
+  });
+});
+
+describe("which runs would spend money", () => {
+  const getTool = (id: string) => TOOLS.find((tool) => tool.id === id) ?? null;
+
+  it("counts a normal tool on a catalog model", () => {
+    expect(
+      toolRunCallsOpenRouter(
+        getTool("apply_localized_characters"),
+        "google/gemini-3.1-flash-image",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not count the browser-only tools or the local dummy model", () => {
+    expect(
+      toolRunCallsOpenRouter(getTool("remove_background"), "google/gemini-3.1-flash-image"),
+    ).toBe(false);
+    expect(toolRunCallsOpenRouter(getTool("pdf_to_images"), "google/gemini-3.1-flash-image")).toBe(
+      false,
+    );
+    expect(
+      toolRunCallsOpenRouter(getTool("apply_localized_characters"), LOCAL_DUMMY_MODEL_ID),
+    ).toBe(false);
   });
 });

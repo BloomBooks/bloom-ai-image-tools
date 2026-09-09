@@ -452,6 +452,9 @@ interface ImageToolsPanelBar {
   /** Batch runner entry point (PLAN-batch-processing.md WP4), used instead of
    *  onApplyTool whenever one or more book images are ticked. */
   onApplyBatchTool: (toolId: string, params: Record<string, string>) => void;
+  /** Demo session: passed on to the tools, which then refuse to run anything that
+   *  would cost money. */
+  demoOnly?: boolean;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
@@ -540,6 +543,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   selectedArtStyleId,
   onApplyTool,
   onApplyBatchTool,
+  demoOnly = false,
   onCancelProcessing,
   onToolSelect,
   onParamChange,
@@ -808,6 +812,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             targetImageMime={targetImage?.sourceMime}
             targetImageSuggestedTarget={targetImage?.suggestedTarget ?? null}
             isAuthenticated={appState.isAuthenticated}
+            demoOnly={demoOnly}
             modelByTool={modelByTool}
             reasoningByTool={reasoningByTool}
             measuredStatsByKey={measuredStatsByKey}

@@ -83,6 +83,7 @@ import {
 import {
   getReferenceConstraints,
   getToolReferenceMode,
+  toolRunCallsOpenRouter,
   toolSupportsBatch,
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
@@ -335,11 +336,9 @@ export interface ImageToolsWorkspaceProps {
    *  clear it. Changes are reported via onCredentialsChange so the host can persist them
    *  (the editor itself never persists the key when hosted). */
   initialApiKey?: string | null;
-  /** Demo context (a host without a subscription for AI image editing): the user may
-   *  use an already-supplied key but must not set, change, or clear OpenRouter
-   *  credentials. The matching model restriction -- only the local dummy is offered --
-   *  is set by the hosted shell through setDemoModelOnly(), since the model catalog is
-   *  consulted outside this component too. */
+  /** Demo session (a host without a subscription for AI image editing): the whole
+   *  editor is on show, but nothing that would call OpenRouter can be run, and the
+   *  OpenRouter credentials cannot be set, changed, or cleared. */
   demoOnly?: boolean;
   bookImageUrls?: string[];
   bookImages?: Array<{
@@ -1261,6 +1260,9 @@ export function ImageToolsWorkspace({
     if (
       isHydrated &&
       !effectiveApiKey &&
+      // A demo session has no connection to offer, so the invitation to make one
+      // would be a dead end.
+      !demoOnly &&
       !canUseSelectedModelWithoutApiKey &&
       !hasShownWelcomeRef.current &&
       !shouldSkipWelcomeDialog &&
@@ -1269,7 +1271,7 @@ export function ImageToolsWorkspace({
       hasShownWelcomeRef.current = true;
       setIsWelcomeDialogOpen(true);
     }
-  }, [isHydrated, effectiveApiKey, canUseSelectedModelWithoutApiKey]);
+  }, [isHydrated, effectiveApiKey, demoOnly, canUseSelectedModelWithoutApiKey]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -2379,6 +2381,12 @@ export function ImageToolsWorkspace({
     // the tool's first recommended model.
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
+    // A demo session shows the tools but never spends money on one. The button for
+    // such a tool is disabled, so this catches the other ways a form gets submitted.
+    if (demoOnly && toolRunCallsOpenRouter(tool, toolModel?.id)) {
+      return;
+    }
+
     const requiresEditImage = tool.editImage !== false;
     const targetImage =
       requiresEditImage && state.targetImageId
@@ -3013,6 +3021,9 @@ export function ImageToolsWorkspace({
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool || !toolSupportsBatch(tool)) return;
     if (state.isProcessing) return;
+    if (demoOnly && toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool))) {
+      return;
+    }
 
     // Book-strip order, not Set insertion order.
     const orderedIncomingIds = bookImageSlotIds.filter((id) => batchTickedIds.has(id));
@@ -4461,6 +4472,7 @@ export function ImageToolsWorkspace({
             onVisibleStripItemIdsChange={handleVisibleStripItemIdsChange}
             onApplyTool={handleApplyTool}
             onApplyBatchTool={handleApplyBatchTool}
+            demoOnly={demoOnly}
             onCancelProcessing={handleCancelProcessing}
             onToolSelect={handleToolSelectWithConstraints}
             onParamChange={handleParamChange}

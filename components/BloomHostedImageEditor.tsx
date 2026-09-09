@@ -31,7 +31,7 @@ import {
   IBloomHostInitPayload,
 } from "../services/host/BloomHostBridge";
 import { ImageToolsWorkspace } from "./ImageToolsWorkspace";
-import { setDemoModelOnly, setHostDeveloperToolsEnabled } from "../lib/localModels";
+import { setHostDeveloperToolsEnabled } from "../lib/localModels";
 import { theme } from "../themes";
 
 interface BloomHostedImageEditorProps {
@@ -72,8 +72,6 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       // Hosted mode: the host's verdict (absent = false) decides whether
       // developer-only affordances like the local dummy model are offered.
       setHostDeveloperToolsEnabled(Boolean(payload.showDeveloperTools));
-      // Demo mode limits every tool to the local dummy model.
-      setDemoModelOnly(Boolean(payload.demoOnly));
       setInitPayload(payload);
       setStatus(``);
       //setStatus(`Connected to ${payload.book.title}`);

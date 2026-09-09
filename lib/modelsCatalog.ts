@@ -3,9 +3,7 @@ import modelCatalogText from "../data/models-registry.json5";
 import type { MeasuredStats, ModelInfo, ModelReasoningLevel, ToolDefinition } from "../types";
 import {
   canUseLocalDummyModelWithoutApiKey,
-  isDemoModelOnly,
   isLocalDummyModelOffered,
-  LOCAL_DUMMY_MODEL,
   LOCAL_DUMMY_MODEL_ID,
   withLocalModels,
 } from "./localModels";
@@ -33,11 +31,6 @@ export const DEFAULT_MODEL: ModelInfo | null =
 export const getModelInfoById = (modelId: string | null | undefined) => {
   const id = (modelId || "").trim();
   if (!id) return null;
-  // The catalog only carries the demo model on localhost (see withLocalModels), but a
-  // demo session runs on it wherever it is served from, so resolve it directly.
-  if (id === LOCAL_DUMMY_MODEL_ID && isDemoModelOnly()) {
-    return LOCAL_DUMMY_MODEL;
-  }
   return MODEL_CATALOG.find((model) => model.id === id) || null;
 };
 
@@ -121,10 +114,6 @@ const DEFAULT_TOOL_MODEL_IDS = MODEL_CATALOG.filter(
 // order and limited to ids that exist in the catalog. Unordered with respect to
 // recommendations — getToolModelOptions applies the default-first ordering.
 const getAllowedModelIds = (tool: ToolDefinition): string[] => {
-  // Demo mode: the dummy model is the only option any tool has.
-  if (isDemoModelOnly()) {
-    return [LOCAL_DUMMY_MODEL_ID];
-  }
   const base = tool.modelIds?.length ? tool.modelIds : DEFAULT_TOOL_MODEL_IDS;
   const disallowed = new Set(tool.disallowedModelIds ?? []);
   const seen = new Set<string>();
@@ -198,10 +187,6 @@ export const resolveToolModelId = (
   }
   if (optionIds.length) {
     return optionIds[0];
-  }
-  // A tool with no options must not fall back to a paid model in demo mode.
-  if (isDemoModelOnly()) {
-    return LOCAL_DUMMY_MODEL_ID;
   }
   return DEFAULT_MODEL?.id ?? "";
 };

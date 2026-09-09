@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/watercolor-dream-BQY7NkL7.png`;export{e as t};

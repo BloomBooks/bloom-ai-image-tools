@@ -1,5 +1,16 @@
 # bloom-ai-image-tools
 
+## 0.1.10
+
+### Patch Changes
+
+- [`9dcbfb9`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/9dcbfb9a70581be652c33b6209e64f8ba8b0c3d7) Thanks [@hatton](https://github.com/hatton)! - Rename `IBloomHostInitPayload.demoOnly` to `playgroundMode`, and tell a playground session
+  what it can do. On opening, a dialog says "In the playground mode you can look around but
+  you can't yet use the AI image generators."; the offer to connect an OpenRouter account is
+  gone, since this session cannot use one. Tools whose run would reach OpenRouter stay
+  disabled, with "Not available in playground mode" as the reason. The dev harness flag is
+  now `?playground=on`.
+
 ## 0.1.9
 
 ### Patch Changes

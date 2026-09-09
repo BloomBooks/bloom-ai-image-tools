@@ -335,8 +335,11 @@ export interface ImageToolsWorkspaceProps {
    *  clear it. Changes are reported via onCredentialsChange so the host can persist them
    *  (the editor itself never persists the key when hosted). */
   initialApiKey?: string | null;
-  /** Demo context (e.g. a Bloom Playground/template book): the user may use an
-   *  already-supplied key but must not set, change, or clear OpenRouter credentials. */
+  /** Demo context (a host without a subscription for AI image editing): the user may
+   *  use an already-supplied key but must not set, change, or clear OpenRouter
+   *  credentials. The matching model restriction -- only the local dummy is offered --
+   *  is set by the hosted shell through setDemoModelOnly(), since the model catalog is
+   *  consulted outside this component too. */
   demoOnly?: boolean;
   bookImageUrls?: string[];
   bookImages?: Array<{

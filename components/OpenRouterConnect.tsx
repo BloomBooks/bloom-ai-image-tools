@@ -219,7 +219,8 @@ export function OpenRouterConnect({
 
       {demoOnly && (
         <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
-          This is a demo book, so the OpenRouter connection can't be changed here.
+          This is a demo session, limited to the demo model, so there is no OpenRouter connection to
+          make here.
         </Typography>
       )}
 

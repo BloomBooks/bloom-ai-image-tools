@@ -115,8 +115,11 @@ export interface IBloomHostInitPayload {
   references: IBloomHostReferenceImage[];
   apiKey?: string | null;
   openRouterUser?: string | null;
-  /** When true (a Bloom Playground/template book), the editor opens in a shared
-   *  "demo" context and must disable its OpenRouter credential-setting UI. */
+  /** When true, the host has no subscription covering AI image editing (a Bloom
+   *  Playground/template book opens the editor anyway). The editor then offers only
+   *  the demo model -- the free local dummy, which never calls OpenRouter -- and
+   *  disables its OpenRouter credential-setting UI. The host sends no apiKey in this
+   *  case, so a real model could not run even if one were chosen. */
   demoOnly?: boolean;
   /** When true, the editor exposes developer-only affordances — currently the
    *  "Local Dummy (No AI)" model, a free deterministic engine offered on every

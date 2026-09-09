@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { TOOLS } from "../../components/tools/tools-registry";
 import {
   buildMeasuredStatKey,
@@ -9,6 +9,7 @@ import {
   resolveToolModelId,
   resolveToolReasoningLevel,
 } from "../modelsCatalog";
+import { LOCAL_DUMMY_MODEL_ID, setDemoModelOnly } from "../localModels";
 import type { ToolDefinition } from "../../types";
 
 const GEMINI_FLASH = "google/gemini-3.1-flash-image";
@@ -97,5 +98,26 @@ describe("measured stats lookup", () => {
     expect(
       getMeasuredStats("generate_image", GPT54_IMAGE_2, "default", "2k", undefined),
     ).toBeNull();
+  });
+});
+
+describe("demo mode", () => {
+  afterEach(() => {
+    // Module-level flag must not leak into the other tests.
+    setDemoModelOnly(false);
+  });
+
+  it("offers only the demo model, whatever the tool would otherwise allow", () => {
+    const tool = getTool("generate_image");
+    expect(
+      getToolModelOptions(tool).map((m) => m.id),
+      "setup: outside demo mode this tool offers the paid models",
+    ).toContain(GEMINI_FLASH);
+
+    setDemoModelOnly(true);
+
+    expect(getToolModelOptions(tool).map((m) => m.id)).toEqual([LOCAL_DUMMY_MODEL_ID]);
+    // A model the user chose in a paid session must not carry into a demo one.
+    expect(resolveToolModelId(tool, { [tool.id]: GEMINI_FLASH })).toBe(LOCAL_DUMMY_MODEL_ID);
   });
 });

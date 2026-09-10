@@ -129,8 +129,7 @@ interface ToolPanelProps {
    *  the Upscale selector's "Auto" option. */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
-  /** Look-around mode: the tools are all on show, but the ones that would spend money
-   *  cannot be run. */
+  /** Look-around mode: the tools are all on show, but none of them can be run. */
   playgroundMode?: boolean;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
@@ -986,8 +985,10 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     // PLAN-batch-processing.md): the ticked images stand in for a single target
     // image, so the usual "needs a target image" gate doesn't apply.
     const isBatchModeForTool = batchTickedCount > 0 && !!tool.allowBatch;
+    // Look-around mode blocks every run; needing an OpenRouter account blocks only the
+    // tools whose run would reach it.
+    const blockedByPlaygroundMode = !!playgroundMode;
     const requiresOpenRouter = toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool));
-    const blockedByPlaygroundMode = playgroundMode && requiresOpenRouter;
     const referenceConstraints = getReferenceConstraints(tool.referenceImages);
     const needsReference = referenceConstraints.min > referenceImageCount;
     const needsTarget = toolRequiresEditImage(tool) && !hasTargetImage && !isBatchModeForTool;

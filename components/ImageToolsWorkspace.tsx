@@ -84,7 +84,6 @@ import {
 import {
   getReferenceConstraints,
   getToolReferenceMode,
-  toolRunCallsOpenRouter,
   toolSupportsBatch,
 } from "../lib/toolHelpers";
 import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
@@ -2381,6 +2380,11 @@ export function ImageToolsWorkspace({
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool) return;
 
+    // Look-around mode shows every tool but runs none of them, whether or not the run
+    // would cost anything. Their buttons are disabled, so this catches the other ways a
+    // form gets submitted.
+    if (playgroundMode) return;
+
     if (tool.localOnly && tool.id === "pdf_to_images") {
       await runPdfToImages(params);
       return;
@@ -2389,12 +2393,6 @@ export function ImageToolsWorkspace({
     // Each tool runs on its own selected model (see modelByTool), defaulting to
     // the tool's first recommended model.
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
-
-    // Look-around mode shows the tools but never spends money on one. The button for
-    // such a tool is disabled, so this catches the other ways a form gets submitted.
-    if (playgroundMode && toolRunCallsOpenRouter(tool, toolModel?.id)) {
-      return;
-    }
 
     const requiresEditImage = tool.editImage !== false;
     const targetImage =
@@ -3030,9 +3028,7 @@ export function ImageToolsWorkspace({
     const tool = TOOLS.find((t) => t.id === toolId);
     if (!tool || !toolSupportsBatch(tool)) return;
     if (state.isProcessing) return;
-    if (playgroundMode && toolRunCallsOpenRouter(tool, resolveToolModelId(tool, modelByTool))) {
-      return;
-    }
+    if (playgroundMode) return;
 
     // Book-strip order, not Set insertion order.
     const orderedIncomingIds = bookImageSlotIds.filter((id) => batchTickedIds.has(id));

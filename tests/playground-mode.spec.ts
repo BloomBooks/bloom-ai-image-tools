@@ -1,9 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { resetImageToolsPersistence } from "./playwright_helpers";
 
-// A host without a subscription for AI image editing opens the editor in playground mode
-// (IBloomHostInitPayload.playgroundMode; the harness takes ?playground=on). Everything is
-// on show, but no tool that would spend money at OpenRouter can be run.
+// A host without a subscription for AI image editing, or with a Playground book, opens the
+// editor in look-around mode (IBloomHostInitPayload.playgroundMode; the harness takes
+// ?playground=on). Everything is on show, but no tool can be run, costly or not.
 const PLAYGROUND_ROUTE = "/?mode=bloom-harness&playground=on";
 
 test.describe("playground mode", () => {
@@ -30,7 +30,7 @@ test.describe("playground mode", () => {
     await expect(page.getByTestId("openrouter-connect-cta")).toHaveCount(0);
   });
 
-  test("a tool that would call OpenRouter cannot be run, and says why", async ({ page }) => {
+  test("an AI tool cannot be run, and says why", async ({ page }) => {
     await page.getByRole("button", { name: /Enhance/i }).click();
     await page.getByText("Custom Edit", { exact: true }).click();
     await page.getByTestId("input-prompt").fill("brighten it");
@@ -40,12 +40,21 @@ test.describe("playground mode", () => {
     await expect(applyButton).toHaveAttribute("title", "Not available in look-around mode");
   });
 
-  test("a tool that runs in the browser is still usable", async ({ page }) => {
+  test("a tool that runs in the browser cannot be run either", async ({ page }) => {
     await page.getByRole("button", { name: /Games/i }).click();
     await page.getByText("Remove Background", { exact: true }).click();
 
-    await expect(
-      page.getByRole("button", { name: /Remove Background|Apply Changes/i }).last(),
-    ).toBeEnabled();
+    const runButton = page.getByRole("button", { name: /Remove Background|Apply Changes/i }).last();
+    await expect(runButton).toBeDisabled();
+    await expect(runButton).toHaveAttribute("title", "Not available in look-around mode");
+  });
+
+  test("PDF to Images, which needs no AI at all, cannot be run either", async ({ page }) => {
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByText("PDF to Images", { exact: true }).click();
+
+    const chooseButton = page.getByRole("button", { name: /Choose PDF/i }).last();
+    await expect(chooseButton).toBeDisabled();
+    await expect(chooseButton).toHaveAttribute("title", "Not available in look-around mode");
   });
 });

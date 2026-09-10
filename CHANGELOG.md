@@ -1,5 +1,14 @@
 # bloom-ai-image-tools
 
+## 0.1.11
+
+### Patch Changes
+
+- [`6cbb040`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/6cbb04082710e69a10b01e22e81841eb557fbeb0) Thanks [@hatton](https://github.com/hatton)! - Call the mode "look-around" wherever a user sees it, and say what it would take to leave it:
+  the opening dialog now reads "This tool is in "look-around" mode. To actually edit or create
+  images, you will need a subscription and a book that is not based on the "Playground"
+  template.", and a blocked tool's reason is "Not available in look-around mode".
+
 ## 0.1.10
 
 ### Patch Changes

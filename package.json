@@ -1,6 +1,6 @@
 {
   "name": "bloom-ai-image-tools",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": false,
   "files": [
     "dist",

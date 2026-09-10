@@ -470,6 +470,8 @@ interface ImageToolsPanelBar {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   onUseCurrentResult: () => void;
+  /** True when the workspace has a book slot to put the current result into. */
+  canUseCurrentResult?: boolean;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
   onCancel?: () => void;
@@ -559,6 +561,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onClearRight,
   onUploadRight,
   onUseCurrentResult,
+  canUseCurrentResult = false,
   currentResultActionLabel,
   currentResultActionTestId,
   onCancel,
@@ -933,6 +936,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onClearRight={onClearRight}
               onUploadRight={onUploadRight}
               onUseCurrentResult={onUseCurrentResult}
+              canUseCurrentResult={canUseCurrentResult}
               currentResultActionLabel={currentResultActionLabel}
               currentResultActionTestId={currentResultActionTestId}
               onCancel={onCancel}

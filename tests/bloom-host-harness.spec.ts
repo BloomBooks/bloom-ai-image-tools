@@ -271,6 +271,55 @@ test.describe("Bloom host harness", () => {
     await expect(payload).toContainText('"credits": null');
   });
 
+  test("a history image commits into the slot the editor was launched on", async ({ page }) => {
+    // BL-16795: the user opens the editor on a placeholder, picks an image out of
+    // History (it lands in the Result pane) and clicks "Use this Image", expecting
+    // the placeholder to become that image. A history image carries no slot of its
+    // own, so the button used not to appear at all -- leaving only "Cancel" in that
+    // corner of the pane, which closes the editor having changed nothing.
+    await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
+    await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+
+    await page.getByTestId("thumbnail-tab-history").click();
+    // history-edit-1 is a DEMO_HISTORY entry whose sidecar has no incomingSlotId.
+    await page.locator('[data-strip-item-id="history-edit-1"]').click();
+
+    const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
+    await expect(commitCurrentButton).toBeVisible();
+    await commitCurrentButton.click();
+
+    const payload = page.getByTestId("bloom-harness-commit-payload");
+    // book-image-5 is the harness's empty placeholder slot, the one we launched on.
+    await expect(payload).toContainText('"incomingId": "book-image-5"');
+    // Its bytes already live at history/<id>.png, so it goes over as a resultId.
+    await expect(payload).toContainText('"resultId": "history-edit-1"');
+  });
+
+  test("a history image saved against another page still commits to the current one", async ({
+    page,
+  }) => {
+    // The other half of BL-16795: a history image generated in an earlier session
+    // remembers the slot it was made for. Honoring that stored id sent the picture
+    // to a different page of the book -- so the page the user was actually looking
+    // at stayed unchanged, which is what the bug report described.
+    await resetImageToolsPersistence(page, SEEDED_CURRENT_RESULT_ROUTE);
+    await page.goto(SEEDED_CURRENT_RESULT_ROUTE);
+    await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+
+    await page.getByTestId("thumbnail-tab-history").click();
+    // This seeded history image's sidecar says incomingSlotId: book-image-1, while
+    // the harness launches the editor on book-image-3.
+    await page.locator('[data-strip-item-id="history-seeded-result-1"]').click();
+
+    const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
+    await expect(commitCurrentButton).toBeVisible();
+    await commitCurrentButton.click();
+
+    const payload = page.getByTestId("bloom-harness-commit-payload");
+    await expect(payload).toContainText('"incomingId": "book-image-3"');
+    await expect(payload).not.toContainText("book-image-1");
+  });
+
   test("hides the dummy model when the host does not enable developer tools", async ({ page }) => {
     // A host that is NOT in developer mode (init without showDeveloperTools —
     // simulated via ?devtools=off) must not offer the "Local Dummy (No AI)"

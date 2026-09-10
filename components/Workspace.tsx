@@ -129,6 +129,10 @@ interface WorkspaceProps {
   onClearRight: () => void;
   onUploadRight: (file: File) => void;
   onUseCurrentResult?: () => void;
+  /** Whether the action is offered at all. The pane cannot work this out from
+   *  the image it is showing: which book slot the image goes into is the
+   *  workspace's call (see `currentResultDestinationSlotId`). */
+  canUseCurrentResult?: boolean;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
   /** When provided (e.g. in Bloom host mode), a "Cancel" button is shown in the
@@ -173,6 +177,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   onClearRight,
   onUploadRight,
   onUseCurrentResult,
+  canUseCurrentResult = false,
   currentResultActionLabel,
   currentResultActionTestId,
   onCancel,
@@ -262,9 +267,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     dropLabel: "",
   }));
 
-  const currentResultItem = resultImages[0] ?? rightImage;
   const resultActionButton =
-    currentResultItem?.incomingSlotId && onUseCurrentResult ? (
+    canUseCurrentResult && onUseCurrentResult ? (
       <Button
         type="button"
         variant="contained"

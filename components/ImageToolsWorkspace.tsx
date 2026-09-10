@@ -373,7 +373,11 @@ export interface ImageToolsWorkspaceProps {
     authMethod: "oauth" | "manual" | null;
     openRouterUser?: string | null;
   }) => void;
-  onCommitCurrentResult?: (item: ImageRecord) => void;
+  /** Commit the image the Result pane is showing into a book slot. The slot is
+   *  decided here (see `currentResultDestinationSlotId`) and passed explicitly:
+   *  the item's own `incomingSlotId` says which slot it was *made* for, which is
+   *  another page entirely for an image the user picked out of history (BL-16795). */
+  onCommitCurrentResult?: (item: ImageRecord, incomingSlotId: string) => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
   /** When provided (e.g. in Bloom host mode), shows a "Cancel" button beside the
@@ -4098,22 +4102,76 @@ export function ImageToolsWorkspace({
     [replacementItemsByIncomingId],
   );
 
+  /**
+   * The book slot the Result pane's action ("Use this Image") puts its image
+   * into. An image only knows which slot it was *made* for; the user can put
+   * anything in that pane, including a history image saved months ago against
+   * some other page, and honoring that stored id sent the picture to the wrong
+   * place — or to a slot this book no longer has, which looked to the user like
+   * "the editor won't let me use it" (BL-16795). So we ask instead: which slot
+   * is this image already tied to *in this session*, and failing that, which
+   * slot is the user working on?
+   */
+  const currentResultDestinationSlotId = useMemo(() => {
+    if (!currentResultItem) {
+      return undefined;
+    }
+
+    // Fresh out of a run: it belongs to the slot that run was for.
+    if (resultItems.length && currentResultItem.incomingSlotId) {
+      return currentResultItem.incomingSlotId;
+    }
+
+    // A book image itself (e.g. inspected mid-batch) belongs to its own slot.
+    if (bookImageSlotIds.includes(currentResultItem.id)) {
+      return currentResultItem.id;
+    }
+
+    // Assigned as some slot's replacement during this session (the batch
+    // inspector shows those in the Result pane).
+    const assignedTo = Object.entries(replacementImageIdByIncomingId).find(
+      ([, replacementId]) => replacementId === currentResultItem.id,
+    )?.[0];
+    if (assignedTo) {
+      return assignedTo;
+    }
+
+    // Otherwise the user picked this image out of a strip: it goes where they
+    // are working — the book image in "Image to Edit", or the empty slot the
+    // host launched us on when there is nothing to edit.
+    return resolveIncomingSlotId(targetImage) ?? undefined;
+  }, [
+    bookImageSlotIds,
+    currentResultItem,
+    replacementImageIdByIncomingId,
+    resolveIncomingSlotId,
+    resultItems.length,
+    targetImage,
+  ]);
+
+  const canUseCurrentResult = !!currentResultDestinationSlotId && !!currentResultItem?.imageData;
+
   const handleUseCurrentResult = useCallback(() => {
+    if (!currentResultItem || !currentResultDestinationSlotId) {
+      return;
+    }
+
     if (onCommitCurrentResult) {
-      if (!currentResultItem?.incomingSlotId || !currentResultItem.imageData) {
+      if (!currentResultItem.imageData) {
         return;
       }
 
-      onCommitCurrentResult(currentResultItem);
+      onCommitCurrentResult(currentResultItem, currentResultDestinationSlotId);
       return;
     }
 
-    if (!currentResultItem?.incomingSlotId) {
-      return;
-    }
-
-    handleAssignReplacement(currentResultItem.incomingSlotId, currentResultItem.id);
-  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult]);
+    handleAssignReplacement(currentResultDestinationSlotId, currentResultItem.id);
+  }, [
+    currentResultDestinationSlotId,
+    currentResultItem,
+    handleAssignReplacement,
+    onCommitCurrentResult,
+  ]);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -4496,6 +4554,7 @@ export function ImageToolsWorkspace({
             onClearRight={handleClearRightPanel}
             onUploadRight={handleUploadRight}
             onUseCurrentResult={handleUseCurrentResult}
+            canUseCurrentResult={canUseCurrentResult}
             currentResultActionLabel={currentResultActionLabel}
             currentResultActionTestId={currentResultActionTestId}
             onCancel={onCancel}

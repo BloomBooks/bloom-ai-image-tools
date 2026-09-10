@@ -121,11 +121,10 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
   );
 
   // Build the commit payload for the assigned slots. Image *bytes* never cross the
-  // postMessage bridge: a generated/uploaded result (a base64 data URL) is written
-  // to the per-book history folder over the binary HTTP file endpoint and referenced
-  // by `resultId`; an image that already has a host-served URL (e.g. another book
-  // image reused as a replacement) is referenced by that `sourceUrl`. Returns null
-  // for items that have neither (nothing to apply).
+  // postMessage bridge: anything living in the book's history folder is referenced by
+  // `resultId` (written there over the binary HTTP file endpoint first, if it isn't
+  // already), and a book image reused as a replacement is referenced by the host-served
+  // `sourceUrl` it came in on. Returns null for an item with no image at all.
   const buildReplacement = React.useCallback(
     async (incomingId: string, item: ImageRecord): Promise<IBloomCommitReplacement | null> => {
       if (item.imageData?.startsWith("data:image/")) {
@@ -135,10 +134,20 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         await bridge.putFile(`history/${item.id}.png`, item.imageData);
         return { incomingId, resultId: item.id, credits: item.credits ?? null };
       }
-      if (item.imageData) {
+      if (!item.imageData) {
+        return null;
+      }
+      // A book image reused as a replacement: the host served that URL out of the
+      // book, so it can resolve it back to a file.
+      if (item.origin === "bookImages" || item.origin === "bookOriginal") {
         return { incomingId, sourceUrl: item.imageData, credits: item.credits ?? null };
       }
-      return null;
+      // Anything else with a URL came from the host's enumeration of
+      // `.ai-image-editor/history/` — its bytes are already sitting at
+      // history/<id>.png, which is exactly what `resultId` means. Referencing them
+      // that way keeps the commit on the documented path instead of asking the host
+      // to resolve a history URL (BL-16795).
+      return { incomingId, resultId: item.id, credits: item.credits ?? null };
     },
     [bridge],
   );
@@ -176,13 +185,13 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
   );
 
   const handleCommitCurrentResult = React.useCallback(
-    async (item: ImageRecord) => {
-      if (!item.incomingSlotId || !item.imageData) {
+    async (item: ImageRecord, incomingSlotId: string) => {
+      if (!incomingSlotId || !item.imageData) {
         return;
       }
 
       try {
-        const replacement = await buildReplacement(item.incomingSlotId, item);
+        const replacement = await buildReplacement(incomingSlotId, item);
         if (!replacement) {
           return;
         }
@@ -280,7 +289,9 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
           openExternalUrl: (url) => bridge.openExternalUrl(url),
         }}
         onReplacementsChange={setReplacementMap}
-        onCommitCurrentResult={(item) => void handleCommitCurrentResult(item)}
+        onCommitCurrentResult={(item, incomingSlotId) =>
+          void handleCommitCurrentResult(item, incomingSlotId)
+        }
         currentResultActionLabel="Use this Image"
         currentResultActionTestId="bloom-host-commit-current-result"
         onCancel={handleCancel}

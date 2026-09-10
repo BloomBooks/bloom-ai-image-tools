@@ -1,5 +1,13 @@
 # bloom-ai-image-tools
 
+## 0.1.12
+
+### Patch Changes
+
+- [`29ce490`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/29ce490f773b1b0b33acbcf8786517069ee34161) Thanks [@hatton](https://github.com/hatton)! - Say the look-around sentence in exactly one place (`LOOK_AROUND_MODE_MESSAGE`), and use it both
+  in the opening notice and where an OpenRouter connection would otherwise be offered, so the two
+  cannot drift and there is one string to translate.
+
 ## 0.1.11
 
 ### Patch Changes

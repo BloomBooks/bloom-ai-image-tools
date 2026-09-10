@@ -129,7 +129,7 @@ interface ToolPanelProps {
    *  the Upscale selector's "Auto" option. */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
-  /** Playground mode: the tools are all on show, but the ones that would spend money
+  /** Look-around mode: the tools are all on show, but the ones that would spend money
    *  cannot be run. */
   playgroundMode?: boolean;
   modelByTool: Record<string, string>;
@@ -996,7 +996,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
     const submitDisabledReason = blockedByPlaygroundMode
-      ? "Not available in playground mode"
+      ? "Not available in look-around mode"
       : needsTarget
         ? "Add an image to edit"
         : needsReference

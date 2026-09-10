@@ -35,7 +35,7 @@ interface OpenRouterConnectProps {
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
   onOpenExternalUrl: (url: string) => void;
-  /** When true (a Bloom Playground book), the AI image generators cannot be used at
+  /** When true, the AI image generators cannot be used at
    *  all, so the OpenRouter credential controls are disabled. */
   playgroundMode?: boolean;
 }
@@ -218,7 +218,7 @@ export function OpenRouterConnect({
 
       {playgroundMode && (
         <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
-          In playground mode the AI image generators cannot be used, so there is no OpenRouter
+          In look-around mode the AI image generators cannot be used, so there is no OpenRouter
           connection to make here.
         </Typography>
       )}

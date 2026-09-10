@@ -1262,7 +1262,7 @@ export function ImageToolsWorkspace({
     if (
       isHydrated &&
       !effectiveApiKey &&
-      // Playground mode has no connection to offer, and says so in its own dialog.
+      // Look-around mode has no connection to offer, and says so in its own dialog.
       !playgroundMode &&
       !canUseSelectedModelWithoutApiKey &&
       !hasShownWelcomeRef.current &&
@@ -1274,7 +1274,7 @@ export function ImageToolsWorkspace({
     }
   }, [isHydrated, effectiveApiKey, playgroundMode, canUseSelectedModelWithoutApiKey]);
 
-  // Playground mode says its own piece instead, once per launch.
+  // Look-around mode says its own piece instead, once per launch.
   useEffect(() => {
     if (isHydrated && playgroundMode && !hasShownWelcomeRef.current) {
       hasShownWelcomeRef.current = true;
@@ -2390,7 +2390,7 @@ export function ImageToolsWorkspace({
     // the tool's first recommended model.
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
-    // Playground mode shows the tools but never spends money on one. The button for
+    // Look-around mode shows the tools but never spends money on one. The button for
     // such a tool is disabled, so this catches the other ways a form gets submitted.
     if (playgroundMode && toolRunCallsOpenRouter(tool, toolModel?.id)) {
       return;
@@ -3583,7 +3583,7 @@ export function ImageToolsWorkspace({
   );
 
   const handleConnect = async () => {
-    // Demo context (e.g. Bloom Playground book): credentials must not be changed.
+    // Look-around mode: credentials must not be changed.
     if (playgroundMode) return;
     try {
       setAuthLoading(true);
@@ -4254,7 +4254,7 @@ export function ImageToolsWorkspace({
       ? theme.colors.danger
       : theme.colors.accent;
 
-  // Playground mode has no connection to offer, so the call to make one is left out.
+  // Look-around mode has no connection to offer, so the call to make one is left out.
   const shouldShowConnectToOpenRouterCTA =
     !playgroundMode && !effectiveApiKey && !canUseSelectedModelWithoutApiKey;
   // A null limit means the connected key has no per-key spending cap; warn near the meter.

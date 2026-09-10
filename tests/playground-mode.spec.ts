@@ -22,7 +22,7 @@ test.describe("playground mode", () => {
     const notice = page.getByTestId("playground-notice-dialog");
     await expect(notice).toBeVisible();
     await expect(notice).toContainText(
-      "In the playground mode you can look around but you can't yet use the AI image generators.",
+      'This tool is in "look-around" mode. To actually edit or create images, you will need a subscription and a book that is not based on the "Playground" template.',
     );
 
     await page.getByTestId("playground-notice-dismiss").click();
@@ -37,7 +37,7 @@ test.describe("playground mode", () => {
 
     const applyButton = page.getByRole("button", { name: "Apply Changes", exact: true });
     await expect(applyButton).toBeDisabled();
-    await expect(applyButton).toHaveAttribute("title", "Not available in playground mode");
+    await expect(applyButton).toHaveAttribute("title", "Not available in look-around mode");
   });
 
   test("a tool that runs in the browser is still usable", async ({ page }) => {

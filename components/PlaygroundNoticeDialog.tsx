@@ -6,7 +6,7 @@ import { theme } from "../themes";
 
 /**
  * What a playground session is told on opening: the editor is here to be looked at, and
- * the AI image generators are not available in it. Shown in place of
+ * what it would take to actually run something. Shown in place of
  * OpenRouterWelcomeDialog, whose offer to connect this session cannot take up.
  */
 interface PlaygroundNoticeDialogProps {
@@ -36,8 +36,9 @@ export function PlaygroundNoticeDialog({ isOpen, onDismiss }: PlaygroundNoticeDi
         <DialogContent sx={{ p: 4 }}>
           <Stack spacing={3}>
             <Typography variant="body1" sx={{ color: theme.colors.textPrimary, lineHeight: 1.7 }}>
-              In the playground mode you can look around but you can&apos;t yet use the AI image
-              generators.
+              This tool is in &quot;look-around&quot; mode. To actually edit or create images, you
+              will need a subscription and a book that is not based on the &quot;Playground&quot;
+              template.
             </Typography>
 
             <Button

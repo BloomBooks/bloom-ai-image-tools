@@ -30,7 +30,7 @@ interface OpenRouterSectionProps {
   onDisconnect: () => void;
   onProvideKey: (key: string) => void;
   onOpenExternalUrl: (url: string) => void;
-  /** Demo context (e.g. Bloom Playground book): credential-setting UI is disabled. */
+  /** Look-around mode: the credential-setting UI is disabled. */
   playgroundMode?: boolean;
 }
 

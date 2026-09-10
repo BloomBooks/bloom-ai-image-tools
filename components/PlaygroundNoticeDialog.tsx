@@ -3,6 +3,7 @@ import { Button, Dialog, DialogContent, Stack, Typography } from "@mui/material"
 import { ThemeProvider } from "@mui/material/styles";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme } from "../themes";
+import { LOOK_AROUND_MODE_MESSAGE } from "../lib/lookAroundMode";
 
 /**
  * What a playground session is told on opening: the editor is here to be looked at, and
@@ -36,9 +37,7 @@ export function PlaygroundNoticeDialog({ isOpen, onDismiss }: PlaygroundNoticeDi
         <DialogContent sx={{ p: 4 }}>
           <Stack spacing={3}>
             <Typography variant="body1" sx={{ color: theme.colors.textPrimary, lineHeight: 1.7 }}>
-              This tool is in &quot;look-around&quot; mode. To actually edit or create images, you
-              will need a subscription and a book that is not based on the &quot;Playground&quot;
-              template.
+              {LOOK_AROUND_MODE_MESSAGE}
             </Typography>
 
             <Button

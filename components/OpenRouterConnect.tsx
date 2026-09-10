@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { theme } from "../themes";
 import { fetchOpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
+import { LOOK_AROUND_MODE_MESSAGE } from "../lib/lookAroundMode";
 import { NoSpendingLimitWarning } from "./NoSpendingLimitWarning";
 
 // NOTE: We previously also supported connecting to OpenRouter via OAuth login.
@@ -218,8 +219,7 @@ export function OpenRouterConnect({
 
       {playgroundMode && (
         <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
-          In look-around mode the AI image generators cannot be used, so there is no OpenRouter
-          connection to make here.
+          {LOOK_AROUND_MODE_MESSAGE}
         </Typography>
       )}
 

@@ -63,6 +63,9 @@ interface ThumbnailStripProps {
   /** Overrides onSelect for the "Current" book image (sends it to the edit
    *  target rather than the Result pane). Falls back to onSelect when absent. */
   onSelectBookImageCurrent?: (id: string) => void;
+  /** Overrides onSelect for a book image's assigned replacement, passing the slot
+   *  it was clicked under. Falls back to onSelect when absent. */
+  onSelectBookImageReplacement?: (incomingId: string, replacementId: string) => void;
   onToggleStar: (id: string) => void;
   onRenameItem?: (id: string, name: string) => void;
   onRemoveItem?: (id: string) => void;
@@ -1332,6 +1335,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   onOpenPreview,
   onSelect,
   onSelectBookImageCurrent,
+  onSelectBookImageReplacement,
   onToggleStar,
   onRenameItem,
   onRemoveItem,
@@ -1608,9 +1612,14 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 onSelect={() => (onSelectBookImageCurrent ?? onSelect)(item.id)}
                 onSelectReplacement={() => {
                   const replacement = replacementItemsByIncomingId[item.id];
-                  if (replacement) {
-                    onSelect(replacement.id);
+                  if (!replacement) {
+                    return;
                   }
+                  if (onSelectBookImageReplacement) {
+                    onSelectBookImageReplacement(item.id, replacement.id);
+                    return;
+                  }
+                  onSelect(replacement.id);
                 }}
                 onToggleStar={() => onToggleStar(item.id)}
                 onRemove={allowRemove ? () => onRemoveItem?.(item.id) : undefined}

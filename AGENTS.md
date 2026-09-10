@@ -2,6 +2,10 @@
 
 Bloom AI Image Tools provides a browser-based workspace for creating and editing images with AI. This repository publishes a component library to NPM and has an example App.
 
+## Issue tracker
+
+This project tracks work in Bloom YouTrack (https://issues.bloomlibrary.org/youtrack). Ticket ids look like `BL-16795`, and branches are named `<TICKET>-<1-3 words>`. Use the `youtrack-api` skill for all tracker operations.
+
 ## Stack
 
 - Package management: pnpm for installs and scripts (do not use npm)

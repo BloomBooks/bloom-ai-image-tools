@@ -373,7 +373,11 @@ export interface ImageToolsWorkspaceProps {
     authMethod: "oauth" | "manual" | null;
     openRouterUser?: string | null;
   }) => void;
-  onCommitCurrentResult?: (item: ImageRecord) => void;
+  /** Commit the image the Result pane is showing into a book slot. The slot is
+   *  decided here (see `currentResultDestinationSlotId`) and passed explicitly:
+   *  the item's own `incomingSlotId` says which slot it was *made* for, which is
+   *  another page entirely for an image the user picked out of history (BL-16795). */
+  onCommitCurrentResult?: (item: ImageRecord, incomingSlotId: string) => void;
   currentResultActionLabel?: string;
   currentResultActionTestId?: string;
   /** When provided (e.g. in Bloom host mode), shows a "Cancel" button beside the
@@ -472,6 +476,10 @@ export function ImageToolsWorkspace({
   // user un-pins via the "Follow latest" chip. Reset to unpinned at the start
   // of every batch run.
   const [isInspectorPinned, setIsInspectorPinned] = useState(false);
+  // Which book slot's pair the user clicked to put the current image in the Result
+  // pane, when they did. One image can stand in for several slots, and then this is
+  // the only thing that says which of them "Use this Image" means.
+  const [inspectedIncomingSlotId, setInspectedIncomingSlotId] = useState<string | null>(null);
   const isInspectorPinnedRef = useRef(false);
   useEffect(() => {
     isInspectorPinnedRef.current = isInspectorPinned;
@@ -596,6 +604,14 @@ export function ImageToolsWorkspace({
       .filter(({ url }) => Boolean(url))
       .map(({ url, index }) => buildBookImageEntry(url as string, index));
   }, [bookImageUrls, bookImages]);
+  // The book slot the host launched the editor on, whether it holds an image or is
+  // an empty placeholder. It is where the user's work belongs when nothing else
+  // says otherwise (see `currentResultDestinationSlotId`).
+  const launchedBookSlotId =
+    selectedBookImageId &&
+    resolvedBookImageEntries.some((entry) => entry.id === selectedBookImageId)
+      ? selectedBookImageId
+      : null;
   const isFolderPersistenceActive = !!fsBinding;
   const historyItemsById = useMemo(() => {
     const entriesById: Record<string, ImageRecord> = {};
@@ -3723,6 +3739,7 @@ export function ImageToolsWorkspace({
 
   const handleSetRightPanel = (id: string) => {
     setResultImageIds([]);
+    setInspectedIncomingSlotId(null);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
   };
 
@@ -3748,6 +3765,7 @@ export function ImageToolsWorkspace({
 
   const handleClearRightPanel = () => {
     setResultImageIds([]);
+    setInspectedIncomingSlotId(null);
     setState((prev) => ({ ...prev, rightPanelImageId: null }));
   };
 
@@ -3877,7 +3895,25 @@ export function ImageToolsWorkspace({
     // a batch run (nothing reads the pin then), and reset to unpinned at the
     // start of every run.
     setIsInspectorPinned(true);
+    // Picked out of a strip, so it stands in for no particular book slot.
+    setInspectedIncomingSlotId(null);
     setState((prev) => ({ ...prev, rightPanelImageId: id }));
+  };
+
+  // Clicking a book slot's assigned replacement in the book-images strip. Unlike a
+  // plain strip click this remembers WHICH slot's replacement was clicked, so
+  // "Use this Image" goes back to that slot even when the same image is standing in
+  // for several of them.
+  const handleSelectBookImageReplacement = (incomingId: string, replacementId: string) => {
+    if (isPreviewModifierActive) {
+      queuePreviewImage(replacementId);
+      return;
+    }
+
+    setResultImageIds([]);
+    setIsInspectorPinned(true);
+    setInspectedIncomingSlotId(incomingId);
+    setState((prev) => ({ ...prev, rightPanelImageId: replacementId }));
   };
 
   // Clicking a "Current" book image normally copies it into the "Image to
@@ -3900,10 +3936,12 @@ export function ImageToolsWorkspace({
       const inspectedId = replacementImageIdByIncomingId[id] || id;
       setResultImageIds([]);
       setIsInspectorPinned(true);
+      setInspectedIncomingSlotId(id);
       setState((prev) => ({ ...prev, rightPanelImageId: inspectedId }));
       return;
     }
 
+    setInspectedIncomingSlotId(null);
     setResultImageIds([]);
     setState((prev) => ({
       ...prev,
@@ -4098,22 +4136,91 @@ export function ImageToolsWorkspace({
     [replacementItemsByIncomingId],
   );
 
+  /**
+   * The book slot the Result pane's action ("Use this Image") puts its image
+   * into. An image only knows which slot it was *made* for; the user can put
+   * anything in that pane, including a history image saved months ago against
+   * some other page, and honoring that stored id sent the picture to the wrong
+   * place — or to a slot this book no longer has, which looked to the user like
+   * "the editor won't let me use it" (BL-16795). So we ask instead: which slot
+   * is this image already tied to *in this session*, and failing that, which
+   * slot is the user working on?
+   */
+  const currentResultDestinationSlotId = useMemo(() => {
+    if (!currentResultItem) {
+      return undefined;
+    }
+
+    // Fresh out of a run: it belongs to the slot that run was for.
+    if (resultItems.length && currentResultItem.incomingSlotId) {
+      return currentResultItem.incomingSlotId;
+    }
+
+    // The user clicked a specific slot's pair in the book-images strip, so we know
+    // exactly which slot this image is standing in for. This outranks everything
+    // below: one image can replace several slots (and can be a book image in its own
+    // right), and only the click says which of them the user meant.
+    if (
+      inspectedIncomingSlotId &&
+      replacementImageIdByIncomingId[inspectedIncomingSlotId] === currentResultItem.id
+    ) {
+      return inspectedIncomingSlotId;
+    }
+
+    // A book image itself (e.g. inspected mid-batch) belongs to its own slot.
+    if (bookImageSlotIds.includes(currentResultItem.id)) {
+      return currentResultItem.id;
+    }
+
+    // Assigned as some slot's replacement during this session. Only when exactly
+    // one slot uses it: one image can replace several slots, and picking the first
+    // of those arbitrarily would silently overwrite a page the user never touched.
+    const assignedTo = Object.entries(replacementImageIdByIncomingId).filter(
+      ([, replacementId]) => replacementId === currentResultItem.id,
+    );
+    if (assignedTo.length === 1) {
+      return assignedTo[0][0];
+    }
+
+    // Otherwise the user picked this image out of a strip: it goes where they are
+    // working -- the book image in "Image to Edit", or failing that the book image
+    // (or empty slot) the host launched us on. The launched slot is the backstop
+    // for a target that belongs to no slot at all, such as one the user uploaded.
+    return resolveIncomingSlotId(targetImage) ?? launchedBookSlotId ?? undefined;
+  }, [
+    bookImageSlotIds,
+    currentResultItem,
+    inspectedIncomingSlotId,
+    launchedBookSlotId,
+    replacementImageIdByIncomingId,
+    resolveIncomingSlotId,
+    resultItems.length,
+    targetImage,
+  ]);
+
+  const canUseCurrentResult = !!currentResultDestinationSlotId && !!currentResultItem?.imageData;
+
   const handleUseCurrentResult = useCallback(() => {
+    if (!currentResultItem || !currentResultDestinationSlotId) {
+      return;
+    }
+
     if (onCommitCurrentResult) {
-      if (!currentResultItem?.incomingSlotId || !currentResultItem.imageData) {
+      if (!currentResultItem.imageData) {
         return;
       }
 
-      onCommitCurrentResult(currentResultItem);
+      onCommitCurrentResult(currentResultItem, currentResultDestinationSlotId);
       return;
     }
 
-    if (!currentResultItem?.incomingSlotId) {
-      return;
-    }
-
-    handleAssignReplacement(currentResultItem.incomingSlotId, currentResultItem.id);
-  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult]);
+    handleAssignReplacement(currentResultDestinationSlotId, currentResultItem.id);
+  }, [
+    currentResultDestinationSlotId,
+    currentResultItem,
+    handleAssignReplacement,
+    onCommitCurrentResult,
+  ]);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -4496,6 +4603,7 @@ export function ImageToolsWorkspace({
             onClearRight={handleClearRightPanel}
             onUploadRight={handleUploadRight}
             onUseCurrentResult={handleUseCurrentResult}
+            canUseCurrentResult={canUseCurrentResult}
             currentResultActionLabel={currentResultActionLabel}
             currentResultActionTestId={currentResultActionTestId}
             onCancel={onCancel}
@@ -4503,6 +4611,7 @@ export function ImageToolsWorkspace({
             cancelActionTestId={cancelActionTestId}
             onSelectHistoryItem={handleSelectHistoryItem}
             onSelectBookImageCurrent={handleSelectBookImageCurrent}
+            onSelectBookImageReplacement={handleSelectBookImageReplacement}
             onToggleHistoryStar={handleToggleHistoryStar}
             onRenameHistoryItem={handleRenameImage}
             onAddCharacterImage={handleAddCharacterImage}

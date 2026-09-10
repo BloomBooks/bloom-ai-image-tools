@@ -1,5 +1,13 @@
 # bloom-ai-image-tools
 
+## 0.1.13
+
+### Patch Changes
+
+- [`c5bc98b`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/c5bc98b38708e4182d3e0fed6347dd3a653ab21c) Thanks [@hatton](https://github.com/hatton)! - Look-around mode now blocks every tool run, not only the ones that would spend money at
+  OpenRouter: "PDF to Images" and "Remove Background", which run entirely in the browser, are
+  disabled there too, with the same "Not available in look-around mode" reason.
+
 ## 0.1.12
 
 ### Patch Changes

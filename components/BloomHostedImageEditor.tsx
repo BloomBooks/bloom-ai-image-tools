@@ -120,6 +120,17 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
     [initPayload?.bookImages],
   );
 
+  // The ids of the book's own images. A record carrying one of these ids IS a live
+  // book image, whose bytes the host serves out of the book; everything else with a
+  // URL was enumerated out of `.ai-image-editor/history/`. Which of the two a record
+  // is decides how it is referenced on commit, and `origin` cannot answer it: an
+  // "original book image" snapshot keeps origin `bookOriginal` while its bytes move
+  // into the history folder on the next launch.
+  const hostBookImageIds = React.useMemo(
+    () => new Set(hostBookImages.map((image) => image.id)),
+    [hostBookImages],
+  );
+
   // Build the commit payload for the assigned slots. Image *bytes* never cross the
   // postMessage bridge: anything living in the book's history folder is referenced by
   // `resultId` (written there over the binary HTTP file endpoint first, if it isn't
@@ -139,7 +150,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       }
       // A book image reused as a replacement: the host served that URL out of the
       // book, so it can resolve it back to a file.
-      if (item.origin === "bookImages" || item.origin === "bookOriginal") {
+      if (hostBookImageIds.has(item.id)) {
         return { incomingId, sourceUrl: item.imageData, credits: item.credits ?? null };
       }
       // Anything else with a URL came from the host's enumeration of
@@ -149,7 +160,7 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
       // to resolve a history URL (BL-16795).
       return { incomingId, resultId: item.id, credits: item.credits ?? null };
     },
-    [bridge],
+    [bridge, hostBookImageIds],
   );
 
   const collectAssignedEntries = React.useCallback(

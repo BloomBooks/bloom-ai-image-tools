@@ -320,6 +320,46 @@ test.describe("Bloom host harness", () => {
     await expect(payload).not.toContainText("book-image-1");
   });
 
+  test("one image standing in for two pages commits to the page that was clicked", async ({
+    page,
+  }) => {
+    // The same picture can be assigned as the replacement for several pages. Clicking
+    // one of those copies puts it in the Result pane, and "Use this Image" must then
+    // replace THAT page -- not whichever page happens to come first in the assignment
+    // map, and not the page the picture itself came from (BL-16795, found by Devin).
+    await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
+
+    const dragCurrentOntoOutgoing = async (fromIncomingId: string, toIncomingId: string) => {
+      const from = page.getByTestId(`book-image-current-slot-${fromIncomingId}`);
+      const to = page.getByTestId(`book-image-outgoing-slot-${toIncomingId}`);
+      const fromBox = await from.boundingBox();
+      const toBox = await to.boundingBox();
+      expect(fromBox).toBeTruthy();
+      expect(toBox).toBeTruthy();
+      if (!fromBox || !toBox) return;
+      await page.mouse.move(fromBox.x + fromBox.width / 2, fromBox.y + fromBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(toBox.x + toBox.width / 2, toBox.y + toBox.height / 2, { steps: 12 });
+      await page.mouse.up();
+      await expect(to.locator("img").first()).toBeVisible();
+    };
+
+    // book-image-1 now stands in for pages 2 and 4.
+    await dragCurrentOntoOutgoing("book-image-1", "book-image-2");
+    await dragCurrentOntoOutgoing("book-image-1", "book-image-4");
+
+    // Click the copy sitting under page 4.
+    await page.getByTestId("book-image-outgoing-slot-book-image-4").locator("img").first().click();
+
+    const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
+    await expect(commitCurrentButton).toBeVisible();
+    await commitCurrentButton.click();
+
+    const payload = page.getByTestId("bloom-harness-commit-payload");
+    await expect(payload).toContainText('"incomingId": "book-image-4"');
+    await expect(payload).not.toContainText('"incomingId": "book-image-2"');
+  });
+
   test("hides the dummy model when the host does not enable developer tools", async ({ page }) => {
     // A host that is NOT in developer mode (init without showDeveloperTools —
     // simulated via ?devtools=off) must not offer the "Local Dummy (No AI)"

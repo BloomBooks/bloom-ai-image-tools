@@ -482,6 +482,7 @@ interface ImageToolsPanelBar {
   /** Clicking a "Current" book image routes here (sets the edit target) instead
    *  of through onSelectHistoryItem (which selects into the Result pane). */
   onSelectBookImageCurrent?: (id: string) => void;
+  onSelectBookImageReplacement?: (incomingId: string, replacementId: string) => void;
   onToggleHistoryStar: (id: string) => void;
   onRenameHistoryItem: (id: string, name: string) => void;
   onAddCharacterImage: (file: File) => void;
@@ -570,6 +571,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   generationProgress,
   onSelectHistoryItem,
   onSelectBookImageCurrent,
+  onSelectBookImageReplacement,
   onToggleHistoryStar,
   onRenameHistoryItem,
   onAddCharacterImage,
@@ -964,6 +966,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               onOpenPreview={onOpenStripPreview}
               onSelect={onSelectHistoryItem}
               onSelectBookImageCurrent={onSelectBookImageCurrent}
+              onSelectBookImageReplacement={onSelectBookImageReplacement}
               onToggleStar={onToggleHistoryStar}
               onRenameItem={onRenameHistoryItem}
               onRemoveFromStrip={onStripRemoveItem}

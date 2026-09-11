@@ -1343,8 +1343,15 @@ export function ImageToolsWorkspace({
       });
     }
 
+    // The gallery opens on a whole strip, not just the part of it that was
+    // scrolled into view, so its images need hydrating too. Without this,
+    // every image past the visible slice of the strip has no bytes and the
+    // gallery shows the "not in storage" placeholder for it.
+    previewDialogImageIdGroups.forEach((group) => group.forEach(addId));
+
     return Array.from(ids);
   }, [
+    previewDialogImageIdGroups,
     replacementImageIdByIncomingId,
     resultImageIds,
     state.referenceImageIds,
@@ -4544,6 +4551,9 @@ export function ImageToolsWorkspace({
           open={previewDialogItems.length > 0}
           items={previewDialogItems}
           layout={previewDialogLayout}
+          resolveSourceImage={(image) =>
+            image.parentId ? (historyItemsById[image.parentId] ?? null) : null
+          }
           onClose={() => {
             setPreviewSelectionImageIds([]);
             setPreviewDialogImageIdGroups([]);

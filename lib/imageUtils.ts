@@ -57,6 +57,39 @@ export const ensureDataUrl = async (source: string): Promise<string> => {
   return blobToBase64(blob);
 };
 
+/**
+ * Decoded byte count of a base64 data URL, or null for anything else. An image
+ * the host serves by URL (Bloom's history folder) has no bytes here to count,
+ * and a guess would be worse than showing nothing.
+ */
+export const getDataUrlByteSize = (dataUrl: string | null | undefined): number | null => {
+  const value = (dataUrl || "").trim();
+  const commaIndex = value.indexOf(",");
+  if (!value.startsWith("data:") || commaIndex < 0) {
+    return null;
+  }
+  if (!/;base64$/i.test(value.slice(0, commaIndex))) {
+    return null;
+  }
+  const base64 = value.slice(commaIndex + 1);
+  if (!base64) return 0;
+  // Every 4 base64 characters carry 3 bytes, less one byte per "=" of padding.
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+};
+
+/**
+ * Byte count as megabytes for a metadata line, e.g. "1.4 MB". Anything under
+ * a tenth of a megabyte keeps two decimals rather than reading "0.0 MB".
+ */
+export const formatMegabytes = (bytes: number | null | undefined): string | null => {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
+    return null;
+  }
+  const megabytes = bytes / (1024 * 1024);
+  return `${megabytes.toFixed(megabytes < 0.1 ? 2 : 1)} MB`;
+};
+
 export const getMimeTypeFromUrl = (dataUrl: string | null | undefined): string | null => {
   if (!dataUrl) return null;
   const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);/i);

@@ -54,7 +54,8 @@ import {
   resolveUpscaleTarget,
   type UpscaleHostTarget,
 } from "../../lib/upscale";
-import { ToolModelPicker, formatCost } from "./ToolModelPicker";
+import { ToolModelPicker } from "./ToolModelPicker";
+import { formatCost } from "../../lib/formatters";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
 import { kWarningColor } from "../materialUITheme";
 

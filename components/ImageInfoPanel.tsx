@@ -7,6 +7,7 @@ import { theme } from "../themes";
 import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
 import { copyTextToClipboard } from "../lib/textClipboard";
 import { formatMimeLabel } from "../lib/imageUtils";
+import { formatCost } from "../lib/formatters";
 
 const rowStyle: React.CSSProperties = {
   display: "grid",
@@ -141,7 +142,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     },
     {
       label: "Cost",
-      value: tool ? `$${item.cost.toFixed(4)}` : null,
+      value: tool ? formatCost(item.cost) : null,
       style: {
         color: tool ? theme.colors.success : theme.colors.textSecondary,
         fontFamily: '"Roboto Mono", "SFMono-Regular", monospace',

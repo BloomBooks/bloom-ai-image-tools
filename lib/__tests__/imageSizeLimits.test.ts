@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { clampImageSizeTier, IMAGE_SIZE_TIERS, sizeTokenToImageSizeTier } from "../imageSizes";
+import {
+  clampImageSizeTier,
+  IMAGE_SIZE_TIERS,
+  OPENAI_IMAGE_SIZE_CONSTRAINTS,
+  parseAspectRatio,
+  pixelsForTier,
+  sizeTokenToImageSizeTier,
+  snapToOpenAiImageSize,
+} from "../imageSizes";
 import {
   getMaxImageSizeForModel,
   getSizeTokenOptionsForModel,
   MODEL_CATALOG,
+  resolveImageSizeRequest,
   resolveImageSizeTierForModel,
 } from "../modelsCatalog";
 import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
@@ -14,7 +23,6 @@ import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 const GEMINI_3_PRO = "google/gemini-3-pro-image";
 const GEMINI_FLASH = "google/gemini-3.1-flash-image";
 const GEMINI_FLASH_LITE = "google/gemini-3.1-flash-lite-image";
-const GPT54_IMAGE_2 = "openai/gpt-5.4-image-2";
 
 const TOOL_SIZE_OPTIONS = ["512k", "1k", "2k", "4k"];
 
@@ -62,15 +70,9 @@ describe("the catalog records a ceiling for every image_config model", () => {
     expect(getMaxImageSizeForModel(GEMINI_FLASH_LITE)).toBe("1K");
   });
 
-  it("caps GPT-5.4 Image 2 at 2K", () => {
-    expect(getMaxImageSizeForModel(GPT54_IMAGE_2)).toBe("2K");
-  });
-
-  it("gives every google/* and gpt-5.4-image* entry a valid ceiling", () => {
+  it("gives every google/* entry a valid ceiling", () => {
     const usesImageConfig = MODEL_CATALOG.filter(
-      (model) =>
-        model.id !== LOCAL_DUMMY_MODEL_ID &&
-        (model.id.startsWith("google/") || model.id.startsWith("openai/gpt-5.4-image")),
+      (model) => model.id !== LOCAL_DUMMY_MODEL_ID && model.id.startsWith("google/"),
     );
     // Sanity check: the catalog really does contain such models, so a passing
     // test below is not an empty loop.
@@ -127,5 +129,167 @@ describe("getSizeTokenOptionsForModel", () => {
 
   it("keeps one option when every declared size is above the ceiling", () => {
     expect(getSizeTokenOptionsForModel(["2k", "4k"], GEMINI_FLASH_LITE)).toEqual(["2k"]);
+  });
+});
+
+describe("snapToOpenAiImageSize", () => {
+  const { maxEdge, edgeMultiple, maxEdgeRatio, minPixels, maxPixels } =
+    OPENAI_IMAGE_SIZE_CONSTRAINTS;
+
+  const satisfiesEveryRule = (size: { width: number; height: number }) => {
+    const long = Math.max(size.width, size.height);
+    const short = Math.min(size.width, size.height);
+    return (
+      size.width % edgeMultiple === 0 &&
+      size.height % edgeMultiple === 0 &&
+      long <= maxEdge &&
+      long / short <= maxEdgeRatio &&
+      size.width * size.height >= minPixels &&
+      size.width * size.height <= maxPixels
+    );
+  };
+
+  it("leaves a size that already obeys every rule alone", () => {
+    expect(snapToOpenAiImageSize({ width: 1536, height: 1024 })).toEqual({
+      width: 1536,
+      height: 1024,
+    });
+    expect(snapToOpenAiImageSize({ width: 1024, height: 1024 })).toEqual({
+      width: 1024,
+      height: 1024,
+    });
+  });
+
+  it("rounds each edge onto the 16-pixel grid", () => {
+    const snapped = snapToOpenAiImageSize({ width: 1500, height: 1001 });
+    expect(snapped.width % 16).toBe(0);
+    expect(snapped.height % 16).toBe(0);
+    // Close to what was asked for, not a different picture.
+    expect(Math.abs(snapped.width - 1500)).toBeLessThanOrEqual(16);
+  });
+
+  it("pulls a too-thin shape back to 3:1", () => {
+    const snapped = snapToOpenAiImageSize({ width: 4000, height: 500 });
+    expect(
+      Math.max(snapped.width, snapped.height) / Math.min(snapped.width, snapped.height),
+    ).toBeLessThanOrEqual(maxEdgeRatio);
+    expect(satisfiesEveryRule(snapped)).toBe(true);
+  });
+
+  it("grows a picture too small to be accepted", () => {
+    // A Bloom thumbnail slot asks for far fewer than 655,360 pixels.
+    const snapped = snapToOpenAiImageSize({ width: 320, height: 240 });
+    expect(snapped.width * snapped.height).toBeGreaterThanOrEqual(minPixels);
+    expect(satisfiesEveryRule(snapped)).toBe(true);
+    // The 4:3 shape survives being grown.
+    expect(snapped.width / snapped.height).toBeCloseTo(4 / 3, 1);
+  });
+
+  it("shrinks a picture too large to be accepted", () => {
+    const snapped = snapToOpenAiImageSize({ width: 8000, height: 6000 });
+    expect(Math.max(snapped.width, snapped.height)).toBeLessThanOrEqual(maxEdge);
+    expect(satisfiesEveryRule(snapped)).toBe(true);
+  });
+
+  it("falls back to a square rather than failing on a size it cannot read", () => {
+    expect(snapToOpenAiImageSize(null)).toEqual({ width: 1024, height: 1024 });
+    expect(snapToOpenAiImageSize({ width: 0, height: 0 })).toEqual({ width: 1024, height: 1024 });
+    expect(snapToOpenAiImageSize({ width: Number.NaN, height: 100 })).toEqual({
+      width: 1024,
+      height: 1024,
+    });
+  });
+
+  it("produces an acceptable size for every shape a book slot might ask for", () => {
+    const shapes = [
+      [1920, 1080],
+      [1080, 1920],
+      [2480, 3508],
+      [612, 792],
+      [3840, 2160],
+      [200, 1400],
+      [5000, 5000],
+      [1, 1],
+    ];
+    for (const [width, height] of shapes) {
+      const snapped = snapToOpenAiImageSize({ width, height });
+      expect(satisfiesEveryRule(snapped), `${width}x${height} -> ${JSON.stringify(snapped)}`).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("resolveImageSizeRequest", () => {
+  it("gives a Gemini key its tier token, capped by the model ceiling", () => {
+    expect(resolveImageSizeRequest("google/gemini-3.1-flash-image", "4K")).toEqual({
+      parameter: "image_config.image_size",
+      value: "2K",
+    });
+    expect(resolveImageSizeRequest("google/gemini-3.1-flash-lite-image", "2K")).toEqual({
+      parameter: "image_config.image_size",
+      value: "1K",
+    });
+  });
+
+  it("gives a GPT Image 2.5 key pixels in the shape that was asked for", () => {
+    expect(
+      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", { aspectRatio: "1:1" }),
+    ).toEqual({ parameter: "size", value: "1024x1024" });
+    // The tier sets the long edge, as it does for the models taking the token.
+    expect(
+      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "2K", { aspectRatio: "3:2" }),
+    ).toEqual({ parameter: "size", value: "2048x1360" });
+  });
+
+  it("honours an exact resolution over the tier when the caller has one", () => {
+    // A Bloom book slot knows the pixels it wants. 1000 is not a multiple of
+    // 16, so the nearest legal height is 1008.
+    expect(
+      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", {
+        desiredPixels: { width: 1500, height: 1000 },
+        aspectRatio: "16:9",
+      }),
+    ).toEqual({ parameter: "size", value: "1504x1008" });
+  });
+
+  it("asks for no size at all when it knows neither pixels nor a shape", () => {
+    // An explicit size overrides the source image's shape on an edit, so a
+    // square guess here would crop every edit made by a tool with no shape
+    // picker. Sending nothing lets the model follow the input.
+    expect(resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K")).toBeNull();
+    expect(
+      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", { aspectRatio: "auto" }),
+    ).toBeNull();
+  });
+
+  it("sends no size for a model that takes no size parameter", () => {
+    expect(resolveImageSizeRequest("debug/local-dummy-extract-cast", "2K")).toBeNull();
+    expect(resolveImageSizeRequest("vendor/not-in-the-catalog", "2K")).toBeNull();
+  });
+});
+
+describe("pixelsForTier", () => {
+  it("puts the tier on the long edge, whichever edge that is", () => {
+    expect(pixelsForTier("2K", "16:9")).toEqual({ width: 2048, height: 1152 });
+    expect(pixelsForTier("2K", "9:16")).toEqual({ width: 1152, height: 2048 });
+    expect(pixelsForTier("1K", "1:1")).toEqual({ width: 1024, height: 1024 });
+    expect(pixelsForTier("4K", "1:1")).toEqual({ width: 3840, height: 3840 });
+  });
+
+  it("falls back to a square when there is no ratio to read", () => {
+    expect(pixelsForTier("1K", "auto")).toEqual({ width: 1024, height: 1024 });
+    expect(pixelsForTier("1K", undefined)).toEqual({ width: 1024, height: 1024 });
+  });
+});
+
+describe("parseAspectRatio", () => {
+  it("reads a ratio and rejects everything else", () => {
+    expect(parseAspectRatio("21:9")).toEqual({ width: 21, height: 9 });
+    expect(parseAspectRatio(" 3:2 ")).toEqual({ width: 3, height: 2 });
+    expect(parseAspectRatio("auto")).toBeNull();
+    expect(parseAspectRatio("")).toBeNull();
+    expect(parseAspectRatio(undefined)).toBeNull();
+    expect(parseAspectRatio("4:0")).toBeNull();
   });
 });

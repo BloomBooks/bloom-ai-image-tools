@@ -326,6 +326,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     imageConfig,
     reasoningLevel: reasoningLevelForRequest,
     imageLabels,
+    editImageCount: requiresEditImage && targetImageData ? 1 : 0,
     targetSlotPageLabel,
   };
   const result = await editImage(

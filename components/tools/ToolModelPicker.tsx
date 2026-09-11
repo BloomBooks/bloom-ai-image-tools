@@ -12,19 +12,19 @@ import {
   Select,
   Stack,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import type { MeasuredStats, ModelReasoningLevel, ToolDefinition } from "../../types";
 import {
   getMeasuredStats,
   getModelInfoById,
+  getReasoningLevelsForModel,
   getRecommendedModelIds,
   getToolModelOptions,
-  MODEL_REASONING_LEVELS,
   resolveToolModelId,
   resolveToolReasoningLevel,
 } from "../../lib/modelsCatalog";
+import { formatCost } from "../../lib/formatters";
 import { theme } from "../../themes";
 
 interface ToolModelPickerProps {
@@ -45,14 +45,6 @@ const REASONING_LABELS: Record<ModelReasoningLevel, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
-};
-
-export const formatCost = (cost: number): string => {
-  if (cost >= 0.01) {
-    return `$${cost.toFixed(2)}`;
-  }
-  // Sub-cent measurements (e.g. GPT-5 Image) keep a couple of significant digits.
-  return `$${cost.toPrecision(2)}`;
 };
 
 const formatDuration = (durationMs: number): string => {
@@ -95,31 +87,10 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   const showNotRecommended = hasRecommendation && !recommendedSet.has(selectedId);
 
   const reasoningLevel = resolveToolReasoningLevel(tool, selectedModel, reasoningByTool);
-  const measuredStats = getMeasuredStats(
-    tool.id,
-    selectedId,
-    reasoningLevel,
-    sizeToken,
-    measuredStatsByKey,
-  );
-
-  const tooltipTitle = (
-    <Box sx={{ textAlign: "center" }}>
-      <Typography variant="caption" component="div" sx={{ fontWeight: 600 }}>
-        Model: {selectedName}
-      </Typography>
-      {showNotRecommended && (
-        <Typography variant="caption" component="div">
-          (not recommended)
-        </Typography>
-      )}
-      {measuredStats != null && (
-        <Typography variant="caption" component="div">
-          When last measured, this cost {formatStats(measuredStats)}
-        </Typography>
-      )}
-    </Box>
-  );
+  const reasoningLevels = getReasoningLevelsForModel(selectedId);
+  // The button says what the menu is for. What each engine is like belongs on
+  // the menu items themselves, where the choice is actually made.
+  const tooltipTitle = "Choose which AI image engine to use";
 
   return (
     <>
@@ -149,7 +120,31 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={() => setAnchorEl(null)}
-        MenuListProps={{ dense: true, sx: { minWidth: 280 } }}
+        MenuListProps={{
+          dense: true,
+          sx: {
+            minWidth: 280,
+            // MUI's default selected state is an 8%-opacity primary wash, which
+            // disappears against this dark surface. Mark the current model with
+            // a solid accent bar down its left edge plus a stronger background,
+            // and keep both through hover so moving the pointer over a
+            // neighbour doesn't make the selection ambiguous.
+            "& .MuiMenuItem-root": {
+              borderLeft: "3px solid transparent",
+            },
+            "& .MuiMenuItem-root.Mui-selected": {
+              borderLeftColor: theme.colors.accent,
+              backgroundColor: theme.colors.accentSubtle,
+              "& .MuiListItemText-primary": {
+                color: theme.colors.textPrimary,
+                fontWeight: 600,
+              },
+              "&:hover": {
+                backgroundColor: theme.colors.accentSubtle,
+              },
+            },
+          },
+        }}
       >
         {options.map((model) => {
           const modelRecommended = recommendedSet.has(model.id);
@@ -169,46 +164,73 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                 setAnchorEl(null);
               }}
             >
-              <ListItemText
-                primary={
-                  <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-                    <span>{model.name}</span>
-                    {modelRecommended && (
-                      <Chip
-                        label="recommended for this tool"
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        sx={{ fontSize: "9pt", height: "auto", py: 0.25 }}
-                      />
-                    )}
-                  </Stack>
-                }
-                secondary={stats != null ? `Last measured: ${formatStats(stats)}` : model.pricing}
-              />
+              {/* The tooltip wraps the text rather than the MenuItem so the
+                  MenuItem stays a direct child of the Menu, which needs to
+                  reach its items to manage selection and focus. An empty title
+                  disables the tooltip, so a model with no description simply
+                  has none. */}
+              <Tooltip title={model.description || ""} placement="right" arrow>
+                <ListItemText
+                  primary={
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      useFlexGap
+                      flexWrap="wrap"
+                    >
+                      <span>{model.name}</span>
+                      {model.badge && (
+                        <Chip
+                          label={model.badge}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: "9pt", height: "auto", py: 0.25 }}
+                        />
+                      )}
+                      {modelRecommended && (
+                        <Chip
+                          label="recommended for this tool"
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          sx={{ fontSize: "9pt", height: "auto", py: 0.25 }}
+                        />
+                      )}
+                    </Stack>
+                  }
+                  secondary={stats != null ? `Last measured: ${formatStats(stats)}` : model.pricing}
+                />
+              </Tooltip>
             </MenuItem>
           );
         })}
 
-        <Divider />
-        <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
-          <FormControl fullWidth size="small">
-            <InputLabel id={`reasoning-label-${tool.id}`}>Reasoning</InputLabel>
-            <Select
-              labelId={`reasoning-label-${tool.id}`}
-              label="Reasoning"
-              value={reasoningLevel}
-              data-testid={`tool-reasoning-${tool.id}`}
-              onChange={(event) => onReasoningChange(event.target.value as ModelReasoningLevel)}
-            >
-              {MODEL_REASONING_LEVELS.map((level) => (
-                <MenuItem key={level} value={level}>
-                  {REASONING_LABELS[level]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+        {/* The model says which levels it takes; a model that takes none gets
+            no control at all. */}
+        {reasoningLevels.length > 0 && (
+          <Box>
+            <Divider />
+            <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
+              <FormControl fullWidth size="small">
+                <InputLabel id={`reasoning-label-${tool.id}`}>Reasoning</InputLabel>
+                <Select
+                  labelId={`reasoning-label-${tool.id}`}
+                  label="Reasoning"
+                  value={reasoningLevel}
+                  data-testid={`tool-reasoning-${tool.id}`}
+                  onChange={(event) => onReasoningChange(event.target.value as ModelReasoningLevel)}
+                >
+                  {reasoningLevels.map((level) => (
+                    <MenuItem key={level} value={level}>
+                      {REASONING_LABELS[level]}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          </Box>
+        )}
       </Menu>
     </>
   );

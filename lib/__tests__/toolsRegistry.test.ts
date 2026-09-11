@@ -70,7 +70,7 @@ describe("ethnicity tool prompt", () => {
       furtherInstructions: "Keep the children's-book line quality.",
     });
 
-    expect(prompt).toContain("update the characters in this image");
+    expect(prompt).toContain("Update the characters in the scene");
     expect(prompt).not.toContain("all matching characters in the scene");
   });
 
@@ -223,6 +223,69 @@ describe("ethnicity tool prompt", () => {
       const tool = TOOLS.find((candidate) => candidate.id === toolId);
       expect(tool).toBeDefined();
       expect(toolSupportsBatch(tool)).toBe(false);
+    }
+  });
+});
+
+describe("no-unrequested-text instruction", () => {
+  // GPT Image 2.5 writes captions and labels into images that never asked for
+  // them, so every tool prompt has to say not to.
+  const TEXT_TOOL_IDS = ["change_text", "stylized_title"];
+
+  it("ends every image prompt with it", () => {
+    const toolsWithPrompts = TOOLS.filter(
+      (tool) => !TEXT_TOOL_IDS.includes(tool.id) && tool.promptTemplate({})?.trim(),
+    );
+    expect(toolsWithPrompts.length).toBeGreaterThan(5);
+
+    for (const tool of toolsWithPrompts) {
+      expect(tool.promptTemplate({}), tool.id).toContain(
+        "Do not add any text, lettering, captions",
+      );
+    }
+  });
+
+  it("leaves out the tools whose job is text", () => {
+    for (const toolId of TEXT_TOOL_IDS) {
+      const tool = TOOLS.find((candidate) => candidate.id === toolId);
+      expect(tool?.addsTextToImage).toBe(true);
+      expect(tool?.promptTemplate({})).not.toContain("Do not add any text");
+    }
+  });
+
+  it("adds nothing to a tool that makes no model call", () => {
+    const pdf = TOOLS.find((tool) => tool.id === "pdf_to_images");
+    expect(pdf?.promptTemplate({})).toBe("");
+  });
+});
+
+describe("preserve-what-you-are-not-changing instruction", () => {
+  // OpenAI's image prompting guide: separate the change from the constraints,
+  // and name what must not move.
+  it("closes a surgical edit tool's prompt with its own preserve list", () => {
+    const removeObject = TOOLS.find((tool) => tool.id === "remove_object");
+    const prompt = removeObject?.promptTemplate({ target: "the red ball" }) ?? "";
+
+    expect(prompt).toContain("Change only what is asked for above");
+    expect(prompt).toContain("every other object and character");
+  });
+
+  it("gives each tool a list of its own rather than one shared sentence", () => {
+    const changeText = TOOLS.find((tool) => tool.id === "change_text");
+    const ethnicity = TOOLS.find((tool) => tool.id === "ethnicity");
+
+    expect(changeText?.preserveInEdit).toContain("the font");
+    expect(ethnicity?.preserveInEdit).toContain("the pose");
+    expect(changeText?.preserveInEdit).not.toBe(ethnicity?.preserveInEdit);
+  });
+
+  it("says nothing about preserving for a tool that rebuilds the whole picture", () => {
+    // Change Style and Coloring Book exist to change the rendering everywhere,
+    // so a "keep the art style" line would contradict the job.
+    for (const toolId of ["change_style", "coloring_book", "make_gif", "generate_image"]) {
+      const tool = TOOLS.find((candidate) => candidate.id === toolId);
+      expect(tool?.preserveInEdit, toolId).toBeUndefined();
+      expect(tool?.promptTemplate({}), toolId).not.toContain("Change only what is asked for");
     }
   });
 });

@@ -64,6 +64,17 @@ export interface ModelInfo {
   description: string;
   pricing: string;
   /**
+   * Which OpenRouter endpoint serves this model. Most catalog entries are chat
+   * models that emit an image as part of a conversation, so the default is
+   * "chat/completions". A dedicated image model (the GPT Image 2.5 keys) is
+   * served only by the images API and rejects chat/completions outright:
+   * "... is an image generation model and cannot be used with the
+   * chat/completions endpoint. Use the /api/v1/images endpoint instead."
+   * `GET /api/v1/images/models` lists every key the images API serves, with
+   * the parameters each one takes.
+   */
+  openRouterEndpoint?: "chat/completions" | "images";
+  /**
    * Numeric per-image price in USD, parallel to the human-readable `pricing`
    * string. Batch cost estimates (N ticked images × this value) need a number
    * to multiply, so this exists rather than parsing `pricing` at display time.
@@ -72,6 +83,34 @@ export interface ModelInfo {
   pricePerImageUsd?: number;
   default?: boolean;
   badge?: string;
+  /**
+   * Which size parameter this model's API takes, named as the API names it.
+   * Each one wants a different kind of value and obeys different rules, so the
+   * request path resolves the desired size per family rather than by one shared
+   * rule (see resolveImageSizeRequest):
+   *
+   * - "image_config.image_size" takes a tier token, "1K" / "2K" / "4K", capped
+   *   by `maxImageSize`. The Gemini keys.
+   * - "size" takes WIDTHxHEIGHT and constrains it: edges a multiple of 16, no
+   *   edge above 3840, no more than 3:1, and a total pixel count between
+   *   655,360 and 8,294,400. The GPT Image 2.5 keys.
+   *
+   * Omit it for a model that takes no size parameter, and the size picker is
+   * hidden rather than offering a choice that changes nothing.
+   */
+  sizeParameter?: "image_config.image_size" | "size";
+  /**
+   * The reasoning levels this model actually accepts, which is what the picker
+   * offers. Omit it for a model that takes no reasoning parameter at all (the
+   * images API has none), and the picker shows no reasoning control.
+   *
+   * The levels are per model, not per family: `GET /api/v1/models/<id>/endpoints`
+   * says whether a key lists `reasoning` among its `supported_parameters`, and
+   * beyond that the levels differ — Gemini 3 Pro Image rejects `effort: "none"`
+   * with a 400, while the 3.1 Flash keys accept it. So each entry lists its own.
+   */
+  reasoningLevels?: ModelReasoningLevel[];
+  /** Where the picker starts, which must be one of `reasoningLevels`. */
   initialReasoningLevel?: ModelReasoningLevel;
   supportedAspectRatios?: string[];
   /**
@@ -109,6 +148,25 @@ export interface ToolDefinition {
   icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;
+  /**
+   * Set on a tool that exists to put words into the picture (Change Text, Add
+   * Stylized Title). Every other tool's prompt gets a line telling the model to
+   * add no text, because GPT Image 2.5 writes captions and labels into images
+   * that never asked for them.
+   */
+  addsTextToImage?: boolean;
+  /**
+   * What this tool must leave alone, for a tool that changes one thing about an
+   * image and keeps the rest. It becomes a closing "change only that; keep these
+   * exactly as they are: ..." sentence on the prompt.
+   *
+   * Written per tool rather than shared, because the list is what makes it
+   * work: OpenAI's image prompting guide asks to "separate changes from
+   * constraints" and name the details to preserve. A tool that rebuilds the
+   * whole picture (Change Style, Coloring Book, Make Gif) declares none, since
+   * for those the rendering is the thing being changed.
+   */
+  preserveInEdit?: string;
   actionButtonLabel?: string;
   referenceImages: "0" | "0+" | "1" | "1+";
   outputType?: "image" | "text";

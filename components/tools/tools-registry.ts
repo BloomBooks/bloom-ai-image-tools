@@ -54,6 +54,13 @@ const COLORING_BOOK_COMPLEXITY_HINTS: Record<string, string> = {
     "Allow richer detail and denser line work while keeping the outlines clean, closed, and still practical to color.",
 };
 
+// GPT Image 2.5 puts words into pictures that never asked for any: a caption
+// along the bottom, a label on an object, a sign in the background. Every tool
+// prompt ends with this line, except the tools whose job is text (they set
+// `addsTextToImage`).
+const NO_UNREQUESTED_TEXT_INSTRUCTION =
+  "Do not add any text, lettering, captions, labels, signs, speech bubbles, or watermarks unless this request explicitly asks for text.";
+
 const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
   name: "aspectRatio",
   label: "Shape",
@@ -144,9 +151,10 @@ export const TOOLS: ToolDefinition[] = (
         const basePrompt = promptText || "Create a new illustration.";
         const selectedSize = (params.size && params.size.trim()) || DEFAULT_SIZE;
         const sizeHint = SIZE_HINTS[selectedSize] || SIZE_HINTS[DEFAULT_SIZE];
-        const noTextReminder =
-          "Do not add any frame, no lettering or typography unless the description explicitly requests text.";
-        const combinedPrompt = `${basePrompt}\n\n${sizeHint} ${noTextReminder}`;
+        // The text half of this lives in NO_UNREQUESTED_TEXT_INSTRUCTION, which
+        // every tool prompt gets.
+        const noFrameReminder = "Do not add any frame.";
+        const combinedPrompt = `${basePrompt}\n\n${sizeHint} ${noFrameReminder}`;
         return applyArtStyleToPrompt(combinedPrompt, params.styleId);
       },
       referenceImages: "0+",
@@ -170,7 +178,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const basePrompt =
-          "Using the supplied reference image or images, design a clean sheet of separate game pieces derived from the visible characters, props, animals, and important objects. Convert the source into distinct standalone pieces that would be useful for a board game or storytelling game. Arrange the finished pieces in a tidy grid on a pure white background with generous spacing between items. Keep every piece fully visible and clearly separated from the others. No borders, no frames, no cut lines, no shadows, no labels, no captions, no numbering, and no extra scene background. Preserve the source design language, colors, and recognizable details while simplifying only as needed so each piece reads clearly as an individual cutout.";
+          "Using the numbered input images listed above, design a clean sheet of separate game pieces derived from the visible characters, props, animals, and important objects. Convert the source into distinct standalone pieces that would be useful for a board game or storytelling game. Arrange the finished pieces in a tidy grid on a pure white background with generous spacing between items. Keep every piece fully visible and clearly separated from the others. No borders, no frames, no cut lines, no shadows, no labels, no captions, no numbering, and no extra scene background. Preserve the source design language, colors, and recognizable details while simplifying only as needed so each piece reads clearly as an individual cutout.";
         return appendOptionalInstructions(
           basePrompt,
           params.furtherInstructions,
@@ -206,8 +214,8 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) => {
         const shouldSplit = params.splitIntoSeparateFiles === "true";
         const basePrompt = shouldSplit
-          ? "Using the supplied reference image or images, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
-          : "Using the supplied reference image or images, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
+          ? "Using the numbered input images listed above, create a single clean extraction sheet that contains one full-body standalone cutout for each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so these cutouts can be reused later for character consistency. Arrange the finished character cutouts in a tidy grid on a pure white background with generous spacing between characters and large empty white gutters between each cutout. Keep every character fully visible and clearly separated from the others. Each character must stand alone as an individual cutout with no touching, no overlap, and no shared outlines or connected shadows between characters, so the final sheet can be split into one file per character. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background."
+          : "Using the numbered input images listed above, create a single clean cast sheet that contains one full-body standalone view of each distinct main character shown in the book. Include each character only once, even if they appear multiple times across the references. The supplied reference images are the primary source of truth for each character's appearance. Preserve each character's recognizable features, clothing, colors, proportions, and art style so this cast sheet can be reused later for character consistency. Arrange the characters in a tidy grid on a pure white background with generous spacing between them and large empty white gutters between each character. Keep every character fully visible and clearly separated from the others, but present the result as one complete cast sheet image rather than separate files. Exclude background scenery, speech bubbles, text, frames, props that are not part of the character, and incidental objects unless they are essential worn items. Leave only a small white margin around each character itself, but keep the spaces between characters large and obvious. No borders, no labels, no captions, no numbering, and no extra scene background.";
         const extraInstructions = params.furtherInstructions?.trim();
         if (!extraInstructions) {
           return basePrompt;
@@ -223,6 +231,8 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "apply_localized_characters",
+      preserveInEdit:
+        "the scene composition, the background, the camera angle, the poses, the expressions, the lighting, and the art style.",
       title: "3) Apply Localized Characters",
       group: "localize",
       icon: Diversity3OutlinedIcon,
@@ -238,7 +248,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const basePrompt =
-          "Using the supplied localized character reference images, update the characters in this image to match those localized character designs. Preserve the original scene composition, background, camera angle, pose, expressions, lighting, clothing intent, and overall art style unless the references clearly require a character-design change. Keep each localized character recognizable and consistent with the supplied references, especially hair and facial features, and replace only the character design details needed to match the localized cast.";
+          "The numbered input images are listed above: the image to edit is the scene, and each reference image is a localized character design. Update the characters in the scene to match those localized character designs. Preserve the original scene composition, background, camera angle, pose, expressions, lighting, clothing intent, and overall art style unless the references clearly require a character-design change. Keep each localized character recognizable and consistent with the supplied references, especially hair and facial features, and replace only the character design details needed to match the localized cast.";
         return appendOptionalInstructions(
           basePrompt,
           params.furtherInstructions,
@@ -314,6 +324,7 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "enhance_drawing",
+      preserveInEdit: "the composition, the characters, the perspective, and the line work.",
       title: "Enhance Line Drawing",
       description: "",
       group: "enhance",
@@ -353,6 +364,8 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "change_text",
+      preserveInEdit:
+        "the font, the lettering style and color, the position and size of the text, the background behind it, and every other part of the image.",
       title: "Change Text",
       description:
         "Replace specific text in the image. Use this to localize images that contain text.",
@@ -374,6 +387,8 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) =>
         `Change the text "${params.match}" to "${params.replace}" in this image. Maintain the font style and background.`,
+      // This tool is here to put text in the image.
+      addsTextToImage: true,
       referenceImages: "0",
       allowBatch: true,
     },
@@ -403,11 +418,11 @@ export const TOOLS: ToolDefinition[] = (
       actionButtonLabel: "Break into Images",
       referenceImages: "0",
       editImage: true,
-      // GPT-5.4 Image 2 is the recommended engine for splitting comics apart.
-      // Plain GPT-5 Image is not offered for this tool at all; the remaining
-      // catalog models stay selectable as alternatives.
-      recommendedModelIds: ["openai/gpt-5.4-image-2"],
-      disallowedModelIds: ["openai/gpt-5-image"],
+      // GPT Image 2.5 Sunburst is the recommended engine for splitting comics
+      // apart; the remaining catalog models stay selectable as alternatives.
+      // Watch for sanitizing here — Gemini 3 Pro redraws scenes it dislikes
+      // while extracting, and Sunburst has not been tested for that.
+      recommendedModelIds: ["openai/gpt-image-2.5-sunburst"],
       // Leave reasoning at the model default for the cleanup-edit image call.
       // With reasoning forced on (e.g. Flash's "medium" initial level) the
       // model "plans a better poster" and redraws the artwork wholesale; the
@@ -501,6 +516,8 @@ export const TOOLS: ToolDefinition[] = (
 
     {
       id: "stylized_title",
+      preserveInEdit:
+        "the whole illustration underneath, including the composition, the characters and their faces, and the colors.",
       title: "Add Stylized Title",
       description: "Add a stylized title overlay that fits well the illustration.",
       group: "text",
@@ -522,12 +539,16 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) =>
         `Add a stylized title "${params.title}" to this image. Use a ${params.style} font style that fits a children's book.`,
+      // This tool is here to put text in the image.
+      addsTextToImage: true,
       referenceImages: "0",
       allowBatch: true,
     },
 
     {
       id: "ethnicity",
+      preserveInEdit:
+        "the pose, the facial expression, the clothing, the background, the composition, the lighting, and the art style.",
       title: "2) Change Ethnicity",
       description: "",
       group: "localize",
@@ -618,6 +639,8 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "improve_drawing",
+      preserveInEdit:
+        "the composition and framing, every character and their identity, faces, clothing and position, the colors and color tone, the art medium, and the level of detail.",
       title: "Improve Drawing a Bit",
       description: "Correct anatomy and perspective while keeping everything else identical.",
       group: "enhance",
@@ -642,14 +665,19 @@ export const TOOLS: ToolDefinition[] = (
       },
       actionButtonLabel: "Improve Drawing",
       referenceImages: "0",
-      // Only offer these two engines: Gemini 3 Pro Preview (default) and
-      // GPT-5.4 Image 2 as a secondary option. Other catalog models are hidden.
-      modelIds: ["google/gemini-3-pro-image", "openai/gpt-5.4-image-2"],
+      // Only offer these engines: Gemini 3 Pro Preview (default) plus the GPT
+      // Image 2.5 pair. Other catalog models are hidden.
+      modelIds: [
+        "google/gemini-3-pro-image",
+        "openai/gpt-image-2.5-flare",
+        "openai/gpt-image-2.5-sunburst",
+      ],
       recommendedModelIds: ["google/gemini-3-pro-image"],
       allowBatch: true,
     },
     {
       id: "upscale",
+      preserveInEdit: "the composition, the subjects, the colors, the style, and the framing.",
       title: "Upscale",
       description: "Ask for the same picture at a higher resolution.",
       group: "enhance",
@@ -696,6 +724,8 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "remove_object",
+      preserveInEdit:
+        "every other object and character, their positions, the composition and framing, the lighting, the colors, and the art style.",
       title: "Remove Object",
       description: "Remove unwanted objects or artifacts.",
       group: "games",
@@ -725,22 +755,48 @@ export const TOOLS: ToolDefinition[] = (
       allowBatch: true,
     },
   ] as ToolDefinition[]
-).map((tool) => {
-  if (!shouldExposeAspectRatio(tool)) {
-    return tool;
-  }
+)
+  .map((tool) => {
+    // Appended here rather than written into each promptTemplate, so a tool
+    // added later carries them without anyone remembering to.
+    const closing = [
+      tool.preserveInEdit
+        ? `Change only what is asked for above. Everything else must stay exactly as it is in the original, including ${tool.preserveInEdit}`
+        : null,
+      tool.addsTextToImage ? null : NO_UNREQUESTED_TEXT_INSTRUCTION,
+    ].filter((line): line is string => Boolean(line));
 
-  if (tool.parameters.some((parameter) => parameter.name === "aspectRatio")) {
-    return tool;
-  }
+    if (closing.length === 0) {
+      return tool;
+    }
 
-  return {
-    ...tool,
-    parameters: [
-      ...tool.parameters,
-      createAspectRatioParameter(
-        tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO,
-      ),
-    ],
-  };
-});
+    return {
+      ...tool,
+      promptTemplate: (params: Record<string, string>) => {
+        const prompt = tool.promptTemplate(params);
+        // Nothing to amend when there is no prompt: a local tool has none (see
+        // pdf_to_images), and a template that reads a parameter straight out of
+        // `params` returns undefined when the caller left it out (see custom).
+        return prompt?.trim() ? `${prompt}\n\n${closing.join(" ")}` : prompt;
+      },
+    };
+  })
+  .map((tool) => {
+    if (!shouldExposeAspectRatio(tool)) {
+      return tool;
+    }
+
+    if (tool.parameters.some((parameter) => parameter.name === "aspectRatio")) {
+      return tool;
+    }
+
+    return {
+      ...tool,
+      parameters: [
+        ...tool.parameters,
+        createAspectRatioParameter(
+          tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO,
+        ),
+      ],
+    };
+  });

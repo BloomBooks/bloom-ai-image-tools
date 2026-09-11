@@ -10,17 +10,87 @@
 // successor that isn't live yet. With `fallbackId`, the day OpenRouter retires
 // the primary the app fails over on its own, no code change or redeploy needed.
 [
+  // GPT Image 2.5, OpenAI's September 2026 image pair. Same token rates as
+  // each other ($8/M image-input, $30/M image-output); the two differ in how
+  // long they take and how much detail they hold, not in price per token.
+  //
+  // Both are dedicated image models: OpenRouter serves them from the images
+  // API alone, and chat/completions refuses them outright ("... is an image
+  // generation model and cannot be used with the chat/completions endpoint").
+  // Hence `openRouterEndpoint: "images"`, which routes them to a different
+  // request shape entirely — see editImageViaImagesApi.
+  //
+  // Neither takes a reasoning parameter, so neither declares `reasoningLevels`
+  // and the picker offers no reasoning control for them.
+  //
+  // Output size is `size`, in pixels ("1536x1024"), per OpenAI's image
+  // prompting guide — not the tier token the Gemini keys take, so `maxImageSize`
+  // does not apply here and the pixel rules live in snapToOpenAiImageSize.
+  // OpenRouter forwards `size` and returns exactly the pixels asked for, on
+  // generation and on edits alike, even though its own
+  // GET /api/v1/images/models lists only aspect_ratio, quality, background, n,
+  // input_references and output_compression for these keys. That list is not a
+  // complete account of what these keys accept; don't treat it as one.
+  // `size` and a concrete `aspect_ratio` in the same request are a 400, so a
+  // request carrying a size sends aspect_ratio "auto".
+  {
+    id: "openai/gpt-image-2.5-flare",
+    name: "GPT Image 2.5 Flare",
+    description: "About twice as quick as Sunburst, and costs the same. Small details are not as good.",
+    // Measured 2026-09-11, two runs: $0.0064 to generate 1024x1024 with no
+    // reference image (~13s), and $0.0281 to edit one reference image at
+    // 1024x1536 (~19s). Cost tracks output pixels and input references, so it
+    // spans roughly 4x across ordinary uses. `pricePerImageUsd` seeds the batch
+    // estimate, and batch runs are always edits, so it carries the edit figure.
+    // Both are far below GPT-5.4 Image 2's $0.24 at the identical per-token
+    // rate — that model spends far more tokens per image.
+    pricing: "About $0.006 new, $0.03 to edit",
+    pricePerImageUsd: 0.028,
+    openRouterEndpoint: "images",
+    // Takes pixels, snapped to the rules in snapToOpenAiImageSize.
+    sizeParameter: "size",
+    // From GET /api/v1/images/models: the images API normalizes these eight
+    // ratios (plus "auto") for this key.
+    supportedAspectRatios: ["2:3", "3:4", "9:16", "1:1", "4:3", "3:2", "16:9", "21:9"],
+    default: true,
+  },
+  {
+    id: "openai/gpt-image-2.5-sunburst",
+    name: "GPT Image 2.5 Sunburst",
+    badge: "Slower, more detail than Flare",
+    description: "Slower than Flare, and costs the same. Better with small details.",
+    // Measured 2026-09-11: $0.0064 to generate 1024x1024 (~21s) — the same cost
+    // as Flare for the same job, just slower. The two differ in time, not
+    // price. Editing is unmeasured; it carries Flare's measured edit figure,
+    // since generation matched exactly.
+    pricing: "About $0.006 new, $0.03 to edit",
+    pricePerImageUsd: 0.028,
+    openRouterEndpoint: "images",
+    // Takes pixels, snapped to the rules in snapToOpenAiImageSize.
+    sizeParameter: "size",
+    // From GET /api/v1/images/models: the images API normalizes these eight
+    // ratios (plus "auto") for this key.
+    supportedAspectRatios: ["2:3", "3:4", "9:16", "1:1", "4:3", "3:2", "16:9", "21:9"],
+    default: false,
+  },
+
   {
     id: "google/gemini-3-pro-image",
     name: "Gemini 3 Pro Preview",
     badge: "Great but Expensive",
-    description: "'Nano Banana Pro' Good for editing, as it preserves the original image.",
+    description: "Good for changing an image. It leaves alone the parts you did not ask it to change. It follows your instructions better than the others here, but it costs more.",
     pricing: "About $0.14 per image",
     pricePerImageUsd: 0.14,
     // Measured against OpenRouter 2026-09-01: this key resolves to the
     // google/gemini-3-pro-image-20260528 snapshot, which rejects 4K. Only the
     // older preview snapshots still take 4K.
     maxImageSize: "2K",
+    sizeParameter: "image_config.image_size",
+    // This key lists "reasoning" in supported_parameters (checked 2026-09-11),
+    // but thinking is mandatory on it: it answers effort "none" with a 400, so
+    // "none" is absent here. It declares no initialReasoningLevel, so the
+    // picker starts at "default".
+    reasoningLevels: ["default", "low", "medium", "high"],
     // For "Break Comic into Images", prefer Gemini 3.1 Flash: Pro tends to
     // "sanitize" content while extracting (observed repeatedly: it redrew an
     // open-defecation panel onto a porcelain toilet).
@@ -47,12 +117,13 @@
     id: "google/gemini-3.1-flash-image",
     name: "Gemini 3.1 Flash",
     badge: "Great",
-    description: "'Nano Banana 2'. Good for editing, as it preserves the original image. Not quite as good at instruction understanding as Gemini 3 Pro.",
+    description: "Good for changing an image. It leaves alone the parts you did not ask it to change. It does not follow your instructions quite as well as Gemini 3 Pro.",
     pricing: "About $0.07 per image",
     pricePerImageUsd: 0.07,
     // Measured against OpenRouter 2026-09-01: this key resolves to the
     // google/gemini-3.1-flash-image-20260528 snapshot, which rejects 4K.
     maxImageSize: "2K",
+    sizeParameter: "image_config.image_size",
     // Recommended for "Break Comic into Images": edit-framed cleanup with
     // Flash preserves the original artwork well (Pro tends to sanitize/redraw
     // scenes), and the tool fetches captions in a separate text call, so
@@ -75,24 +146,29 @@
       "4:1",
       "8:1",
     ],
+    // Lists both "reasoning" and "reasoning_effort" in supported_parameters
+    // (checked 2026-09-11), and thinking is optional on the 3.1 Flash keys, so
+    // "none" is among them.
+    reasoningLevels: ["default", "none", "low", "medium", "high"],
     initialReasoningLevel: "medium",
-    default: true,
+    default: false,
   },
 
   {
-    // Lighter/cheaper sibling of Gemini 3.1 Flash. Price is a starting
-    // estimate at roughly half of Flash ($0.07 -> ~$0.035); revise once
-    // OpenRouter publishes actual per-image pricing.
+    // Lighter/cheaper sibling of Gemini 3.1 Flash. Confirmed against
+    // OpenRouter 2026-09-11: image_output is $0.00003/token, and a Gemini
+    // image is 1120 output tokens, so $0.0336 per image.
     id: "google/gemini-3.1-flash-lite-image",
     name: "Gemini 3.1 Flash Lite",
     badge: "Cheaper",
-    description: "'Nano Banana 2' lite. Cheaper, lighter sibling of Gemini 3.1 Flash. Good for editing, as it preserves the original image.",
-    pricing: "About $0.035 per image (estimate)",
+    description: "Good for changing an image. It leaves alone the parts you did not ask it to change. Cheaper and simpler than Gemini 3.1 Flash.",
+    pricing: "About $0.035 per image",
     pricePerImageUsd: 0.035,
     // Measured against OpenRouter 2026-09-01: the
     // google/gemini-3.1-flash-lite-image-20260630 snapshot takes 1K only. It
     // rejects 2K with "Image size 2K is not supported for this model".
     maxImageSize: "1K",
+    sizeParameter: "image_config.image_size",
     // Mirror Flash's aspect-ratio support (same Gemini 3.1 Flash family).
     supportedAspectRatios: [
       "1:8",
@@ -110,39 +186,11 @@
       "4:1",
       "8:1",
     ],
+    // Lists both "reasoning" and "reasoning_effort" in supported_parameters
+    // (checked 2026-09-11), and thinking is optional on the 3.1 Flash keys, so
+    // "none" is among them.
+    reasoningLevels: ["default", "none", "low", "medium", "high"],
     initialReasoningLevel: "medium",
-    default: false,
-  },
-
-  {
-    id: "openai/gpt-5-image",
-    name: "GPT-5 Image",
-    badge: "Good, but only for new images.",
-    description: "Slow",
-    pricing: "About $0.02 / 1k image",
-    // The display string above is ambiguous (per-image vs. per-1k-images); this
-    // treats it as the per-image figure until OpenRouter publishes exact pricing.
-    pricePerImageUsd: 0.02,
-    // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
-    // The current OpenRouter chat-completions path in this app can faithfully target
-    // those three exact aspect ratios.
-    supportedAspectRatios: ["2:3", "1:1", "3:2"],
-    default: false,
-  },
-  {
-    id: "openai/gpt-5.4-image-2",
-    name: "GPT-5.4 Image 2",
-    badge: "TODO",
-    description: "slower and more expensive than gemini flash",
-    pricing: "About $0.24 / 1k image",
-    pricePerImageUsd: 0.24,
-    // Measured against OpenRouter 2026-09-01: image_config on this key accepts
-    // "1K" and "2K" only.
-    maxImageSize: "2K",
-    // OpenAI docs explicitly call out square, portrait, and landscape popular sizes.
-    // The current OpenRouter chat-completions path in this app can faithfully target
-    // those three exact aspect ratios.
-    supportedAspectRatios: ["2:3", "1:1", "3:2"],
     default: false,
   },
 ]

@@ -1,10 +1,13 @@
 import type { ModelReasoningLevel } from "../types";
-import { getOpenAIOrientation } from "../lib/aspectRatios";
+import { AUTO_ASPECT_RATIO, getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
 import {
   getMaxImageSizeForModel,
+  getModelInfoById,
   getModelNameById,
+  getOpenRouterEndpointForModel,
   getRequestModelIds,
+  resolveImageSizeRequest,
   resolveImageSizeTierForModel,
 } from "../lib/modelsCatalog";
 import { sizeTokenToImageSizeTier } from "../lib/imageSizes";
@@ -107,11 +110,12 @@ export interface ImageConfig {
   /** Size: "512k", "1k", "2k", "4k" */
   size?: string;
   /**
-   * The exact pixel size the user asked for (the Upscale tool's selector).
-   * Real providers never see it: they accept only the coarse tier tokens above,
-   * so `size` is what the request carries. Only the local dummy model
-   * reproduces these dimensions, which is what makes the selector testable
-   * without spending on a model.
+   * The exact pixel size the caller wants: the Upscale tool's selector, or the
+   * size of the book slot the image is going into. A model whose catalog entry
+   * declares `sizeParameter: "size"` is asked for these dimensions directly
+   * (snapped to what it accepts); a model that takes only the coarse tier
+   * tokens above never sees them, and the local dummy model reproduces them
+   * exactly, which is what makes the selector testable without spending.
    */
   targetDimensions?: { width: number; height: number };
 }
@@ -127,6 +131,13 @@ export interface EditImageOptions {
    * (e.g. a character called "Maria"). Use null/"" for unlabeled images.
    */
   imageLabels?: (string | null | undefined)[];
+  /**
+   * How many of the leading `base64Images` are the images being edited, the
+   * rest being references. The images API has nowhere to put a label beside a
+   * picture the way chat/completions does, so this is what lets the prompt name
+   * each input by number and purpose (see buildInputImageRoster).
+   */
+  editImageCount?: number;
   /**
    * The page label of the book image slot this run is for ("Page 1 - Image 3").
    * Only the Local Dummy model reads it, to draw the label on the image it
@@ -740,6 +751,233 @@ const rethrowIfAbort = (error: unknown): string => {
 };
 
 /**
+ * Turns a non-ok OpenRouter response into the right error type. Shared so the
+ * images API path reports credit/rate-limit/other failures exactly as the
+ * chat/completions path does.
+ */
+function throwOpenRouterHttpError(
+  status: number,
+  statusText: string,
+  rawText: string,
+  data: any,
+  modelId: string,
+): never {
+  const detailMessage = getOpenRouterErrorDetail(data);
+
+  if (status === 402 && detailMessage) {
+    throw new OpenRouterApiError(detailMessage, {
+      status,
+      reason: "insufficient-credits",
+      detailMessage,
+      infoUrl: OPENROUTER_KEYS_URL,
+    });
+  }
+
+  if (status === 429) {
+    throw new OpenRouterApiError(buildRateLimitMessage(modelId), {
+      status,
+      reason: "rate-limited",
+      detailMessage,
+    });
+  }
+
+  const message = detailMessage || rawText || statusText || "";
+  const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
+  throw new OpenRouterApiError(`OpenRouter request failed: ${status} ${preview}`, {
+    status,
+    detailMessage,
+  });
+}
+
+/**
+ * Generates or edits an image through OpenRouter's images API
+ * (POST /api/v1/images), for the catalog entries that declare
+ * `openRouterEndpoint: "images"`.
+ *
+ * This is a genuinely different API from chat/completions, not a variant of it:
+ * there are no messages, no modalities, and no reasoning — just a prompt, the
+ * source images as `input_references`, and a normalized `aspect_ratio`. The
+ * result comes back as base64 in `data[].b64_json` rather than inside a chat
+ * message. A dedicated image model is served ONLY here and answers
+ * chat/completions with a 404 telling you so.
+ *
+ * `GET /api/v1/images/models` is the source of truth for which keys this serves
+ * and which parameters each one accepts (the GPT Image 2.5 pair takes
+ * aspect_ratio, quality, background, n, input_references, output_compression —
+ * note there is no `resolution`, so image size is not selectable).
+ */
+/**
+ * A numbered roster of the input images, to go at the top of the prompt.
+ *
+ * The chat path puts a label in a text part right before each picture, which
+ * the images API has no room for: `input_references` is a bare array. Without
+ * this, a character the user named in the strip reaches the model anonymous,
+ * and a tool given several references cannot say which is which. OpenAI's image
+ * prompting guide asks for exactly this: identify each input by number and
+ * purpose, then explain how they combine.
+ *
+ * Returns "" when there is nothing worth saying (a single unlabeled image
+ * already needs no introduction).
+ */
+export const buildInputImageRoster = (
+  imageCount: number,
+  labels: (string | null | undefined)[] = [],
+  editImageCount = 0,
+): string => {
+  const named = labels.some((label) => (label || "").trim());
+  if (imageCount < 1 || (imageCount === 1 && !named)) {
+    return "";
+  }
+
+  const lines = Array.from({ length: imageCount }, (_, index) => {
+    const role = index < editImageCount ? "the image to edit" : "a reference image";
+    const label = (labels[index] || "").trim();
+    return `${index + 1}. ${label ? `${role}, showing "${label}"` : role}`;
+  });
+
+  return `Input images, in order:\n${lines.join("\n")}`;
+};
+
+const editImageViaImagesApi = async (
+  images: string[],
+  prompt: string,
+  key: string,
+  modelId: string,
+  options: EditImageOptions | undefined,
+  startTime: number,
+): Promise<EditImageResult> => {
+  const { signal, imageConfig } = options ?? {};
+
+  // The images API takes a normalized aspect ratio, not pixel dimensions. Send
+  // one only when the model is documented to accept it; anything else becomes
+  // "auto" and lets the model follow the source image.
+  const requested = imageConfig?.aspectRatio?.trim();
+  const supported = getModelInfoById(modelId)?.supportedAspectRatios ?? [];
+  const requestedAspectRatio =
+    requested && requested !== AUTO_ASPECT_RATIO && supported.includes(requested)
+      ? requested
+      : "auto";
+
+  // GPT Image 2.5 takes the output size in pixels, which is more exact than an
+  // aspect ratio and is the only way to honour a caller's own target (Bloom
+  // knows the pixel size of the book slot an image is going into). Three rules,
+  // each verified against the live endpoint rather than inferred:
+  //   - both edges must be multiples of 16, or it is a 400 ("Width and height
+  //     must both be divisible by 16") — hence snapToOpenAiImageSize.
+  //   - a `size` beside a concrete `aspect_ratio` is a 400 from OpenRouter
+  //     ("size ... conflicts with aspect_ratio ..."), so a request that carries
+  //     a size must leave the aspect ratio on "auto".
+  //   - it applies to edits as well as generation.
+  const sizeRequest = resolveImageSizeRequest(
+    modelId,
+    sizeTokenToImageSizeTier(imageConfig?.size),
+    { desiredPixels: imageConfig?.targetDimensions, aspectRatio: requestedAspectRatio },
+  );
+  const pixelSize = sizeRequest?.parameter === "size" ? sizeRequest.value : null;
+  const aspectRatio = pixelSize ? "auto" : requestedAspectRatio;
+
+  const roster = buildInputImageRoster(
+    images.length,
+    options?.imageLabels,
+    options?.editImageCount,
+  );
+  const promptWithRoster = roster ? `${roster}\n\n${prompt}` : prompt;
+
+  const body: Record<string, any> = {
+    model: modelId,
+    prompt: promptWithRoster,
+    n: 1,
+    aspect_ratio: aspectRatio,
+    ...(pixelSize ? { size: pixelSize } : {}),
+  };
+
+  // Source images ride along as reference images. They can be HTTP(S) URLs or
+  // base64 data URLs; ours are always data URLs.
+  if (images.length > 0) {
+    body.input_references = images.map((dataUrl) => {
+      const { base64, mimeType } = dataUrlToParts(dataUrl);
+      return {
+        type: "image_url",
+        image_url: { url: `data:${mimeType};base64,${base64}` },
+      };
+    });
+  }
+
+  console.log("[openRouter] images-API request", {
+    endpoint: "/images",
+    model: modelId,
+    aspectRatio,
+    aspectRatioRequested: requested ?? "(none)",
+    size: pixelSize ?? "(omitted — model default)",
+    inputReferenceCount: images.length,
+    promptChars: promptWithRoster.length,
+    promptPreview:
+      promptWithRoster.length > 300 ? `${promptWithRoster.slice(0, 300)}…` : promptWithRoster,
+  });
+
+  const response = await fetch(`${OPENROUTER_BASE_URL}/images`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "Bloom AI Image Tools",
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  // As in the chat path: a cancel during the body read must propagate rather
+  // than look like an empty response.
+  const rawText = await response.text().catch(rethrowIfAbort);
+  let data: any = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    data = { _nonJsonBody: rawText };
+  }
+
+  if (!response.ok) {
+    throwOpenRouterHttpError(response.status, response.statusText, rawText, data, modelId);
+  }
+
+  const collectedImages: string[] = [];
+  for (const entry of Array.isArray(data?.data) ? data.data : []) {
+    if (typeof entry?.b64_json === "string" && entry.b64_json) {
+      const mediaType =
+        typeof entry.media_type === "string" && entry.media_type.startsWith("image/")
+          ? entry.media_type
+          : "image/png";
+      collectedImages.push(`data:${mediaType};base64,${entry.b64_json}`);
+    }
+  }
+
+  console.log("[openRouter] images-API response", {
+    status: response.status,
+    model: (data?.model as string) || modelId,
+    imagesReturned: collectedImages.length,
+    cost: (data?.usage?.cost as number) ?? null,
+    usage: data?.usage ?? null,
+  });
+
+  if (collectedImages.length === 0) {
+    throw new Error(
+      `OpenRouter did not return an image. The images API responded with: ${
+        getOpenRouterErrorDetail(data) || rawText.slice(0, 300) || "an empty data array"
+      }`,
+    );
+  }
+
+  return {
+    imageData: collectedImages[0],
+    images: collectedImages,
+    duration: getNow() - startTime,
+    model: (data?.model as string) || modelId,
+    cost: (data?.usage?.cost as number) ?? 0,
+  };
+};
+
+/**
  * Uses OpenRouter image endpoints to generate or edit an image.
  * @param base64Images - Source images for editing/reference (data URLs). Empty array for generation.
  * @param prompt - Instruction sent to the model.
@@ -793,6 +1031,13 @@ export const editImage = async (
   const reasoningLevel = options?.reasoningLevel ?? "default";
   const localStartTime = getNow();
   const images = (base64Images || []).filter((x) => !!x);
+
+  // A dedicated image model is served only by the images API; everything below
+  // this point builds a chat/completions request it would reject outright.
+  if (getOpenRouterEndpointForModel(modelToUse) === "images") {
+    return editImageViaImagesApi(images, prompt, key, modelToUse, options, localStartTime);
+  }
+
   const hasImage = images.length > 0;
 
   const content: any[] = [{ type: "text", text: prompt }];
@@ -815,12 +1060,16 @@ export const editImage = async (
   }
 
   // Build image generation parameters for different providers.
-  // - google/* (Gemini) and openai/gpt-5.4-image*: use image_config, whose
-  //   image_size is one of "1K"|"2K"|"4K"
-  // - other OpenAI (gpt-image-1, DALL-E, etc.): use size as pixel dimensions
-  const isGeminiModel = modelToUse.startsWith("google/");
-  const isGpt54ImageModel = modelToUse.startsWith("openai/gpt-5.4-image");
-  const usesImageConfig = isGeminiModel || isGpt54ImageModel;
+  // - Gemini and openai/gpt-5.4-image*: image_config, whose image_size is one
+  //   of "1K"|"2K"|"4K"
+  // - other OpenAI (gpt-image-1, DALL-E, etc.): `size` as pixel dimensions
+  // Which one a model takes is declared per model in the catalog. An id the
+  // catalog does not list — an env override, or a key the registry has not
+  // caught up with — falls back to the family prefix.
+  const catalogSizeParameter = getModelInfoById(modelToUse)?.sizeParameter;
+  const usesImageConfig = catalogSizeParameter
+    ? catalogSizeParameter === "image_config.image_size"
+    : modelToUse.startsWith("google/") || modelToUse.startsWith("openai/gpt-5.4-image");
 
   const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
   // Each model key has its own image_size ceiling, and the ceiling belongs to
@@ -830,7 +1079,9 @@ export const editImage = async (
   // guessing from the id, because a wrong guess is a 400, not a smaller image.
   const requestedImageSize = sizeTokenToImageSizeTier(imageConfig?.size);
 
-  // OpenAI-style size (pixel dimensions) for models that don't support image_config
+  // OpenAI-style size (pixel dimensions) for models that don't support
+  // image_config. Set per candidate inside the failover loop below, because the
+  // pixel size a model accepts is its own; this is only the starting value.
   const openAISize = mapAspectRatioToOpenAISize(imageConfig?.aspectRatio);
 
   // Ordered model keys to try, one HTTP request each (see
@@ -909,6 +1160,15 @@ export const editImage = async (
         );
       }
       body.image_config.image_size = sizeForRequest;
+    } else {
+      // A pixel-size model: ask for the exact size when the catalog knows this
+      // model and the caller knows what it wants, and otherwise keep the shape
+      // the aspect ratio implies.
+      const sizeRequest = resolveImageSizeRequest(modelForRequest, requestedImageSize, {
+        desiredPixels: imageConfig?.targetDimensions,
+        aspectRatio: imageConfig?.aspectRatio,
+      });
+      body.size = sizeRequest?.parameter === "size" ? sizeRequest.value : openAISize;
     }
     let modelUnavailable = false;
 

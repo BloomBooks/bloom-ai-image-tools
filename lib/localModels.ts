@@ -5,10 +5,8 @@ export const LOCAL_DUMMY_MODEL_ID = "debug/local-dummy-extract-cast";
 export const LOCAL_DUMMY_MODEL: ModelInfo = {
   id: LOCAL_DUMMY_MODEL_ID,
   name: "Local Dummy (No AI)",
-  badge: "Localhost Only",
-  description:
-    "Deterministic local test engine. On an edit tool it returns the target image tinted with a 'DUMMY EDIT' banner; with no target it returns a cast sheet. Never calls OpenRouter.",
-  pricing: "Free on localhost",
+  description: "Used only for testing.",
+  pricing: "Free",
   supportedAspectRatios: ["2:3", "3:4", "4:5", "9:16", "1:1", "5:4", "4:3", "3:2", "16:9"],
 };
 

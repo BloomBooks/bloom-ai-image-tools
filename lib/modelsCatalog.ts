@@ -10,9 +10,14 @@ import {
 import {
   clampImageSizeTier,
   DEFAULT_SIZE_TOKEN,
+  formatPixelSize,
   type ImageSizeTier,
   IMAGE_SIZE_TIERS,
+  parseAspectRatio,
+  type PixelSize,
+  pixelsForTier,
   sizeTokenToImageSizeTier,
+  snapToOpenAiImageSize,
 } from "./imageSizes";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
@@ -49,6 +54,81 @@ export const getRequestModelIds = (modelId: string | null | undefined): string[]
   if (!id) return [];
   const fallbackId = getModelInfoById(id)?.fallbackId?.trim();
   return fallbackId && fallbackId !== id ? [id, fallbackId] : [id];
+};
+
+/**
+ * Which OpenRouter endpoint serves a model. Defaults to chat/completions,
+ * which is what every chat-style image model uses; a dedicated image model
+ * declares "images" in the catalog and 400s on chat/completions. An unknown id
+ * (an env override, or a key the registry has not caught up with) gets the
+ * default.
+ */
+export const getOpenRouterEndpointForModel = (
+  modelId: string | null | undefined,
+): "chat/completions" | "images" =>
+  getModelInfoById(modelId)?.openRouterEndpoint ?? "chat/completions";
+
+/**
+ * The reasoning levels a model accepts, in the order the picker should offer
+ * them. Empty means the model takes no reasoning parameter, and the picker
+ * shows no reasoning control.
+ *
+ * Each catalog entry lists its own levels, because they differ per model rather
+ * than per family: Gemini 3 Pro Image makes thinking mandatory and answers
+ * `effort: "none"` with a 400, while the 3.1 Flash keys accept "none". An
+ * unknown id (an env override, or a key the registry has not caught up with)
+ * gets the full set rather than none, so a level stays reachable.
+ */
+export const getReasoningLevelsForModel = (
+  modelId: string | null | undefined,
+): ModelReasoningLevel[] => {
+  const model = getModelInfoById(modelId);
+  if (!model) return [...MODEL_REASONING_LEVELS];
+  return model.reasoningLevels ? [...model.reasoningLevels] : [];
+};
+
+/**
+ * What to put in a request to ask a model for a particular output size, or null
+ * when the model takes no size parameter and the caller should send none.
+ *
+ * Each family is resolved by its own rule rather than a shared one, because the
+ * two take different kinds of value: a Gemini key takes a tier token capped by
+ * the model's ceiling, and a GPT Image 2.5 key takes pixels snapped to its own
+ * constraints. `desiredPixels` is what the caller actually wants (Bloom's
+ * suggested target for a book slot, say); `aspectRatio` is the shape the user
+ * picked; `requestedTier` is the coarse choice from the size picker, which
+ * decides the long edge when there are no exact pixels to honour.
+ *
+ * A pixel-size model gets null when the caller knows neither exact pixels nor a
+ * concrete shape. Falling back to a square would be worse than sending nothing:
+ * on an edit, an explicit size overrides the source image's shape, so a guess
+ * would crop or letterbox every edit whose tool has no shape picker.
+ */
+export type ImageSizeRequest =
+  | { parameter: "image_config.image_size"; value: ImageSizeTier }
+  | { parameter: "size"; value: string };
+
+export const resolveImageSizeRequest = (
+  modelId: string | null | undefined,
+  requestedTier: ImageSizeTier,
+  options?: { desiredPixels?: PixelSize | null; aspectRatio?: string | null },
+): ImageSizeRequest | null => {
+  const parameter = getModelInfoById(modelId)?.sizeParameter;
+  if (!parameter) {
+    return null;
+  }
+  if (parameter === "image_config.image_size") {
+    return { parameter, value: resolveImageSizeTierForModel(modelId, requestedTier) };
+  }
+  const target =
+    options?.desiredPixels ??
+    (parseAspectRatio(options?.aspectRatio)
+      ? pixelsForTier(requestedTier, options?.aspectRatio)
+      : null);
+  if (!target) {
+    return null;
+  }
+  return { parameter, value: formatPixelSize(snapToOpenAiImageSize(target)) };
 };
 
 /**
@@ -105,7 +185,7 @@ export const isModelReasoningLevel = (value: unknown): value is ModelReasoningLe
 
 // Shared default option list for tools that don't declare their own `modelIds`:
 // every real image-capable catalog model (the localhost-only dummy is excluded),
-// with the catalog default (Gemini 3.1 Flash) recommended.
+// with the catalog default (GPT Image 2.5 Flare) recommended.
 const DEFAULT_TOOL_MODEL_IDS = MODEL_CATALOG.filter(
   (model) => model.id !== LOCAL_DUMMY_MODEL_ID,
 ).map((model) => model.id);
@@ -195,23 +275,26 @@ export const resolveToolModelId = (
  * Effective reasoning level for a tool run: the per-tool override, then the
  * tool's hard `imageReasoningLevel` cap, then the model's initial level, then
  * "default".
+ *
+ * A level the chosen model does not accept becomes "default", so a setting
+ * remembered from another model cannot be sent as, say, "none" to Gemini 3 Pro
+ * Image, which answers that with a 400.
  */
 export const resolveToolReasoningLevel = (
   tool: ToolDefinition,
   model: ModelInfo | null,
   reasoningByTool?: Record<string, ModelReasoningLevel>,
 ): ModelReasoningLevel => {
-  const override = reasoningByTool?.[tool.id];
-  if (isModelReasoningLevel(override)) {
-    return override;
-  }
-  if (isModelReasoningLevel(tool.imageReasoningLevel)) {
-    return tool.imageReasoningLevel;
-  }
-  if (isModelReasoningLevel(model?.initialReasoningLevel)) {
-    return model.initialReasoningLevel;
-  }
-  return "default";
+  const accepted = getReasoningLevelsForModel(model?.id);
+  const take = (level: ModelReasoningLevel | undefined): ModelReasoningLevel | null =>
+    isModelReasoningLevel(level) && accepted.includes(level) ? level : null;
+
+  return (
+    take(reasoningByTool?.[tool.id]) ??
+    take(tool.imageReasoningLevel) ??
+    take(model?.initialReasoningLevel) ??
+    "default"
+  );
 };
 
 /**

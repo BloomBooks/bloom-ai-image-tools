@@ -116,12 +116,19 @@ const withDimensions = (baseLabel: string, dimensions: ImageDimensions | null): 
 /**
  * The selector's options, in display order. "Auto" exists only when the host
  * sent a target for this slot, so a source without one simply starts at HD.
+ *
+ * `snap` is how the selected model would change the pixels before sending them
+ * (see snapPixelsForModel): GPT Image 2.5 caps an edge at 3840 and the total
+ * at 8,294,400 pixels, so its "4K" option reads the size it will be sent (for
+ * a 3:2 source, 3520 x 2352) rather than 4096. Without it the labels carry the
+ * tier's own numbers, which the Gemini keys take as is.
  */
 export const buildUpscaleOptions = (
   source: ImageDimensions | null | undefined,
   hostTarget?: UpscaleHostTarget | null,
+  snap: (dimensions: ImageDimensions | null) => ImageDimensions | null = (d) => d,
 ): UpscaleOption[] => {
-  const hostDimensions = normalizeHostTarget(hostTarget);
+  const hostDimensions = snap(normalizeHostTarget(hostTarget));
   const options: UpscaleOption[] = [];
 
   if (hostDimensions) {
@@ -132,11 +139,11 @@ export const buildUpscaleOptions = (
     });
   }
 
-  const hd = fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE);
+  const hd = snap(fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE));
   options.push({ token: "hd", label: withDimensions("HD", hd), dimensions: hd });
 
   (["2k", "4k"] as const).forEach((token) => {
-    const dimensions = fitToLongEdge(source, TIER_LONG_EDGES[token]);
+    const dimensions = snap(fitToLongEdge(source, TIER_LONG_EDGES[token]));
     options.push({
       token,
       label: withDimensions(token.toUpperCase(), dimensions),

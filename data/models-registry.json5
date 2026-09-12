@@ -55,6 +55,11 @@
     // From the same listing: input_references max 16, counting the image
     // being edited.
     maxInputImages: 16,
+    // The `quality` values the images API takes for this key, from the same
+    // listing. Measured 2026-09-12 on a 1024x1024 generation: "low" took 7.7s
+    // and "auto" about 13s, both for $0.006. Whether "low" shows in the art is
+    // untested, which is why the picker starts at "auto".
+    qualityLevels: ["auto", "low", "medium", "high", "xhigh", "max"],
     default: true,
   },
   {
@@ -77,6 +82,8 @@
     // From the same listing: input_references max 16, counting the image
     // being edited.
     maxInputImages: 16,
+    // Same `quality` values as Flare; see that entry.
+    qualityLevels: ["auto", "low", "medium", "high", "xhigh", "max"],
     default: false,
   },
 
@@ -94,9 +101,11 @@
     sizeParameter: "image_config.image_size",
     // This key lists "reasoning" in supported_parameters (checked 2026-09-11),
     // but thinking is mandatory on it: it answers effort "none" with a 400, so
-    // "none" is absent here. It declares no initialReasoningLevel, so the
-    // picker starts at "default".
-    reasoningLevels: ["default", "low", "medium", "high"],
+    // "none" is absent here. Google documents two thinking levels for Gemini 3
+    // Pro, "low" and "high"; "medium" is accepted (a 200 and an image, checked
+    // 2026-09-12) but coerced to one of those two, so it is not offered. It
+    // declares no initialReasoningLevel, so the picker starts at "default".
+    reasoningLevels: ["default", "low", "high"],
     // For "Break Comic into Images", prefer Gemini 3.1 Flash: Pro tends to
     // "sanitize" content while extracting (observed repeatedly: it redrew an
     // open-defecation panel onto a porcelain toilet).

@@ -14,14 +14,21 @@ import {
   Tooltip,
 } from "@mui/material";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import type { MeasuredStats, ModelReasoningLevel, ToolDefinition } from "../../types";
+import type {
+  MeasuredStats,
+  ModelImageQuality,
+  ModelReasoningLevel,
+  ToolDefinition,
+} from "../../types";
 import {
   getMeasuredStats,
   getModelInfoById,
+  getQualityLevelsForModel,
   getReasoningLevelsForModel,
   getRecommendedModelIds,
   getToolModelOptions,
   resolveToolModelId,
+  resolveToolQuality,
   resolveToolReasoningLevel,
 } from "../../lib/modelsCatalog";
 import { formatCost } from "../../lib/formatters";
@@ -31,11 +38,13 @@ interface ToolModelPickerProps {
   tool: ToolDefinition;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
+  qualityByTool: Record<string, ModelImageQuality>;
   measuredStatsByKey: Record<string, MeasuredStats>;
   /** The output size token this tool would request now (drives the cost lookup). */
   sizeToken: string;
   onModelChange: (modelId: string) => void;
   onReasoningChange: (level: ModelReasoningLevel) => void;
+  onQualityChange: (quality: ModelImageQuality) => void;
   disabled?: boolean;
 }
 
@@ -45,6 +54,15 @@ const REASONING_LABELS: Record<ModelReasoningLevel, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
+};
+
+const QUALITY_LABELS: Record<ModelImageQuality, string> = {
+  auto: "Auto",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
 };
 
 const formatDuration = (durationMs: number): string => {
@@ -68,10 +86,12 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   tool,
   modelByTool,
   reasoningByTool,
+  qualityByTool,
   measuredStatsByKey,
   sizeToken,
   onModelChange,
   onReasoningChange,
+  onQualityChange,
   disabled = false,
 }) => {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -88,6 +108,8 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
 
   const reasoningLevel = resolveToolReasoningLevel(tool, selectedModel, reasoningByTool);
   const reasoningLevels = getReasoningLevelsForModel(selectedId);
+  const qualityLevels = getQualityLevelsForModel(selectedId);
+  const quality = resolveToolQuality(tool, selectedModel, qualityByTool);
   // The button says what the menu is for. What each engine is like belongs on
   // the menu items themselves, where the choice is actually made.
   const tooltipTitle = "Choose which AI image engine to use";
@@ -224,6 +246,32 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                   {reasoningLevels.map((level) => (
                     <MenuItem key={level} value={level}>
                       {REASONING_LABELS[level]}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          </Box>
+        )}
+
+        {/* Same rule for quality: only a model that lists quality levels (the
+            GPT Image 2.5 pair) gets the control. */}
+        {qualityLevels.length > 0 && quality && (
+          <Box>
+            <Divider />
+            <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
+              <FormControl fullWidth size="small">
+                <InputLabel id={`quality-label-${tool.id}`}>Quality</InputLabel>
+                <Select
+                  labelId={`quality-label-${tool.id}`}
+                  label="Quality"
+                  value={quality}
+                  data-testid={`tool-quality-${tool.id}`}
+                  onChange={(event) => onQualityChange(event.target.value as ModelImageQuality)}
+                >
+                  {qualityLevels.map((level) => (
+                    <MenuItem key={level} value={level}>
+                      {QUALITY_LABELS[level]}
                     </MenuItem>
                   ))}
                 </Select>

@@ -41,6 +41,13 @@ export interface GeneratedTextResult {
 export type ModelReasoningLevel = "default" | "none" | "low" | "medium" | "high";
 
 /**
+ * The `quality` values OpenAI's images API takes, as OpenRouter forwards them.
+ * "auto" is the model's own default and is what a request carries when nobody
+ * has picked.
+ */
+export type ModelImageQuality = "auto" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
  * Last-measured generation cost and duration for a tool/model/reasoning/size
  * combination. Time scales roughly with price, so both live under one key.
  */
@@ -114,6 +121,13 @@ export interface ModelInfo {
   reasoningLevels?: ModelReasoningLevel[];
   /** Where the picker starts, which must be one of `reasoningLevels`. */
   initialReasoningLevel?: ModelReasoningLevel;
+  /**
+   * The `quality` values this model takes, which is what the picker offers.
+   * Only the images-API keys (GPT Image 2.5) take one; omit it for every other
+   * model and the picker shows no quality control and the request carries none.
+   * A picked value is sent as `quality` by editImageViaImagesApi.
+   */
+  qualityLevels?: ModelImageQuality[];
   supportedAspectRatios?: string[];
   /**
    * Highest `image_config.image_size` tier this model accepts. A request above
@@ -449,6 +463,8 @@ export interface PersistedImageToolsState {
   modelByTool?: Record<string, string>;
   /** toolId -> reasoning-level override for that tool's selected model. */
   reasoningByTool?: Record<string, ModelReasoningLevel>;
+  /** toolId -> quality override for that tool's selected model (GPT Image 2.5 only). */
+  qualityByTool?: Record<string, ModelImageQuality>;
   /**
    * Last-measured cost + duration keyed by
    * `${toolId}|${modelId}|${reasoningLevel}|${sizeToken}`, shown in the per-tool

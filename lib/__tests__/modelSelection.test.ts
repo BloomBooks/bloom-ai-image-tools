@@ -7,11 +7,15 @@ import {
   getMeasuredStats,
   getModelInfoById,
   getOpenRouterEndpointForModel,
+  getQualityLevelsForModel,
   getReasoningLevelsForModel,
   getRecommendedModelIds,
+  getSizeOptionsForModel,
   getToolModelOptions,
   resolveToolModelId,
+  resolveToolQuality,
   resolveToolReasoningLevel,
+  snapPixelsForModel,
 } from "../modelsCatalog";
 import type { ToolDefinition } from "../../types";
 
@@ -142,7 +146,65 @@ describe("reasoning levels per model", () => {
     // same ~480 reasoning tokens and "none" bought what omitting the parameter
     // buys. So the picker offers the two positions that differ.
     expect(getReasoningLevelsForModel(GEMINI_FLASH)).toEqual(["default", "high"]);
-    expect(getReasoningLevelsForModel(GEMINI_PRO)).toEqual(["default", "low", "medium", "high"]);
+    // Google documents "low" and "high" for Gemini 3 Pro; "medium" is accepted
+    // but coerced, so it is not offered.
+    expect(getReasoningLevelsForModel(GEMINI_PRO)).toEqual(["default", "low", "high"]);
+  });
+
+  it("offers quality only for the models that take it, starting at auto", () => {
+    const tool = getTool("generate_image");
+    expect(getQualityLevelsForModel(SUNBURST)).toEqual([
+      "auto",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(getQualityLevelsForModel(GEMINI_FLASH)).toEqual([]);
+    expect(resolveToolQuality(tool, getModelInfoById(SUNBURST)!, {})).toBe("auto");
+    expect(resolveToolQuality(tool, getModelInfoById(SUNBURST)!, { generate_image: "low" })).toBe(
+      "low",
+    );
+    // A quality remembered under GPT Image 2.5 is not sent to a Gemini key.
+    expect(
+      resolveToolQuality(tool, getModelInfoById(GEMINI_FLASH)!, { generate_image: "low" }),
+    ).toBeNull();
+  });
+
+  it("labels size options with the pixels a pixel-size model will be sent", () => {
+    // GPT Image 2.5 caps the pixel budget, so "4k" square is 2880x2880, and
+    // "512k" and "1k" both land on 1024x1024 and collapse into one option.
+    expect(getSizeOptionsForModel(["512k", "1k", "2k", "4k"], SUNBURST, "1:1")).toEqual([
+      { token: "512k", label: "1024x1024" },
+      { token: "2k", label: "2048x2048" },
+      { token: "4k", label: "2880x2880" },
+    ]);
+    // A tier-token model shows the tokens as they are.
+    expect(getSizeOptionsForModel(["512k", "1k", "2k", "4k"], GEMINI_FLASH, "1:1")).toEqual([
+      { token: "512k", label: "512k" },
+      { token: "1k", label: "1k" },
+      { token: "2k", label: "2k" },
+    ]);
+  });
+
+  it("snaps pixels for a pixel-size model and leaves them alone otherwise", () => {
+    // A 3:2 "4K" request hits GPT Image 2.5's pixel budget (8,294,400) before
+    // its 3840 edge cap, so it lands well under both.
+    expect(snapPixelsForModel(SUNBURST, { width: 4096, height: 2731 })).toEqual({
+      width: 3520,
+      height: 2352,
+    });
+    // A 16:9 one fits the budget exactly at the edge cap.
+    expect(snapPixelsForModel(SUNBURST, { width: 4096, height: 2304 })).toEqual({
+      width: 3840,
+      height: 2160,
+    });
+    expect(snapPixelsForModel(GEMINI_FLASH, { width: 4096, height: 2731 })).toEqual({
+      width: 4096,
+      height: 2731,
+    });
+    expect(snapPixelsForModel(SUNBURST, null)).toBeNull();
   });
 
   it("caps input images at what the model's endpoint takes", () => {

@@ -11,6 +11,7 @@ import {
   ImageRecord,
   ImageToolsStatePersistence,
   MeasuredStats,
+  ModelImageQuality,
   ModelReasoningLevel,
   PersistedAppState,
   ThumbnailStripId,
@@ -37,6 +38,7 @@ import {
   buildMeasuredStatKey,
   DEFAULT_MODEL,
   getModelInfoById,
+  isModelImageQuality,
   isModelReasoningLevel,
   MODEL_CATALOG,
   resolveToolModelId,
@@ -219,6 +221,22 @@ const normalizeReasoningByTool = (value: unknown): Record<string, ModelReasoning
     const cleanToolId = toolId.trim();
     if (cleanToolId && isModelReasoningLevel(level)) {
       normalized[cleanToolId] = level;
+    }
+  });
+
+  return normalized;
+};
+
+const normalizeQualityByTool = (value: unknown): Record<string, ModelImageQuality> => {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const normalized: Record<string, ModelImageQuality> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([toolId, quality]) => {
+    const cleanToolId = toolId.trim();
+    if (cleanToolId && isModelImageQuality(quality)) {
+      normalized[cleanToolId] = quality;
     }
   });
 
@@ -452,6 +470,7 @@ export function ImageToolsWorkspace({
   // reasoning level; `measuredStatsByKey` powers the indicator's cost/time tooltip.
   const [modelByTool, setModelByTool] = useState<Record<string, string>>({});
   const [reasoningByTool, setReasoningByTool] = useState<Record<string, ModelReasoningLevel>>({});
+  const [qualityByTool, setQualityByTool] = useState<Record<string, ModelImageQuality>>({});
   const [measuredStatsByKey, setMeasuredStatsByKey] = useState<Record<string, MeasuredStats>>({});
   const [generationTiming, setGenerationTiming] = useState<GenerationTimingState>({
     lastDurationMs: null,
@@ -1542,6 +1561,7 @@ export function ImageToolsWorkspace({
 
           setModelByTool(normalizeModelByTool(persisted.modelByTool));
           setReasoningByTool(normalizeReasoningByTool(persisted.reasoningByTool));
+          setQualityByTool(normalizeQualityByTool(persisted.qualityByTool));
           setMeasuredStatsByKey(normalizeMeasuredStatsByKey(persisted.measuredStatsByKey));
           setGenerationTiming(normalizeGenerationTiming(persisted.generationTiming));
           if (persisted.auth?.apiKey) {
@@ -1614,6 +1634,7 @@ export function ImageToolsWorkspace({
   const activeToolIdRef = useRef(activeToolId);
   const modelByToolRef = useRef(modelByTool);
   const reasoningByToolRef = useRef(reasoningByTool);
+  const qualityByToolRef = useRef(qualityByTool);
   const measuredStatsByKeyRef = useRef(measuredStatsByKey);
   const generationTimingRef = useRef(generationTiming);
   const selectedArtStyleIdRef = useRef(selectedArtStyleId);
@@ -1642,6 +1663,9 @@ export function ImageToolsWorkspace({
   useEffect(() => {
     reasoningByToolRef.current = reasoningByTool;
   }, [reasoningByTool]);
+  useEffect(() => {
+    qualityByToolRef.current = qualityByTool;
+  }, [qualityByTool]);
   useEffect(() => {
     measuredStatsByKeyRef.current = measuredStatsByKey;
   }, [measuredStatsByKey]);
@@ -1831,6 +1855,7 @@ export function ImageToolsWorkspace({
         activeToolId: activeToolIdRef.current,
         modelByTool: modelByToolRef.current,
         reasoningByTool: reasoningByToolRef.current,
+        qualityByTool: qualityByToolRef.current,
         measuredStatsByKey: measuredStatsByKeyRef.current,
         generationTiming: generationTimingRef.current,
         selectedArtStyleId: selectedArtStyleIdRef.current ?? null,
@@ -1949,6 +1974,7 @@ export function ImageToolsWorkspace({
     activeToolId,
     modelByTool,
     reasoningByTool,
+    qualityByTool,
     measuredStatsByKey,
     selectedArtStyleId,
     apiKey,
@@ -2513,6 +2539,7 @@ export function ImageToolsWorkspace({
             params,
             constrainedReferences,
             reasoningByTool,
+            qualityByTool,
             generationTiming: generationTimingRef.current,
             resolvedApiKey: effectiveApiKey,
             useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
@@ -3116,6 +3143,7 @@ export function ImageToolsWorkspace({
             params,
             constrainedReferences,
             reasoningByTool,
+            qualityByTool,
             generationTiming: generationTimingRef.current,
             resolvedApiKey: effectiveApiKey,
             useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
@@ -4083,6 +4111,10 @@ export function ImageToolsWorkspace({
     setReasoningByTool((prev) => ({ ...prev, [toolId]: level }));
   };
 
+  const handleToolQualityChange = (toolId: string, quality: ModelImageQuality) => {
+    setQualityByTool((prev) => ({ ...prev, [toolId]: quality }));
+  };
+
   const targetImage = state.targetImageId
     ? accessibleHistoryItems.find((h) => h.id === state.targetImageId) || null
     : null;
@@ -4448,9 +4480,11 @@ export function ImageToolsWorkspace({
             appState={state}
             modelByTool={modelByTool}
             reasoningByTool={reasoningByTool}
+            qualityByTool={qualityByTool}
             measuredStatsByKey={measuredStatsByKey}
             onToolModelChange={handleToolModelChange}
             onToolReasoningChange={handleToolReasoningChange}
+            onToolQualityChange={handleToolQualityChange}
             targetImage={batchTickedIds.size > 0 ? null : targetImage}
             batchSelectionMessage={batchSelectionMessage}
             batchSelection={batchSelection}

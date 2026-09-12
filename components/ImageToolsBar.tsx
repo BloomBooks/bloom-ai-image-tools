@@ -23,6 +23,7 @@ import {
   GenerationProgressState,
   ImageRecord,
   MeasuredStats,
+  ModelImageQuality,
   ModelReasoningLevel,
   ToolParamsById,
   ThumbnailStripId,
@@ -413,9 +414,11 @@ interface ImageToolsPanelBar {
   appState: AppState;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
+  qualityByTool: Record<string, ModelImageQuality>;
   measuredStatsByKey: Record<string, MeasuredStats>;
   onToolModelChange: (toolId: string, modelId: string) => void;
   onToolReasoningChange: (toolId: string, level: ModelReasoningLevel) => void;
+  onToolQualityChange: (toolId: string, quality: ModelImageQuality) => void;
   targetImage: ImageRecord | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
@@ -517,9 +520,11 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   appState,
   modelByTool,
   reasoningByTool,
+  qualityByTool,
   measuredStatsByKey,
   onToolModelChange,
   onToolReasoningChange,
+  onToolQualityChange,
   targetImage,
   referenceImages,
   rightImage,
@@ -815,9 +820,11 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             playgroundMode={playgroundMode}
             modelByTool={modelByTool}
             reasoningByTool={reasoningByTool}
+            qualityByTool={qualityByTool}
             measuredStatsByKey={measuredStatsByKey}
             onToolModelChange={onToolModelChange}
             onToolReasoningChange={onToolReasoningChange}
+            onToolQualityChange={onToolQualityChange}
             activeToolId={activeToolId}
             paramsByTool={toolParams}
             onParamChange={onParamChange}

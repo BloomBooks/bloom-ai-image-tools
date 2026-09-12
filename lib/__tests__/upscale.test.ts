@@ -64,6 +64,18 @@ describe("buildUpscaleOptions", () => {
     expect(options[2].label).toBe("4K (4096 x 2731)");
   });
 
+  it("labels with the snapped size when the model changes the pixels it is sent", () => {
+    // The caller passes how the selected model snaps a request (GPT Image 2.5
+    // caps an edge at 3840); the label then says what will actually be sent.
+    const capEdge = (d: { width: number; height: number } | null) =>
+      d && d.width > 3840 ? { width: 3840, height: Math.round((3840 * d.height) / d.width) } : d;
+    const options = buildUpscaleOptions({ width: 900, height: 600 }, null, capEdge);
+
+    expect(options[1].label).toBe("2K (2048 x 1365)");
+    expect(options[2].label).toBe("4K (3840 x 2560)");
+    expect(options[2].dimensions).toEqual({ width: 3840, height: 2560 });
+  });
+
   it("puts the long edge on the tall side for a portrait source", () => {
     const options = buildUpscaleOptions({ width: 600, height: 900 });
 

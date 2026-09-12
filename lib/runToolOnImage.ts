@@ -1,6 +1,7 @@
 import {
   GenerationTimingState,
   ImageRecord,
+  ModelImageQuality,
   ModelInfo,
   ModelReasoningLevel,
   ToolDefinition,
@@ -13,7 +14,7 @@ import {
 } from "../services/openRouterService";
 import { BREAK_COMIC_CAPTIONS_PROMPT, BREAK_COMIC_TEXT_MODEL } from "./breakComic";
 import { canUseLocalDummyModelWithoutApiKey } from "./localModels";
-import { resolveToolReasoningLevel } from "./modelsCatalog";
+import { resolveToolQuality, resolveToolReasoningLevel } from "./modelsCatalog";
 import { removeBackgroundFromImage } from "./backgroundRemoval";
 import { applyPostProcessingPipeline } from "./postProcessing";
 import {
@@ -68,6 +69,8 @@ export interface RunToolOnImageArgs {
   /** Reference images already limited to the tool's reference-count cap. */
   constrainedReferences: ImageRecord[];
   reasoningByTool: Record<string, ModelReasoningLevel>;
+  /** Per-tool quality choice; only sent for a model that lists qualityLevels. */
+  qualityByTool: Record<string, ModelImageQuality>;
   generationTiming: GenerationTimingState;
   /** OpenRouter key to use for network calls; unused for local-only tools (remove_background). */
   resolvedApiKey: string | undefined;
@@ -131,6 +134,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     params,
     constrainedReferences,
     reasoningByTool,
+    qualityByTool,
     generationTiming,
     resolvedApiKey,
     useEnvDefaultModelId,
@@ -340,6 +344,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     signal,
     imageConfig,
     reasoningLevel: reasoningLevelForRequest,
+    quality: resolveToolQuality(tool, toolModel ?? null, qualityByTool),
     imageLabels,
     editImageCount: requiresEditImage && targetImageData ? 1 : 0,
     targetSlotPageLabel,

@@ -20,6 +20,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import type {
   BatchRunState,
   MeasuredStats,
+  ModelImageQuality,
   ModelReasoningLevel,
   ToolDefinition,
   ToolParameter,
@@ -38,14 +39,17 @@ import {
 } from "../../lib/aspectRatios";
 import {
   getReferenceConstraints,
+  getRequestedAspectRatioValue,
   toolRequiresEditImage,
   toolRunCallsOpenRouter,
 } from "../../lib/toolHelpers";
 import {
   getEstimatedCostPerImageUsd,
   getModelInfoById,
+  getSizeOptionsForModel,
   getSizeTokenOptionsForModel,
   resolveToolModelId,
+  snapPixelsForModel,
 } from "../../lib/modelsCatalog";
 import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
 import {
@@ -134,9 +138,11 @@ interface ToolPanelProps {
   playgroundMode?: boolean;
   modelByTool: Record<string, string>;
   reasoningByTool: Record<string, ModelReasoningLevel>;
+  qualityByTool: Record<string, ModelImageQuality>;
   measuredStatsByKey: Record<string, MeasuredStats>;
   onToolModelChange: (toolId: string, modelId: string) => void;
   onToolReasoningChange: (toolId: string, level: ModelReasoningLevel) => void;
+  onToolQualityChange: (toolId: string, quality: ModelImageQuality) => void;
   activeToolId: string | null;
   paramsByTool: ToolParamsById;
   onParamChange: (toolId: string, paramName: string, value: string) => void;
@@ -441,9 +447,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   playgroundMode = false,
   modelByTool,
   reasoningByTool,
+  qualityByTool,
   measuredStatsByKey,
   onToolModelChange,
   onToolReasoningChange,
+  onToolQualityChange,
   activeToolId,
   paramsByTool,
   onParamChange,
@@ -781,7 +789,24 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "size") {
-        const sizeOptions = getOrderedSizeOptions(param.options, toolModel?.id);
+        // A pixel-size model (GPT Image 2.5) is labeled with the pixels each
+        // token will be sent in the shape this tool would request, so "4k" reads
+        // 2880x2880 rather than promising 4096. Tokens that land on the same
+        // pixels are offered once. A tier-token model shows the tokens as is.
+        const sizeLabelByToken = new Map(
+          getSizeOptionsForModel(
+            param.options,
+            toolModel?.id,
+            resolveAspectRatioValue(
+              getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
+              targetImageResolution,
+              toolModel?.supportedAspectRatios,
+            ),
+          ).map((option) => [option.token, option.label]),
+        );
+        const sizeOptions = getOrderedSizeOptions(param.options, toolModel?.id).filter((token) =>
+          sizeLabelByToken.has(token),
+        );
         const shouldPreferModelDefault =
           toolModel?.id === GEMINI_3_1_FLASH_MODEL_ID && (!value || value === param.defaultValue);
         // A remembered choice can be above the current model's ceiling (the user
@@ -819,7 +844,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             >
               {sizeOptions.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {option}
+                  {sizeLabelByToken.get(option) ?? option}
                 </MenuItem>
               ))}
             </TextField>
@@ -828,7 +853,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "target-resolution") {
-        const options = buildUpscaleOptions(targetImageResolution, targetImageSuggestedTarget);
+        // Labeled with what the selected model will be sent: a pixel-size
+        // model has an edge cap and a pixel budget, so its "4K" reads the
+        // size inside them, not 4096.
+        const options = buildUpscaleOptions(
+          targetImageResolution,
+          targetImageSuggestedTarget,
+          (dimensions) => snapPixelsForModel(toolModel?.id, dimensions),
+        );
         // The stored token can name an option this image doesn't offer (a slot
         // with no host target, after one that had it), so fall back to the
         // first option rather than showing an empty select.
@@ -1058,10 +1090,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               tool={tool}
               modelByTool={modelByTool}
               reasoningByTool={reasoningByTool}
+              qualityByTool={qualityByTool}
               measuredStatsByKey={measuredStatsByKey}
               sizeToken={resolveToolSizeToken(tool)}
               onModelChange={(modelId) => onToolModelChange(tool.id, modelId)}
               onReasoningChange={(level) => onToolReasoningChange(tool.id, level)}
+              onQualityChange={(quality) => onToolQualityChange(tool.id, quality)}
               disabled={isProcessing}
             />
           </Box>

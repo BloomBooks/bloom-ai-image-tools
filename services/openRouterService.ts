@@ -1,4 +1,4 @@
-import type { ModelReasoningLevel } from "../types";
+import type { ModelImageQuality, ModelReasoningLevel } from "../types";
 import { AUTO_ASPECT_RATIO, getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
 import {
@@ -125,6 +125,13 @@ export interface EditImageOptions {
   signal?: AbortSignal;
   imageConfig?: ImageConfig;
   reasoningLevel?: ModelReasoningLevel;
+  /**
+   * The `quality` to send on the images API, for the models whose catalog
+   * entry lists qualityLevels (GPT Image 2.5). Null or absent sends none, and
+   * the model uses its own default. The chat path ignores it: no chat-served
+   * model takes a quality parameter.
+   */
+  quality?: ModelImageQuality | null;
   /**
    * Optional human-facing names aligned by index with `base64Images`. When a
    * name is present, a short text part is inserted right before that image so
@@ -889,6 +896,9 @@ const editImageViaImagesApi = async (
     n: 1,
     aspect_ratio: aspectRatio,
     ...(pixelSize ? { size: pixelSize } : {}),
+    // Only a model whose catalog entry lists qualityLevels ever gets one here
+    // (see resolveToolQuality); omitted, the model uses its own default.
+    ...(options?.quality ? { quality: options.quality } : {}),
   };
 
   // Source images ride along as reference images. They can be HTTP(S) URLs or
@@ -927,6 +937,7 @@ const editImageViaImagesApi = async (
         aspectRatio,
         aspectRatioRequested: requested ?? "(none)",
         size: pixelSize ?? "(omitted — model default)",
+        quality: options?.quality ?? "(omitted — model default)",
         inputReferenceCount: images.length,
         promptChars: prompt.length,
         promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,

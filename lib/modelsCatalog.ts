@@ -1,6 +1,12 @@
 import JSON5 from "json5";
 import modelCatalogText from "../data/models-registry.json5";
-import type { MeasuredStats, ModelInfo, ModelReasoningLevel, ToolDefinition } from "../types";
+import type {
+  MeasuredStats,
+  ModelImageQuality,
+  ModelInfo,
+  ModelReasoningLevel,
+  ToolDefinition,
+} from "../types";
 import {
   canUseLocalDummyModelWithoutApiKey,
   isLocalDummyModelOffered,
@@ -148,6 +154,93 @@ export const getMaxImageSizeForModel = (modelId: string | null | undefined): Ima
  */
 export const getMaxInputImagesForModel = (modelId: string | null | undefined): number | null =>
   getModelInfoById(modelId)?.maxInputImages ?? null;
+
+/** Whether this model takes its output size as pixels ("1536x1024"). */
+export const modelTakesPixelSize = (modelId: string | null | undefined): boolean =>
+  getModelInfoById(modelId)?.sizeParameter === "size";
+
+/**
+ * The size a model would actually be sent for the pixels asked of it: snapped
+ * to the model's own rules for a pixel-size model (GPT Image 2.5's 16-pixel
+ * grid, 3840 edge and pixel budget), and unchanged for every other model,
+ * whose tier tokens the labels already describe. This is what a label should
+ * show so it does not promise pixels the request cannot carry.
+ */
+export const snapPixelsForModel = (
+  modelId: string | null | undefined,
+  desired: PixelSize | null,
+): PixelSize | null => {
+  if (!desired || !modelTakesPixelSize(modelId)) return desired;
+  return snapToOpenAiImageSize(desired);
+};
+
+/**
+ * The size options to offer for a model, each with the label to show. A model
+ * that takes tier tokens shows the token itself. A pixel-size model shows the
+ * pixels it will be sent for that token in the given shape, and two tokens that
+ * land on the same pixels ("512k" and "1k" both become 1024 on the long edge)
+ * collapse into one, so the list never offers the same request twice.
+ */
+export const getSizeOptionsForModel = (
+  options: string[] | null | undefined,
+  modelId: string | null | undefined,
+  aspectRatio: string | null | undefined,
+): { token: string; label: string }[] => {
+  const tokens = getSizeTokenOptionsForModel(options, modelId);
+  if (!modelTakesPixelSize(modelId)) {
+    return tokens.map((token) => ({ token, label: token }));
+  }
+  const seen = new Set<string>();
+  const result: { token: string; label: string }[] = [];
+  for (const token of tokens) {
+    const request = resolveImageSizeRequest(modelId, sizeTokenToImageSizeTier(token), {
+      aspectRatio: parseAspectRatio(aspectRatio) ? aspectRatio : "1:1",
+    });
+    const label = request?.parameter === "size" ? request.value : token;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    result.push({ token, label });
+  }
+  return result;
+};
+
+/**
+ * The `quality` values a model takes, in the order the picker should offer
+ * them. Empty means the model takes no quality parameter, and the picker shows
+ * no quality control. See ModelInfo.qualityLevels.
+ */
+export const getQualityLevelsForModel = (modelId: string | null | undefined): ModelImageQuality[] =>
+  getModelInfoById(modelId)?.qualityLevels ?? [];
+
+export const MODEL_IMAGE_QUALITIES: ModelImageQuality[] = [
+  "auto",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+export const isModelImageQuality = (value: unknown): value is ModelImageQuality =>
+  typeof value === "string" && MODEL_IMAGE_QUALITIES.includes(value as ModelImageQuality);
+
+/**
+ * The quality a run of this tool on this model sends: the user's remembered
+ * choice when the model takes it, else "auto" for a model that takes quality at
+ * all, else null, and the request carries no quality parameter. A choice
+ * remembered under one model is not sent to another that does not list it.
+ */
+export const resolveToolQuality = (
+  tool: ToolDefinition,
+  model: ModelInfo | null,
+  qualityByTool?: Record<string, ModelImageQuality>,
+): ModelImageQuality | null => {
+  const accepted = getQualityLevelsForModel(model?.id);
+  if (accepted.length === 0) return null;
+  const remembered = qualityByTool?.[tool.id];
+  if (isModelImageQuality(remembered) && accepted.includes(remembered)) return remembered;
+  return accepted.includes("auto") ? "auto" : accepted[0];
+};
 
 /**
  * The tier to put in a request for this model: what the caller asked for,

@@ -52,6 +52,9 @@
     // From GET /api/v1/images/models: the images API normalizes these eight
     // ratios (plus "auto") for this key.
     supportedAspectRatios: ["2:3", "3:4", "9:16", "1:1", "4:3", "3:2", "16:9", "21:9"],
+    // From the same listing: input_references max 16, counting the image
+    // being edited.
+    maxInputImages: 16,
     default: true,
   },
   {
@@ -71,6 +74,9 @@
     // From GET /api/v1/images/models: the images API normalizes these eight
     // ratios (plus "auto") for this key.
     supportedAspectRatios: ["2:3", "3:4", "9:16", "1:1", "4:3", "3:2", "16:9", "21:9"],
+    // From the same listing: input_references max 16, counting the image
+    // being edited.
+    maxInputImages: 16,
     default: false,
   },
 
@@ -107,6 +113,9 @@
       "16:9",
       "21:9",
     ],
+    // OpenRouter's GET /api/v1/images/models: input_references max 14. The
+    // count includes the image being edited.
+    maxInputImages: 14,
     default: false,
   },
   {
@@ -146,11 +155,17 @@
       "4:1",
       "8:1",
     ],
-    // Lists both "reasoning" and "reasoning_effort" in supported_parameters
-    // (checked 2026-09-11), and thinking is optional on the 3.1 Flash keys, so
-    // "none" is among them.
-    reasoningLevels: ["default", "none", "low", "medium", "high"],
-    initialReasoningLevel: "medium",
+    // Google documents two thinking levels for the 3.1 image models, "minimal"
+    // (the default) and "high", and OpenRouter forwards any effort it gets.
+    // Measured 2026-09-12 on Flash Lite: "low", "medium" and "high" each spent
+    // ~480 reasoning tokens (the same amount), while "none", "minimal" and no
+    // parameter at all spent 0. So the real dial has two positions, and that is
+    // all the picker offers: "default" is no thinking, "high" is thinking.
+    reasoningLevels: ["default", "high"],
+    initialReasoningLevel: "high",
+    // OpenRouter's GET /api/v1/images/models: input_references max 14. The
+    // count includes the image being edited.
+    maxInputImages: 14,
     default: false,
   },
 
@@ -186,11 +201,14 @@
       "4:1",
       "8:1",
     ],
-    // Lists both "reasoning" and "reasoning_effort" in supported_parameters
-    // (checked 2026-09-11), and thinking is optional on the 3.1 Flash keys, so
-    // "none" is among them.
-    reasoningLevels: ["default", "none", "low", "medium", "high"],
-    initialReasoningLevel: "medium",
+    // Two thinking levels, as on Gemini 3.1 Flash above: "default" is no
+    // thinking (Google's "minimal"), "high" is thinking. See that entry for the
+    // measurement.
+    reasoningLevels: ["default", "high"],
+    initialReasoningLevel: "high",
+    // OpenRouter's GET /api/v1/images/models: input_references max 14. The
+    // count includes the image being edited.
+    maxInputImages: 14,
     default: false,
   },
 ]

@@ -230,7 +230,8 @@ describe("ethnicity tool prompt", () => {
 describe("no-unrequested-text instruction", () => {
   // GPT Image 2.5 writes captions and labels into images that never asked for
   // them, so every tool prompt has to say not to.
-  const TEXT_TOOL_IDS = ["change_text", "stylized_title"];
+  // Generate Pallet asks for numbered swatches, and the numbers are text.
+  const TEXT_TOOL_IDS = ["change_text", "stylized_title", "generate_pallet"];
 
   it("ends every image prompt with it", () => {
     const toolsWithPrompts = TOOLS.filter(

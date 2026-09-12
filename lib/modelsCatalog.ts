@@ -75,9 +75,10 @@ export const getOpenRouterEndpointForModel = (
  *
  * Each catalog entry lists its own levels, because they differ per model rather
  * than per family: Gemini 3 Pro Image makes thinking mandatory and answers
- * `effort: "none"` with a 400, while the 3.1 Flash keys accept "none". An
- * unknown id (an env override, or a key the registry has not caught up with)
- * gets the full set rather than none, so a level stays reachable.
+ * `effort: "none"` with a 400, while the 3.1 Flash keys have two thinking
+ * levels and treat "low", "medium" and "high" as the same one. An unknown id
+ * (an env override, or a key the registry has not caught up with) gets the full
+ * set rather than none, so a level stays reachable.
  */
 export const getReasoningLevelsForModel = (
   modelId: string | null | undefined,
@@ -139,6 +140,14 @@ export const resolveImageSizeRequest = (
  */
 export const getMaxImageSizeForModel = (modelId: string | null | undefined): ImageSizeTier | null =>
   getModelInfoById(modelId)?.maxImageSize ?? null;
+
+/**
+ * The most input images a model takes in one request (edit image plus
+ * references), or null when the catalog does not know and nothing should be
+ * checked. See ModelInfo.maxInputImages.
+ */
+export const getMaxInputImagesForModel = (modelId: string | null | undefined): number | null =>
+  getModelInfoById(modelId)?.maxInputImages ?? null;
 
 /**
  * The tier to put in a request for this model: what the caller asked for,

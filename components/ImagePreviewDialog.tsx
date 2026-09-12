@@ -226,14 +226,18 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
 }) => {
   const visibleItems = React.useMemo(() => items.filter((item) => item.images.length > 0), [items]);
   const [zoom, setZoom] = React.useState(1);
-  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  // The scroll container is held in state, set through a callback ref, rather
+  // than in a useRef read from an effect keyed on `open`. MUI's Dialog renders
+  // through a Portal that mounts its children one render after `open` flips,
+  // so in the commit where `open` changes the element does not exist yet; an
+  // effect reading a ref there would find null and never attach the listener.
+  const [scrollElement, setScrollElement] = React.useState<HTMLDivElement | null>(null);
 
   // Ctrl+wheel resizes the images instead of the whole window, so the listener
   // has to be non-passive: React's onWheel cannot call preventDefault, and
   // without that the browser zooms the page.
   React.useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) return undefined;
+    if (!scrollElement) return undefined;
 
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return;
@@ -244,9 +248,9 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
       });
     };
 
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [open]);
+    scrollElement.addEventListener("wheel", onWheel, { passive: false });
+    return () => scrollElement.removeEventListener("wheel", onWheel);
+  }, [scrollElement]);
 
   const itemWidth = Math.round(BASE_ITEM_WIDTH * zoom);
 
@@ -291,7 +295,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
       </DialogTitle>
 
       <DialogContent
-        ref={scrollRef}
+        ref={setScrollElement}
         sx={{
           px: { xs: 2, sm: 3 },
           py: 0,

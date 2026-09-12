@@ -95,8 +95,9 @@ export interface ModelInfo {
    *   edge above 3840, no more than 3:1, and a total pixel count between
    *   655,360 and 8,294,400. The GPT Image 2.5 keys.
    *
-   * Omit it for a model that takes no size parameter, and the size picker is
-   * hidden rather than offering a choice that changes nothing.
+   * Omit it for a model that takes no size parameter; the request then carries
+   * no size at all. (The size picker itself is governed by `maxImageSize`, see
+   * getSizeTokenOptionsForModel.)
    */
   sizeParameter?: "image_config.image_size" | "size";
   /**
@@ -107,7 +108,8 @@ export interface ModelInfo {
    * The levels are per model, not per family: `GET /api/v1/models/<id>/endpoints`
    * says whether a key lists `reasoning` among its `supported_parameters`, and
    * beyond that the levels differ — Gemini 3 Pro Image rejects `effort: "none"`
-   * with a 400, while the 3.1 Flash keys accept it. So each entry lists its own.
+   * with a 400, and the 3.1 Flash keys have only two thinking levels, so three
+   * of the five names would buy the same request. So each entry lists its own.
    */
   reasoningLevels?: ModelReasoningLevel[];
   /** Where the picker starts, which must be one of `reasoningLevels`. */
@@ -122,6 +124,14 @@ export interface ModelInfo {
    * for models that ignore `image_config` altogether (they take pixel sizes).
    */
   maxImageSize?: ImageSizeTier;
+  /**
+   * The most input images this model takes in one request, counting the image
+   * being edited along with the references. From `input_references` in
+   * OpenRouter's `GET /api/v1/images/models` listing (14 for the Gemini keys,
+   * 16 for GPT Image 2.5). A request over it is a 400, so the run path refuses
+   * it before sending. Omit when the ceiling is unknown, and nothing is checked.
+   */
+  maxInputImages?: number;
 }
 
 export interface ArtStyleDefinition {

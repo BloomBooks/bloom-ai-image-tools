@@ -20,9 +20,14 @@ describe("buildInputImageRoster", () => {
     expect(buildInputImageRoster(1, ["Maria"], 1)).toContain('the image to edit, showing "Maria"');
   });
 
-  it("says nothing about a lone unlabeled image, which needs no introduction", () => {
-    expect(buildInputImageRoster(1, [], 1)).toBe("");
-    expect(buildInputImageRoster(1, [null], 0)).toBe("");
+  it("lists a lone unlabeled image too, because tool prompts refer to the list", () => {
+    expect(buildInputImageRoster(1, [], 1)).toBe("Input images, in order:\n1. the image to edit");
+    expect(buildInputImageRoster(1, [null], 0)).toBe(
+      "Input images, in order:\n1. a reference image",
+    );
+  });
+
+  it("says nothing when there are no images", () => {
     expect(buildInputImageRoster(0, [])).toBe("");
   });
 

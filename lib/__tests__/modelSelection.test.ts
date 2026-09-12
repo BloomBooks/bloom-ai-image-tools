@@ -3,6 +3,7 @@ import { TOOLS } from "../../components/tools/tools-registry";
 import {
   buildMeasuredStatKey,
   DEFAULT_MODEL,
+  getMaxInputImagesForModel,
   getMeasuredStats,
   getModelInfoById,
   getOpenRouterEndpointForModel,
@@ -73,11 +74,11 @@ describe("per-tool reasoning resolution", () => {
 
   it("applies the tool's imageReasoningLevel cap over the model's initial level", () => {
     const tool = getTool("break_comic_into_images");
-    // Gemini Flash starts at "medium", but break-comic caps reasoning at
+    // Gemini Flash starts at "high", but break-comic caps reasoning at
     // "default". Name the model rather than using DEFAULT_MODEL: the cap can
     // only be shown to win over a model that declares an initial level.
     const flash = getModelInfoById(GEMINI_FLASH);
-    expect(flash?.initialReasoningLevel).toBe("medium");
+    expect(flash?.initialReasoningLevel).toBe("high");
     expect(resolveToolReasoningLevel(tool, flash, {})).toBe("default");
   });
 
@@ -86,8 +87,8 @@ describe("per-tool reasoning resolution", () => {
     // Gemini Flash rather than the catalog default, because this checks the
     // initialReasoningLevel step of the chain and only some models declare one.
     const flash = getModelInfoById(GEMINI_FLASH);
-    expect(flash?.initialReasoningLevel).toBe("medium");
-    expect(resolveToolReasoningLevel(tool, flash, {})).toBe("medium");
+    expect(flash?.initialReasoningLevel).toBe("high");
+    expect(resolveToolReasoningLevel(tool, flash, {})).toBe("high");
   });
 
   it('uses "default" for a model that declares no initial reasoning level', () => {
@@ -136,15 +137,21 @@ describe("OpenRouter endpoint routing", () => {
 
 describe("reasoning levels per model", () => {
   it("offers the levels the model declares", () => {
-    // All three Gemini keys list "reasoning" in supported_parameters on
-    // OpenRouter (checked 2026-09-11).
-    expect(getReasoningLevelsForModel(GEMINI_FLASH)).toEqual([
-      "default",
-      "none",
-      "low",
-      "medium",
-      "high",
-    ]);
+    // The 3.1 Flash keys have two thinking levels (Google's "minimal" and
+    // "high"); measured 2026-09-12, "low", "medium" and "high" all bought the
+    // same ~480 reasoning tokens and "none" bought what omitting the parameter
+    // buys. So the picker offers the two positions that differ.
+    expect(getReasoningLevelsForModel(GEMINI_FLASH)).toEqual(["default", "high"]);
+    expect(getReasoningLevelsForModel(GEMINI_PRO)).toEqual(["default", "low", "medium", "high"]);
+  });
+
+  it("caps input images at what the model's endpoint takes", () => {
+    // From OpenRouter's GET /api/v1/images/models input_references ranges.
+    expect(getMaxInputImagesForModel(GEMINI_FLASH)).toBe(14);
+    expect(getMaxInputImagesForModel(GEMINI_PRO)).toBe(14);
+    expect(getMaxInputImagesForModel(SUNBURST)).toBe(16);
+    // An id the catalog does not know gets no cap, and so no check.
+    expect(getMaxInputImagesForModel("vendor/unknown-model")).toBeNull();
   });
 
   it("leaves out a level the model rejects", () => {

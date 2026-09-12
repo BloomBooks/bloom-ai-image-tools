@@ -424,7 +424,7 @@ export const TOOLS: ToolDefinition[] = (
       // while extracting, and Sunburst has not been tested for that.
       recommendedModelIds: ["openai/gpt-image-2.5-sunburst"],
       // Leave reasoning at the model default for the cleanup-edit image call.
-      // With reasoning forced on (e.g. Flash's "medium" initial level) the
+      // With reasoning forced on (e.g. Flash's "high" initial level) the
       // model "plans a better poster" and redraws the artwork wholesale; the
       // faithful runs all omitted the reasoning parameter.
       imageReasoningLevel: "default",
@@ -633,6 +633,8 @@ export const TOOLS: ToolDefinition[] = (
         return `${basePrompt}\n\nTheme and palette guidance to follow closely: ${instructions}`;
       },
       actionButtonLabel: "Generate Pallet",
+      // The swatches are numbered, and the numbers are text the tool asks for.
+      addsTextToImage: true,
       referenceImages: "0+",
       editImage: false,
       hiddenAspectRatioDefault: "21:9",

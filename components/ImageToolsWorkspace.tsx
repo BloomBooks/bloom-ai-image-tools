@@ -839,7 +839,12 @@ export function ImageToolsWorkspace({
       }
       const dataUrl = await readImageFile(fsBinding, item.imageFileName);
       if (!dataUrl) {
-        return item;
+        // The file is gone (or unreadable). Drop the name so the record stops
+        // claiming bytes it cannot produce: the hydrator no longer re-picks it
+        // every pass, blocking the records behind it in the batch, and the
+        // gallery says "not in storage" instead of "Loading…" forever. The
+        // next folder scan restores the name if the file is really there.
+        return { ...item, imageFileName: null };
       }
 
       const resolution = item.resolution ?? (await getImageDimensions(dataUrl));
@@ -1366,7 +1371,7 @@ export function ImageToolsWorkspace({
     }
 
     const itemsNeedingData = hydrateCandidateIds
-      .map((id) => state.history.find((item) => item.id === id) || null)
+      .map((id) => historyItemsById[id] || null)
       .filter((item): item is ImageRecord =>
         Boolean(item && !item.imageData && !!item.imageFileName),
       );
@@ -1395,7 +1400,7 @@ export function ImageToolsWorkspace({
         let changed = false;
         const nextHistory = prev.history.map((item) => {
           const updated = updateMap.get(item.id);
-          if (updated && updated.imageData && updated !== item) {
+          if (updated && updated !== item) {
             changed = true;
             return updated;
           }
@@ -1414,7 +1419,7 @@ export function ImageToolsWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [isHydrated, fsBinding, hydrateCandidateIds, state.history, loadHistoryImageFromFolder]);
+  }, [isHydrated, fsBinding, hydrateCandidateIds, historyItemsById, loadHistoryImageFromFolder]);
 
   useEffect(() => {
     if (!fsSupported) {

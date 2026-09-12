@@ -211,6 +211,21 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     requestedSize = pickSizeTokenForLongEdge(Math.max(upscaleTarget.width, upscaleTarget.height));
   }
 
+  // The exact pixels the request should ask for, when the caller knows them.
+  // A model that takes pixels (GPT Image 2.5) is asked for these directly; a
+  // tier-token model never sees them. Upscale supplies its selector's target.
+  // Any other edit whose tool set no size and whose shape follows the source
+  // gets the source's own resolution, because on such a model an explicit size
+  // overrides the source's shape: without this every edit would come back in
+  // the picker-less default tier (1K) and one of the model's canned shapes,
+  // shrinking a 2048x1536 illustration to 1024x768.
+  const shapeFollowsSource = requestedAspectRatio === AUTO_ASPECT_RATIO && !autoSizeResolution;
+  const targetDimensions =
+    upscaleTarget ??
+    (requiresEditImage && targetImageResolution && shapeFollowsSource && !requestedSize
+      ? targetImageResolution
+      : undefined);
+
   const promptWithoutAspectRatio =
     tool.id === "custom"
       ? `Edit the first image. If more images are provided, treat them as style/"like this" references.\n\nInstructions:\n${basePrompt}`
@@ -306,7 +321,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
       toolModel?.supportedAspectRatios,
     ),
     size: requestedSize,
-    ...(upscaleTarget ? { targetDimensions: upscaleTarget } : {}),
+    ...(targetDimensions ? { targetDimensions } : {}),
   };
 
   if (tool.autoSizeFromInput) {

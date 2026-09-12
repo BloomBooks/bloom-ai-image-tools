@@ -3,6 +3,7 @@ import { AUTO_ASPECT_RATIO, getOpenAIOrientation } from "../lib/aspectRatios";
 import { canUseLocalDummyModelWithoutApiKey, LOCAL_DUMMY_MODEL_ID } from "../lib/localModels";
 import {
   getMaxImageSizeForModel,
+  getMaxInputImagesForModel,
   getModelInfoById,
   getModelNameById,
   getOpenRouterEndpointForModel,
@@ -751,9 +752,9 @@ const rethrowIfAbort = (error: unknown): string => {
 };
 
 /**
- * Turns a non-ok OpenRouter response into the right error type. Shared so the
- * images API path reports credit/rate-limit/other failures exactly as the
- * chat/completions path does.
+ * Turns a non-ok OpenRouter response into the right error type. Shared by the
+ * images API path, the chat/completions image path and the text path, so all
+ * three report credit/rate-limit/other failures the same way.
  */
 function throwOpenRouterHttpError(
   status: number,
@@ -790,42 +791,25 @@ function throwOpenRouterHttpError(
 }
 
 /**
- * Generates or edits an image through OpenRouter's images API
- * (POST /api/v1/images), for the catalog entries that declare
- * `openRouterEndpoint: "images"`.
+ * A numbered roster of the input images, to go at the top of the prompt on
+ * both endpoints. Tool prompts refer to it ("the numbered input images listed
+ * above"), so it is emitted whenever there is at least one input image, even a
+ * lone unlabeled one; only a request with no images gets "".
  *
- * This is a genuinely different API from chat/completions, not a variant of it:
- * there are no messages, no modalities, and no reasoning — just a prompt, the
- * source images as `input_references`, and a normalized `aspect_ratio`. The
- * result comes back as base64 in `data[].b64_json` rather than inside a chat
- * message. A dedicated image model is served ONLY here and answers
- * chat/completions with a 404 telling you so.
- *
- * `GET /api/v1/images/models` is the source of truth for which keys this serves
- * and which parameters each one accepts (the GPT Image 2.5 pair takes
- * aspect_ratio, quality, background, n, input_references, output_compression —
- * note there is no `resolution`, so image size is not selectable).
- */
-/**
- * A numbered roster of the input images, to go at the top of the prompt.
- *
- * The chat path puts a label in a text part right before each picture, which
- * the images API has no room for: `input_references` is a bare array. Without
- * this, a character the user named in the strip reaches the model anonymous,
- * and a tool given several references cannot say which is which. OpenAI's image
- * prompting guide asks for exactly this: identify each input by number and
- * purpose, then explain how they combine.
- *
- * Returns "" when there is nothing worth saying (a single unlabeled image
- * already needs no introduction).
+ * The images API has no room for a label beside a picture (`input_references`
+ * is a bare array), so here is the only place a character's name or an image's
+ * role reaches the model on that path. The chat path also puts a label in a
+ * text part right before each picture, and the roster gives it the numbering
+ * and the edit-vs-reference roles as well. OpenAI's image prompting guide asks
+ * for exactly this: identify each input by number and purpose, then explain
+ * how they combine.
  */
 export const buildInputImageRoster = (
   imageCount: number,
   labels: (string | null | undefined)[] = [],
   editImageCount = 0,
 ): string => {
-  const named = labels.some((label) => (label || "").trim());
-  if (imageCount < 1 || (imageCount === 1 && !named)) {
+  if (imageCount < 1) {
     return "";
   }
 
@@ -838,6 +822,29 @@ export const buildInputImageRoster = (
   return `Input images, in order:\n${lines.join("\n")}`;
 };
 
+// A no-image response (200 with nothing usable in it) is resent this many
+// times before the run fails. Shared by both image endpoints.
+const MAX_IMAGE_ATTEMPTS = 3;
+
+/**
+ * Generates or edits an image through OpenRouter's images API
+ * (POST /api/v1/images), for the catalog entries that declare
+ * `openRouterEndpoint: "images"`.
+ *
+ * This is a genuinely different API from chat/completions, not a variant of it:
+ * there are no messages, no modalities, and no reasoning — just a prompt, the
+ * source images as `input_references`, a normalized `aspect_ratio`, and an
+ * optional pixel `size`. The result comes back as base64 in `data[].b64_json`
+ * rather than inside a chat message. A dedicated image model is served ONLY
+ * here and answers chat/completions with a 404 telling you so.
+ *
+ * `GET /api/v1/images/models` lists which keys this serves, but its parameter
+ * list is not a complete account of what a key accepts: it omits `size`, which
+ * the GPT Image 2.5 keys take (see data/models-registry.json5).
+ *
+ * `prompt` already carries the input-image roster; editImage prepends it for
+ * both endpoints.
+ */
 const editImageViaImagesApi = async (
   images: string[],
   prompt: string,
@@ -876,16 +883,9 @@ const editImageViaImagesApi = async (
   const pixelSize = sizeRequest?.parameter === "size" ? sizeRequest.value : null;
   const aspectRatio = pixelSize ? "auto" : requestedAspectRatio;
 
-  const roster = buildInputImageRoster(
-    images.length,
-    options?.imageLabels,
-    options?.editImageCount,
-  );
-  const promptWithRoster = roster ? `${roster}\n\n${prompt}` : prompt;
-
   const body: Record<string, any> = {
-    model: modelId,
-    prompt: promptWithRoster,
+    // `model` is set per candidate inside the failover loop below.
+    prompt,
     n: 1,
     aspect_ratio: aspectRatio,
     ...(pixelSize ? { size: pixelSize } : {}),
@@ -903,78 +903,122 @@ const editImageViaImagesApi = async (
     });
   }
 
-  console.log("[openRouter] images-API request", {
-    endpoint: "/images",
-    model: modelId,
-    aspectRatio,
-    aspectRatioRequested: requested ?? "(none)",
-    size: pixelSize ?? "(omitted — model default)",
-    inputReferenceCount: images.length,
-    promptChars: promptWithRoster.length,
-    promptPreview:
-      promptWithRoster.length > 300 ? `${promptWithRoster.slice(0, 300)}…` : promptWithRoster,
-  });
+  // The same failover and retry as the chat path: each candidate key (the
+  // chosen model, then any catalog `fallbackId`) gets its own requests, and a
+  // 200 with no image in it is resent up to MAX_IMAGE_ATTEMPTS times. An
+  // unavailable key falls over to the next candidate; any other HTTP error
+  // fails the run.
+  const candidateModelIds = getRequestModelIds(modelId);
+  let lastNoImageDetail = "an empty data array";
 
-  const response = await fetch(`${OPENROUTER_BASE_URL}/images`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": window.location.origin,
-      "X-Title": "Bloom AI Image Tools",
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+  for (let modelIndex = 0; modelIndex < candidateModelIds.length; modelIndex += 1) {
+    const modelForRequest = candidateModelIds[modelIndex];
+    const hasFallbackModel = modelIndex < candidateModelIds.length - 1;
+    const nextModelId = hasFallbackModel ? candidateModelIds[modelIndex + 1] : null;
+    body.model = modelForRequest;
+    let modelUnavailable = false;
 
-  // As in the chat path: a cancel during the body read must propagate rather
-  // than look like an empty response.
-  const rawText = await response.text().catch(rethrowIfAbort);
-  let data: any = null;
-  try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = { _nonJsonBody: rawText };
-  }
+    for (let attempt = 0; attempt < MAX_IMAGE_ATTEMPTS; attempt += 1) {
+      console.log("[openRouter] images-API request", {
+        endpoint: "/images",
+        model: modelForRequest,
+        attempt: attempt + 1,
+        attemptsPlanned: MAX_IMAGE_ATTEMPTS,
+        aspectRatio,
+        aspectRatioRequested: requested ?? "(none)",
+        size: pixelSize ?? "(omitted — model default)",
+        inputReferenceCount: images.length,
+        promptChars: prompt.length,
+        promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,
+      });
 
-  if (!response.ok) {
-    throwOpenRouterHttpError(response.status, response.statusText, rawText, data, modelId);
-  }
+      const response = await fetch(`${OPENROUTER_BASE_URL}/images`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Bloom AI Image Tools",
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
 
-  const collectedImages: string[] = [];
-  for (const entry of Array.isArray(data?.data) ? data.data : []) {
-    if (typeof entry?.b64_json === "string" && entry.b64_json) {
-      const mediaType =
-        typeof entry.media_type === "string" && entry.media_type.startsWith("image/")
-          ? entry.media_type
-          : "image/png";
-      collectedImages.push(`data:${mediaType};base64,${entry.b64_json}`);
+      // As in the chat path: a cancel during the body read must propagate rather
+      // than look like an empty response.
+      const rawText = await response.text().catch(rethrowIfAbort);
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { _nonJsonBody: rawText };
+      }
+
+      if (!response.ok) {
+        const detailMessage = getOpenRouterErrorDetail(data);
+        if (hasFallbackModel && isModelUnavailableError(response.status, detailMessage)) {
+          console.warn(
+            `[openRouter] model "${modelForRequest}" unavailable (${response.status}); ` +
+              `falling over to "${nextModelId}".`,
+          );
+          modelUnavailable = true;
+          break;
+        }
+        throwOpenRouterHttpError(
+          response.status,
+          response.statusText,
+          rawText,
+          data,
+          modelForRequest,
+        );
+      }
+
+      const collectedImages: string[] = [];
+      for (const entry of Array.isArray(data?.data) ? data.data : []) {
+        if (typeof entry?.b64_json === "string" && entry.b64_json) {
+          const mediaType =
+            typeof entry.media_type === "string" && entry.media_type.startsWith("image/")
+              ? entry.media_type
+              : "image/png";
+          collectedImages.push(`data:${mediaType};base64,${entry.b64_json}`);
+        }
+      }
+
+      console.log("[openRouter] images-API response", {
+        status: response.status,
+        model: (data?.model as string) || modelForRequest,
+        imagesReturned: collectedImages.length,
+        cost: (data?.usage?.cost as number) ?? null,
+        usage: data?.usage ?? null,
+      });
+
+      if (collectedImages.length > 0) {
+        return {
+          imageData: collectedImages[0],
+          images: collectedImages,
+          duration: getNow() - startTime,
+          model: (data?.model as string) || modelForRequest,
+          cost: (data?.usage?.cost as number) ?? 0,
+        };
+      }
+
+      lastNoImageDetail =
+        getOpenRouterErrorDetail(data) || rawText.slice(0, 300) || "an empty data array";
+      if (attempt < MAX_IMAGE_ATTEMPTS - 1) {
+        console.warn(
+          `[openRouter] No image in images-API response (attempt ${attempt + 1}/${MAX_IMAGE_ATTEMPTS}); retrying.`,
+        );
+      }
+    }
+
+    if (!modelUnavailable) {
+      break;
     }
   }
 
-  console.log("[openRouter] images-API response", {
-    status: response.status,
-    model: (data?.model as string) || modelId,
-    imagesReturned: collectedImages.length,
-    cost: (data?.usage?.cost as number) ?? null,
-    usage: data?.usage ?? null,
-  });
-
-  if (collectedImages.length === 0) {
-    throw new Error(
-      `OpenRouter did not return an image. The images API responded with: ${
-        getOpenRouterErrorDetail(data) || rawText.slice(0, 300) || "an empty data array"
-      }`,
-    );
-  }
-
-  return {
-    imageData: collectedImages[0],
-    images: collectedImages,
-    duration: getNow() - startTime,
-    model: (data?.model as string) || modelId,
-    cost: (data?.usage?.cost as number) ?? 0,
-  };
+  throw new Error(
+    `OpenRouter did not return an image. The images API responded with: ${lastNoImageDetail}`,
+  );
 };
 
 /**
@@ -1032,15 +1076,46 @@ export const editImage = async (
   const localStartTime = getNow();
   const images = (base64Images || []).filter((x) => !!x);
 
+  // Over the model's input ceiling is a 400 from OpenRouter after the upload,
+  // so refuse it here, in words that say what to do about it.
+  const maxInputImages = getMaxInputImagesForModel(modelToUse);
+  if (maxInputImages !== null && images.length > maxInputImages) {
+    const editCount = Math.min(options?.editImageCount ?? 0, images.length);
+    const counted =
+      editCount > 0
+        ? `${images.length} (the image being edited plus ${images.length - editCount} references)`
+        : `${images.length}`;
+    throw new Error(
+      `${getModelNameById(modelToUse) || modelToUse} takes at most ${maxInputImages} input images ` +
+        `in one request, and this run has ${counted}. Remove some reference images and try again.`,
+    );
+  }
+
+  // Tool prompts refer to "the numbered input images listed above", so the
+  // roster goes on the prompt for both endpoints, before the route is chosen.
+  const roster = buildInputImageRoster(
+    images.length,
+    options?.imageLabels,
+    options?.editImageCount,
+  );
+  const promptWithRoster = roster ? `${roster}\n\n${prompt}` : prompt;
+
   // A dedicated image model is served only by the images API; everything below
   // this point builds a chat/completions request it would reject outright.
   if (getOpenRouterEndpointForModel(modelToUse) === "images") {
-    return editImageViaImagesApi(images, prompt, key, modelToUse, options, localStartTime);
+    return editImageViaImagesApi(
+      images,
+      promptWithRoster,
+      key,
+      modelToUse,
+      options,
+      localStartTime,
+    );
   }
 
   const hasImage = images.length > 0;
 
-  const content: any[] = [{ type: "text", text: prompt }];
+  const content: any[] = [{ type: "text", text: promptWithRoster }];
   if (hasImage) {
     const labels = options?.imageLabels ?? [];
     images.forEach((dataUrl, index) => {
@@ -1060,8 +1135,7 @@ export const editImage = async (
   }
 
   // Build image generation parameters for different providers.
-  // - Gemini and openai/gpt-5.4-image*: image_config, whose image_size is one
-  //   of "1K"|"2K"|"4K"
+  // - Gemini: image_config, whose image_size is one of "1K"|"2K"|"4K"
   // - other OpenAI (gpt-image-1, DALL-E, etc.): `size` as pixel dimensions
   // Which one a model takes is declared per model in the catalog. An id the
   // catalog does not list — an env override, or a key the registry has not
@@ -1069,7 +1143,7 @@ export const editImage = async (
   const catalogSizeParameter = getModelInfoById(modelToUse)?.sizeParameter;
   const usesImageConfig = catalogSizeParameter
     ? catalogSizeParameter === "image_config.image_size"
-    : modelToUse.startsWith("google/") || modelToUse.startsWith("openai/gpt-5.4-image");
+    : modelToUse.startsWith("google/");
 
   const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
   // Each model key has its own image_size ceiling, and the ceiling belongs to
@@ -1139,7 +1213,6 @@ export const editImage = async (
   // mandatory for this endpoint and cannot be disabled"). "default" (and an
   // explicit "none" request) omit the reasoning parameter entirely and leave
   // the decision to the model.
-  const MAX_IMAGE_ATTEMPTS = 3;
   const effort: string | null =
     reasoningLevel === "default" || reasoningLevel === "none" ? null : reasoningLevel;
 
@@ -1193,8 +1266,9 @@ export const editImage = async (
         sizeOpenAI: body.size,
         imageConfigGemini: body.image_config,
         inputImageCount: images.length,
-        promptChars: prompt.length,
-        promptPreview: prompt.length > 300 ? `${prompt.slice(0, 300)}…` : prompt,
+        promptChars: promptWithRoster.length,
+        promptPreview:
+          promptWithRoster.length > 300 ? `${promptWithRoster.slice(0, 300)}…` : promptWithRoster,
       });
 
       const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
@@ -1234,29 +1308,13 @@ export const editImage = async (
           break;
         }
 
-        if (response.status === 402 && detailMessage) {
-          throw new OpenRouterApiError(detailMessage, {
-            status: response.status,
-            reason: "insufficient-credits",
-            detailMessage,
-            infoUrl: OPENROUTER_KEYS_URL,
-          });
-        }
-
-        if (response.status === 429) {
-          throw new OpenRouterApiError(buildRateLimitMessage(modelForRequest), {
-            status: response.status,
-            reason: "rate-limited",
-            detailMessage,
-          });
-        }
-
-        const message = detailMessage || rawText || response.statusText || "";
-        const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-        throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
-          status: response.status,
-          detailMessage,
-        });
+        throwOpenRouterHttpError(
+          response.status,
+          response.statusText,
+          rawText,
+          data,
+          modelForRequest,
+        );
       }
 
       // Try to extract image(s) from chat-style response. Interleaved image
@@ -1476,29 +1534,13 @@ export const generateText = async (
           break;
         }
 
-        if (response.status === 402 && detailMessage) {
-          throw new OpenRouterApiError(detailMessage, {
-            status: response.status,
-            reason: "insufficient-credits",
-            detailMessage,
-            infoUrl: OPENROUTER_KEYS_URL,
-          });
-        }
-
-        if (response.status === 429) {
-          throw new OpenRouterApiError(buildRateLimitMessage(modelForRequest), {
-            status: response.status,
-            reason: "rate-limited",
-            detailMessage,
-          });
-        }
-
-        const message = detailMessage || rawText || response.statusText || "";
-        const preview = message.length > 500 ? `${message.slice(0, 500)}…` : message;
-        throw new OpenRouterApiError(`OpenRouter request failed: ${response.status} ${preview}`, {
-          status: response.status,
-          detailMessage,
-        });
+        throwOpenRouterHttpError(
+          response.status,
+          response.statusText,
+          rawText,
+          data,
+          modelForRequest,
+        );
       }
 
       // An empty attempt may still bill prompt tokens, so keep a running total.

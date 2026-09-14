@@ -17,6 +17,7 @@ import { canUseLocalDummyModelWithoutApiKey } from "./localModels";
 import { resolveToolQuality, resolveToolReasoningLevel } from "./modelsCatalog";
 import { removeBackgroundFromImage } from "./backgroundRemoval";
 import { applyPostProcessingPipeline } from "./postProcessing";
+import { shrinkReferenceImage } from "./imageProcessing";
 import {
   AUTO_ASPECT_RATIO,
   getAspectRatioPromptHint,
@@ -204,8 +205,12 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
   // the OpenRouter client and local background removal cannot consume.
   const targetImageData =
     requiresEditImage && targetImage ? await ensureDataUrl(targetImage.imageData) : null;
+  // References are capped on the way out: they are only looked at, so the
+  // pixels above MAX_REFERENCE_IMAGE_EDGE buy nothing and are charged for.
+  // targetImageData above is deliberately not capped — it is the picture the
+  // result is made from.
   const referenceImageData = await Promise.all(
-    constrainedReferences.map((h) => ensureDataUrl(h.imageData)),
+    constrainedReferences.map(async (h) => shrinkReferenceImage(await ensureDataUrl(h.imageData))),
   );
   const sourceImages = [...(targetImageData ? [targetImageData] : []), ...referenceImageData];
   // Named images (e.g. characters named in the strip) get their name sent

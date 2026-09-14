@@ -205,6 +205,40 @@ export const resizeImage = (imageData: string, maxSize: number): Promise<string>
 };
 
 /**
+ * The longest edge a reference image is sent to a model at.
+ *
+ * Measured against openai/gpt-image-2.5-flare on 2026-09-14. That model's
+ * vision encoder bills an input image as one token per 32x32 patch plus about
+ * ten, so `ceil(width / 32) * ceil(height / 32) + 10` predicts the prompt
+ * tokens exactly, at every size tried. At $8/1M those tokens dominate a call:
+ * one 2048px reference took a 1024x1536 generation from $0.0054 to $0.0171,
+ * and three took it to $0.0405.
+ *
+ * 1024 is the largest edge that still bills the least. Below it the charge
+ * stops falling — a 512, a 768 and a 1024 wide reference all bill the same 617
+ * prompt tokens — so a smaller cap would give up detail and save nothing.
+ *
+ * Only references come through here. The image being edited is what the result
+ * is made from and has to keep its resolution.
+ */
+export const MAX_REFERENCE_IMAGE_EDGE = 1024;
+
+/**
+ * A reference image at no more than MAX_REFERENCE_IMAGE_EDGE on its long edge.
+ * One already smaller comes back untouched (resizeImage short-circuits).
+ *
+ * A resize that fails should cost money, not the run, so the original is sent.
+ */
+export const shrinkReferenceImage = async (imageData: string): Promise<string> => {
+  try {
+    return await resizeImage(imageData, MAX_REFERENCE_IMAGE_EDGE);
+  } catch (error) {
+    console.warn("[references] could not shrink a reference image; sending it full size", error);
+    return imageData;
+  }
+};
+
+/**
  * Process an image for use as an art style thumbnail:
  * 1. Crop whitespace
  * 2. Resize to 200px (max dimension)

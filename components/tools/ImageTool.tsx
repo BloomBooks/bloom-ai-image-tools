@@ -9,6 +9,7 @@ import {
   FormControlLabel,
   FormHelperText,
   LinearProgress,
+  ListItemText,
   MenuItem,
   Paper,
   Skeleton,
@@ -21,6 +22,7 @@ import type {
   BatchRunState,
   MeasuredStats,
   ModelImageQuality,
+  ModelInfo,
   ModelReasoningLevel,
   ToolDefinition,
   ToolParameter,
@@ -49,9 +51,22 @@ import {
   getSizeOptionsForModel,
   getSizeTokenOptionsForModel,
   resolveToolModelId,
+  type SizeOption,
   snapPixelsForModel,
 } from "../../lib/modelsCatalog";
-import { DEFAULT_SIZE_TOKEN, pickSizeTokenForLongEdge } from "../../lib/imageSizes";
+import {
+  DEFAULT_SIZE_TOKEN,
+  formatPixelSize,
+  pickSizeTokenForLongEdge,
+} from "../../lib/imageSizes";
+import {
+  AUTO_SIZE_TOKEN,
+  findSizeParam,
+  isAutoSizeValue,
+  resolveSizeTokenValue,
+  resolveSlotTarget,
+  toolCanFollowSlot,
+} from "../../lib/slotTarget";
 import {
   buildUpscaleOptions,
   findTargetResolutionParam,
@@ -659,6 +674,22 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     onApplyTool(tool.id, payload);
   };
 
+  // What a run of this tool would ask for if it followed the book slot Bloom
+  // described for the target image, or null when it would not (no slot, a tool
+  // that makes something other than the slot's picture, or a hand-picked size).
+  // The size and shape controls and the cost lookup all read the same answer.
+  const resolveSlotForTool = useCallback(
+    (tool: ToolDefinition, toolModel: ModelInfo | null) =>
+      resolveSlotTarget({
+        tool,
+        params: paramsByTool[tool.id],
+        hostTarget: targetImageSuggestedTarget,
+        requestedAspectRatio: getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
+        supportedAspectRatios: toolModel?.supportedAspectRatios,
+      }),
+    [paramsByTool, targetImageSuggestedTarget],
+  );
+
   const renderParameterField = useCallback(
     (tool: ToolDefinition, param: ToolParameter, value: string) => {
       const inputTestId = `input-${param.name}`;
@@ -770,52 +801,88 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           isEditTool && rawAspectRatioValue === AUTO_ASPECT_RATIO
             ? AUTO_ASPECT_RATIO
             : resolveAspectRatioValue(rawAspectRatioValue, undefined, supportedAspectRatios);
+        // While a tool with a size picker is on Auto inside Bloom, the whole
+        // request follows the book slot, shape included, so the shape control
+        // shows the slot's shape and takes no input (see lib/slotTarget.ts).
+        const slot = findSizeParam(tool.parameters) ? resolveSlotForTool(tool, toolModel) : null;
         return (
-          <AspectRatioPicker
-            key={param.name}
-            value={aspectRatioValue}
-            onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
-            disabled={isProcessing}
-            label={param.label}
-            allowAuto={isEditTool}
-            autoResolvedValue={resolveAspectRatioValue(
-              AUTO_ASPECT_RATIO,
-              targetImageResolution,
-              supportedAspectRatios,
+          <Stack key={param.name} spacing={0.5}>
+            <AspectRatioPicker
+              value={slot ? slot.aspectRatio : aspectRatioValue}
+              onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
+              disabled={isProcessing || !!slot}
+              label={param.label}
+              allowAuto={isEditTool}
+              autoResolvedValue={resolveAspectRatioValue(
+                AUTO_ASPECT_RATIO,
+                targetImageResolution,
+                supportedAspectRatios,
+              )}
+              options={supportedAspectRatios}
+            />
+            {slot && (
+              <FormHelperText data-testid="aspect-ratio-follows-slot" sx={{ m: 0 }}>
+                Follows the book slot while Size is Auto.
+              </FormHelperText>
             )}
-            options={supportedAspectRatios}
-          />
+          </Stack>
         );
       }
 
       if (param.type === "size") {
-        // A pixel-size model (GPT Image 2.5) is labeled with the pixels each
-        // token will be sent in the shape this tool would request, so "4k" reads
-        // 2880x2880 rather than promising 4096. Tokens that land on the same
-        // pixels are offered once. A tier-token model shows the tokens as is.
-        const sizeLabelByToken = new Map(
-          getSizeOptionsForModel(
-            param.options,
-            toolModel?.id,
-            resolveAspectRatioValue(
-              getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
-              targetImageResolution,
-              toolModel?.supportedAspectRatios,
-            ),
-          ).map((option) => [option.token, option.label]),
+        // Every option is the tier's name, so the picker reads the same on
+        // every model. A pixel-size model (GPT Image 2.5) also shows the pixels
+        // each tier will be sent in the shape this tool would request, since
+        // its "4k" is 2880x2880 for a square; tiers that land on the same
+        // pixels are offered once. Inside Bloom, an Auto entry at the top is
+        // the book slot's size and the default (see lib/slotTarget.ts).
+        const slot = resolveSlotForTool(tool, toolModel);
+        const slotAvailable = !!targetImageSuggestedTarget && toolCanFollowSlot(tool);
+        const shapeForPixels =
+          slot?.aspectRatio ??
+          resolveAspectRatioValue(
+            getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
+            targetImageResolution,
+            toolModel?.supportedAspectRatios,
+          );
+        const optionByToken = new Map<string, SizeOption>(
+          getSizeOptionsForModel(param.options, toolModel?.id, shapeForPixels).map((option) => [
+            option.token,
+            option,
+          ]),
         );
-        const sizeOptions = getOrderedSizeOptions(param.options, toolModel?.id).filter((token) =>
-          sizeLabelByToken.has(token),
+        const tierTokens = getOrderedSizeOptions(param.options, toolModel?.id).filter((token) =>
+          optionByToken.has(token),
         );
-        const shouldPreferModelDefault =
-          toolModel?.id === GEMINI_3_1_FLASH_MODEL_ID && (!value || value === param.defaultValue);
-        // A remembered choice can be above the current model's ceiling (the user
-        // picked 4k under one model, then switched). Fall back to the first
-        // offered size rather than showing a value the model would reject.
-        const rememberedSize = sizeOptions.includes(value) ? value : "";
-        const sizeValue = shouldPreferModelDefault
-          ? sizeOptions[0] || param.defaultValue || ""
-          : rememberedSize || sizeOptions[0] || param.defaultValue || "";
+        const slotPixels = slotAvailable
+          ? snapPixelsForModel(toolModel?.id, targetImageSuggestedTarget ?? null)
+          : null;
+        const sizeOptions: SizeOption[] = [
+          ...(slotAvailable
+            ? [
+                {
+                  token: AUTO_SIZE_TOKEN,
+                  label: "Auto",
+                  pixels: slotPixels ? formatPixelSize(slotPixels) : undefined,
+                },
+              ]
+            : []),
+          ...tierTokens.map((token) => optionByToken.get(token)!),
+        ];
+        // Auto with no slot to follow shows the smallest tier, which is what it
+        // sends. A remembered tier can be above the current model's ceiling
+        // (the user picked 4k under one model, then switched); fall back to
+        // Auto or the first offered tier rather than a value the model rejects.
+        const firstTier = tierTokens[0] ?? "";
+        const sizeValue = isAutoSizeValue(value)
+          ? slotAvailable
+            ? AUTO_SIZE_TOKEN
+            : firstTier
+          : tierTokens.includes(value)
+            ? value
+            : slotAvailable
+              ? AUTO_SIZE_TOKEN
+              : firstTier;
         return (
           <Stack key={param.name} spacing={1}>
             <Typography
@@ -840,11 +907,20 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               SelectProps={{
                 MenuProps: { disablePortal: false },
                 displayEmpty: false,
+                // The closed picker shows only the tier's name; the pixels are
+                // detail for the open list, where there is room for them.
+                renderValue: (selected) =>
+                  sizeOptions.find((option) => option.token === selected)?.label ??
+                  String(selected),
               }}
             >
               {sizeOptions.map((option) => (
-                <MenuItem key={option} value={option}>
-                  {sizeLabelByToken.get(option) ?? option}
+                <MenuItem key={option.token} value={option.token}>
+                  <ListItemText
+                    primary={option.label}
+                    secondary={option.pixels}
+                    sx={{ my: 0, "& .MuiListItemText-secondary": { fontSize: "0.75rem" } }}
+                  />
                 </MenuItem>
               ))}
             </TextField>
@@ -961,6 +1037,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       selectedArtStyleId,
       modelByTool,
       handleParamChange,
+      // The size picker's pixel line and the shape control's slot state read
+      // the tool's other params (its shape, its size), so they must re-render
+      // when any param changes.
+      paramsByTool,
+      resolveSlotForTool,
       targetImageResolution,
       targetImageSuggestedTarget,
       hasTargetImage,
@@ -987,11 +1068,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   // picker can look up the remembered cost/time for that exact size. Mirrors
   // the resolution in ImageToolsWorkspace.handleApplyTool.
   const resolveToolSizeToken = (tool: ToolDefinition): string => {
-    const sizeParam = tool.parameters.find((param) => param.type === "size");
+    const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool));
+    const sizeParam = findSizeParam(tool.parameters);
+    const slot = resolveSlotForTool(tool, toolModel);
     if (sizeParam) {
       return (
-        paramsByTool[tool.id]?.[sizeParam.name] || sizeParam.defaultValue || DEFAULT_SIZE_TOKEN
+        resolveSizeTokenValue(sizeParam, paramsByTool[tool.id]?.[sizeParam.name], slot) ||
+        DEFAULT_SIZE_TOKEN
       );
+    }
+    if (slot) {
+      return slot.sizeToken;
     }
     const targetResolutionParam = findTargetResolutionParam(tool.parameters);
     if (targetResolutionParam) {

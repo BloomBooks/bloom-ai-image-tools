@@ -29,10 +29,14 @@ import {
   parseGifEnding,
   parseGifFrameCount,
 } from "../../lib/gifAnimationPrompt";
+import { AUTO_SIZE_TOKEN } from "../../lib/slotTarget";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
 const SIZE_OPTIONS = ["512k", "1k", "2k", "4k"] as const;
+// The size whose prompt hint stands in when the run has settled Auto to no
+// particular tier. The run path resolves Auto before the template runs, so
+// this is only a last resort.
 const DEFAULT_SIZE = SIZE_OPTIONS[0];
 const SIZE_HINTS: Record<string, string> = {
   "512k": "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
@@ -143,7 +147,9 @@ export const TOOLS: ToolDefinition[] = (
           label: "Size",
           type: "size",
           options: [...SIZE_OPTIONS],
-          defaultValue: DEFAULT_SIZE,
+          // Auto is the book slot's size when Bloom supplies one, and the
+          // smallest option otherwise (see lib/slotTarget.ts).
+          defaultValue: AUTO_SIZE_TOKEN,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
@@ -468,7 +474,9 @@ export const TOOLS: ToolDefinition[] = (
           label: "Size",
           type: "size",
           options: [...SIZE_OPTIONS],
-          defaultValue: DEFAULT_SIZE,
+          // Auto is the book slot's size when Bloom supplies one, and the
+          // smallest option otherwise (see lib/slotTarget.ts).
+          defaultValue: AUTO_SIZE_TOKEN,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {

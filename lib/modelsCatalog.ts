@@ -174,32 +174,44 @@ export const snapPixelsForModel = (
   return snapToOpenAiImageSize(desired);
 };
 
+export interface SizeOption {
+  token: string;
+  /** The tier's name, which is what the closed picker shows. */
+  label: string;
+  /**
+   * The pixels this token will be sent as, for a model that takes pixels
+   * ("2880x2880"); absent for a model that takes the token itself.
+   */
+  pixels?: string;
+}
+
 /**
- * The size options to offer for a model, each with the label to show. A model
- * that takes tier tokens shows the token itself. A pixel-size model shows the
- * pixels it will be sent for that token in the given shape, and two tokens that
- * land on the same pixels ("512k" and "1k" both become 1024 on the long edge)
- * collapse into one, so the list never offers the same request twice.
+ * The size options to offer for a model. The tier's name is the label on every
+ * model, so the picker reads the same way whichever model is selected. A
+ * pixel-size model also carries the pixels each token will be sent in the given
+ * shape, since on GPT Image 2.5 "4k" is 2880x2880 for a square, and two tokens
+ * that land on the same pixels ("512k" and "1k" both become 1024 on the long
+ * edge) collapse into one, so the list never offers the same request twice.
  */
 export const getSizeOptionsForModel = (
   options: string[] | null | undefined,
   modelId: string | null | undefined,
   aspectRatio: string | null | undefined,
-): { token: string; label: string }[] => {
+): SizeOption[] => {
   const tokens = getSizeTokenOptionsForModel(options, modelId);
   if (!modelTakesPixelSize(modelId)) {
     return tokens.map((token) => ({ token, label: token }));
   }
   const seen = new Set<string>();
-  const result: { token: string; label: string }[] = [];
+  const result: SizeOption[] = [];
   for (const token of tokens) {
     const request = resolveImageSizeRequest(modelId, sizeTokenToImageSizeTier(token), {
       aspectRatio: parseAspectRatio(aspectRatio) ? aspectRatio : "1:1",
     });
-    const label = request?.parameter === "size" ? request.value : token;
-    if (seen.has(label)) continue;
-    seen.add(label);
-    result.push({ token, label });
+    const pixels = request?.parameter === "size" ? request.value : undefined;
+    if (pixels && seen.has(pixels)) continue;
+    if (pixels) seen.add(pixels);
+    result.push({ token, label: token, ...(pixels ? { pixels } : {}) });
   }
   return result;
 };

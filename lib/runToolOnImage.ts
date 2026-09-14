@@ -33,6 +33,7 @@ import {
 } from "./upscale";
 import { getGifSheetAspectRatio, parseGifFrameCount } from "./gifAnimationPrompt";
 import { getRequestedAspectRatioValue } from "./toolHelpers";
+import { findSizeParam, resolveSizeTokenValue, resolveSlotTarget } from "./slotTarget";
 import {
   createPromptDurationKey,
   createToolDurationKey,
@@ -159,12 +160,39 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
       )
     : null;
 
+  let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
+
+  // Inside Bloom, the host says how many pixels the book slot wants, and a
+  // result that belongs in the slot is asked for at that size (and, unless the
+  // user picked a shape, in that shape). See lib/slotTarget.ts for which tools
+  // follow the slot and how an Auto size settles without one.
+  const slotTarget = resolveSlotTarget({
+    tool,
+    params,
+    hostTarget: hostSuggestedTarget,
+    requestedAspectRatio,
+    supportedAspectRatios: toolModel?.supportedAspectRatios,
+  });
+  if (slotTarget) {
+    requestedAspectRatio = slotTarget.aspectRatio;
+  }
+  const sizeParam = findSizeParam(tool.parameters);
+  const settledSizeToken = resolveSizeTokenValue(sizeParam, params.size, slotTarget);
+
+  // The template reads params.size for its size sentence, so it gets the tier
+  // Auto settled to rather than the word "auto".
+  const paramsForPrompt =
+    sizeParam && settledSizeToken && settledSizeToken !== params.size
+      ? { ...params, size: settledSizeToken }
+      : params;
   const basePrompt = tool.promptTemplate(
     upscaleTarget
-      ? { ...params, [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget) }
-      : params,
+      ? {
+          ...paramsForPrompt,
+          [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget),
+        }
+      : paramsForPrompt,
   );
-  let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
   if (tool.derivedResultMode === "animated-gif") {
     // The sheet's canvas shape follows the frame-count's grid layout
     // (16 portrait cells don't fit a 16:9 canvas, so 4x4 goes square).
@@ -191,7 +219,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
   // Tools that decompose a page (break-comic) must not downscale it. Match
   // the output size + aspect ratio to the input so resolution is preserved
   // (a 3508px poster -> 4K), instead of falling back to a square 1K default.
-  let requestedSize = params.size ?? tool.hiddenSizeDefault;
+  let requestedSize = settledSizeToken ?? tool.hiddenSizeDefault;
   let autoSizeResolution: { width: number; height: number } | undefined;
   if (tool.autoSizeFromInput && sourceImages[0]) {
     const inputResolution = await getImageDimensions(sourceImages[0]);
@@ -217,15 +245,17 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
 
   // The exact pixels the request should ask for, when the caller knows them.
   // A model that takes pixels (GPT Image 2.5) is asked for these directly; a
-  // tier-token model never sees them. Upscale supplies its selector's target.
-  // Any other edit whose tool set no size and whose shape follows the source
-  // gets the source's own resolution, because on such a model an explicit size
+  // tier-token model never sees them. Upscale supplies its selector's target,
+  // and a run that follows the book slot supplies the slot. Any other edit
+  // whose tool set no size and whose shape follows the source gets the
+  // source's own resolution, because on such a model an explicit size
   // overrides the source's shape: without this every edit would come back in
   // the picker-less default tier (1K) and one of the model's canned shapes,
   // shrinking a 2048x1536 illustration to 1024x768.
   const shapeFollowsSource = requestedAspectRatio === AUTO_ASPECT_RATIO && !autoSizeResolution;
   const targetDimensions =
     upscaleTarget ??
+    slotTarget?.targetDimensions ??
     (requiresEditImage && targetImageResolution && shapeFollowsSource && !requestedSize
       ? targetImageResolution
       : undefined);

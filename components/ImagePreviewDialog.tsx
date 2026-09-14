@@ -36,6 +36,10 @@ export interface ImagePreviewDialogProps {
   onClose: () => void;
 }
 
+// Gap left between the gallery and the edge of the tool, in pixels, so the
+// host's own window chrome stays clear of the gallery's close button.
+const GALLERY_INSET_PX = 20;
+
 // Width of one gallery item at zoom 1, in pixels. Ctrl+wheel scales this, and
 // the row wraps, so zooming out fits more images per row and then more rows.
 const BASE_ITEM_WIDTH = 560;
@@ -84,7 +88,11 @@ const PreviewImage: React.FC<{
   // a past session, a history file since removed). That only shows up as a load
   // error, so the placeholder has to be reachable from there too.
   const [loadFailed, setLoadFailed] = React.useState(false);
-  React.useEffect(() => setLoadFailed(false), [image.imageData]);
+  const [hasLoaded, setHasLoaded] = React.useState(false);
+  React.useEffect(() => {
+    setLoadFailed(false);
+    setHasLoaded(false);
+  }, [image.imageData]);
 
   const resolution = image.resolution
     ? `${image.resolution.width} x ${image.resolution.height}`
@@ -97,10 +105,15 @@ const PreviewImage: React.FC<{
     formatSizes(image, sourceImage),
   ].filter((value): value is string => Boolean(value));
 
-  const prompt = (image.promptUsed || "").trim();
+  // A book image is named by its slot ("Page 3 - Image 2"), which is how the
+  // user knows which one it is; only a generated image is named by its prompt.
+  const caption = (image.pageLabel || image.promptUsed || "").trim();
 
   // The record's own shape, so a slot keeps its place in the grid before the
   // image decodes instead of collapsing to nothing and shoving the rest around.
+  // Once the bytes are in, the image's own proportions take over: the record's
+  // resolution is often absent or stale, and the checkerboard is painted on the
+  // <img> box, so a box wider than the image leaves checks beside it.
   const aspectRatio =
     image.resolution && image.resolution.width > 0 && image.resolution.height > 0
       ? `${image.resolution.width} / ${image.resolution.height}`
@@ -126,12 +139,13 @@ const PreviewImage: React.FC<{
             draggable={false}
             loading="lazy"
             decoding="async"
+            onLoad={() => setHasLoaded(true)}
             onError={() => setLoadFailed(true)}
             style={{
               display: "block",
               width: "100%",
               height: "auto",
-              aspectRatio,
+              ...(hasLoaded ? {} : { aspectRatio }),
               objectFit: "contain",
               ...TRANSPARENCY_BACKGROUND_STYLE,
             }}
@@ -198,18 +212,18 @@ const PreviewImage: React.FC<{
         <Box sx={metadataTextStyles} data-testid="image-preview-dialog-facts">
           {facts.join(" · ")}
         </Box>
-        {prompt && (
-          // The full prompt is allowed to cover whatever is behind it: it is
+        {caption && (
+          // The full caption is allowed to cover whatever is behind it: it is
           // what the user pointed at, and a gallery is wall-to-wall images.
           <Tooltip
-            title={<Box sx={{ whiteSpace: "pre-wrap", fontSize: "12px" }}>{prompt}</Box>}
+            title={<Box sx={{ whiteSpace: "pre-wrap", fontSize: "12px" }}>{caption}</Box>}
             placement="top"
             arrow
             slotProps={{
               tooltip: { sx: { maxWidth: 620, maxHeight: "70vh", overflowY: "auto" } },
             }}
           >
-            <Box sx={{ ...metadataTextStyles, color: "#94a3b8", cursor: "help" }}>{prompt}</Box>
+            <Box sx={{ ...metadataTextStyles, color: "#94a3b8", cursor: "help" }}>{caption}</Box>
           </Tooltip>
         )}
       </Box>
@@ -258,10 +272,20 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
     <Dialog
       open={open && visibleItems.length > 0}
       onClose={onClose}
-      fullScreen
+      maxWidth={false}
       PaperProps={{
         "data-testid": "image-preview-dialog",
         sx: {
+          // Inset rather than full-screen: flush against the edge, the
+          // gallery's own close button sits next to the host's close button
+          // (Bloom's dialog chrome), and it is too easy to shut the whole tool
+          // when you meant to leave the gallery.
+          m: `${GALLERY_INSET_PX}px`,
+          width: `calc(100% - ${GALLERY_INSET_PX * 2}px)`,
+          maxWidth: "none",
+          height: `calc(100% - ${GALLERY_INSET_PX * 2}px)`,
+          maxHeight: "none",
+          borderRadius: 2,
           backgroundColor: "#06080d",
           color: "#f8fafc",
         },
@@ -347,7 +371,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2.5, justifyContent: "center" }}>
+      <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2.5, justifyContent: "flex-end" }}>
         <Button onClick={onClose} variant="contained" color="inherit">
           Close
         </Button>

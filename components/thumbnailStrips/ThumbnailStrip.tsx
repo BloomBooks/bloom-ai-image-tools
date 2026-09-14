@@ -47,8 +47,6 @@ interface ThumbnailStripProps {
   };
   removeDisabledReasonById?: Partial<Record<string, string>>;
   selectedId: string | null;
-  previewModifierActive?: boolean;
-  previewSelectionImageIds?: string[];
   allowDrop: boolean;
   allowRemove: boolean;
   allowReorder: boolean;
@@ -486,8 +484,6 @@ type StripThumbBaseProps = {
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
-  isPreviewSelected: boolean;
-  previewModifierActive: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
@@ -510,8 +506,6 @@ type ThumbVisualProps = {
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
-  isPreviewSelected: boolean;
-  previewModifierActive: boolean;
   isAnyDndDragging: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
@@ -525,8 +519,6 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
   stripId,
   item,
   isSelected,
-  isPreviewSelected,
-  previewModifierActive,
   isAnyDndDragging,
   allowRemove,
   removeDisabledReason,
@@ -578,12 +570,11 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
         image={image}
         variant="thumb"
         isAnyDndDragging={isAnyDndDragging}
-        previewModifierActive={previewModifierActive}
-        previewSelected={isPreviewSelected}
         dataTestId="history-card"
         onClick={handleSelect}
         isSelected={isSelected}
         draggableImageId={undefined}
+        isDraggable={!!image}
         controls={{
           upload: false,
           paste: false,
@@ -677,8 +668,6 @@ const ThumbVisual = React.memo(ThumbVisualInner, (prev, next) => {
     prev.item.caption === next.item.caption &&
     prev.item.name === next.item.name &&
     prev.isSelected === next.isSelected &&
-    prev.isPreviewSelected === next.isPreviewSelected &&
-    prev.previewModifierActive === next.previewModifierActive &&
     prev.isAnyDndDragging === next.isAnyDndDragging &&
     prev.allowRemove === next.allowRemove &&
     prev.removeDisabledReason === next.removeDisabledReason
@@ -692,8 +681,6 @@ const StripThumbBase: React.FC<StripThumbBaseProps> = ({
   stripId,
   item,
   isSelected,
-  isPreviewSelected,
-  previewModifierActive,
   allowRemove,
   removeDisabledReason,
   isAnyDndDragging = false,
@@ -735,8 +722,6 @@ const StripThumbBase: React.FC<StripThumbBaseProps> = ({
         stripId={stripId}
         item={item}
         isSelected={isSelected}
-        isPreviewSelected={isPreviewSelected}
-        previewModifierActive={previewModifierActive}
         isAnyDndDragging={isAnyDndDragging}
         allowRemove={allowRemove}
         removeDisabledReason={removeDisabledReason}
@@ -753,8 +738,6 @@ const SortableStripThumb: React.FC<{
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
-  isPreviewSelected: boolean;
-  previewModifierActive: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
@@ -789,8 +772,6 @@ const DraggableStripThumb: React.FC<{
   stripId: ThumbnailStripId;
   item: ImageRecord;
   isSelected: boolean;
-  isPreviewSelected: boolean;
-  previewModifierActive: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
@@ -825,10 +806,8 @@ const BookImagePairThumb: React.FC<{
   replacement: ImageRecord | null;
   isSelected: boolean;
   isReplacementSelected: boolean;
-  isPreviewSelected: boolean;
   /** True for the one book image the user launched the editor on. */
   isLaunchedBookImage: boolean;
-  previewModifierActive: boolean;
   allowRemove: boolean;
   removeDisabledReason?: string;
   isAnyDndDragging?: boolean;
@@ -846,9 +825,7 @@ const BookImagePairThumb: React.FC<{
   replacement,
   isSelected,
   isReplacementSelected,
-  isPreviewSelected,
   isLaunchedBookImage,
-  previewModifierActive,
   allowRemove,
   removeDisabledReason: _removeDisabledReason,
   isAnyDndDragging = false,
@@ -1005,12 +982,11 @@ const BookImagePairThumb: React.FC<{
             variant="thumb"
             borderless
             isAnyDndDragging={isAnyDndDragging}
-            previewModifierActive={previewModifierActive}
-            previewSelected={isPreviewSelected}
             dataTestId="history-card"
             onClick={onSelect}
             isSelected={isSelected}
             draggableImageId={undefined}
+            isDraggable={!isEmptySlot}
             controls={{
               upload: false,
               paste: false,
@@ -1047,12 +1023,15 @@ const BookImagePairThumb: React.FC<{
               <div
                 style={{
                   position: "absolute",
-                  bottom: 12,
-                  right: 12,
+                  // Top-left is the corner the slot's own controls leave free:
+                  // close sits top-right, and the menu and copy buttons run
+                  // along the bottom.
+                  top: 12,
+                  left: 12,
                   zIndex: 2,
                   display: "flex",
                   flexDirection: "column",
-                  alignItems: "flex-end",
+                  alignItems: "flex-start",
                   gap: 6,
                 }}
               >
@@ -1065,7 +1044,7 @@ const BookImagePairThumb: React.FC<{
                       key={`${indicator.kind}-${indicator.level}`}
                       title={indicator.message}
                       arrow
-                      placement="top"
+                      placement="bottom"
                     >
                       <div
                         data-testid={`book-image-replacement-compatibility-${item.id}-${indicator.kind}`}
@@ -1095,12 +1074,11 @@ const BookImagePairThumb: React.FC<{
             variant="thumb"
             borderless={!!replacement}
             isAnyDndDragging={isAnyDndDragging}
-            previewModifierActive={false}
-            previewSelected={false}
             dataTestId={replacement ? "history-card" : undefined}
             onClick={replacement ? onSelectReplacement : undefined}
             isSelected={isReplacementSelected}
             draggableImageId={undefined}
+            isDraggable={!!replacement}
             onRemove={replacement ? onClearReplacement : undefined}
             controls={{
               upload: false,
@@ -1321,8 +1299,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   bookImagesAction,
   removeDisabledReasonById,
   selectedId,
-  previewModifierActive = false,
-  previewSelectionImageIds = [],
   allowDrop,
   allowRemove,
   allowReorder,
@@ -1363,10 +1339,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   const orderedItems = useMemo(() => {
     return itemIds.map((id) => itemsById[id]).filter((item): item is ImageRecord => Boolean(item));
   }, [itemIds, itemsById]);
-  const previewSelectionIdSet = useMemo(
-    () => new Set(previewSelectionImageIds),
-    [previewSelectionImageIds],
-  );
 
   const orderedItemIds = useMemo(() => orderedItems.map((item) => item.id), [orderedItems]);
 
@@ -1599,9 +1571,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 replacement={replacementItemsByIncomingId[item.id] || null}
                 isSelected={item.id === selectedId}
                 isReplacementSelected={replacementItemsByIncomingId[item.id]?.id === selectedId}
-                isPreviewSelected={previewSelectionIdSet.has(item.id)}
                 isLaunchedBookImage={item.id === launchedBookImageId}
-                previewModifierActive={previewModifierActive}
                 allowRemove={allowRemove}
                 removeDisabledReason={removeDisabledReasonById?.[item.id]}
                 isAnyDndDragging={isAnyDndDragging}
@@ -1631,8 +1601,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
                 stripId={stripId}
                 item={item}
                 isSelected={item.id === selectedId}
-                isPreviewSelected={previewSelectionIdSet.has(item.id)}
-                previewModifierActive={previewModifierActive}
                 allowRemove={allowRemove}
                 removeDisabledReason={removeDisabledReasonById?.[item.id]}
                 isAnyDndDragging={isAnyDndDragging}
@@ -1650,8 +1618,6 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               stripId={stripId}
               item={item}
               isSelected={item.id === selectedId}
-              isPreviewSelected={previewSelectionIdSet.has(item.id)}
-              previewModifierActive={previewModifierActive}
               allowRemove={allowRemove}
               removeDisabledReason={removeDisabledReasonById?.[item.id]}
               isAnyDndDragging={isAnyDndDragging}

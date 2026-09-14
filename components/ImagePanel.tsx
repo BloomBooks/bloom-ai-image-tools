@@ -204,6 +204,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                       }
                       // dnd-kit handles internal drags; keep native drag only when explicit.
                       draggableImageId={undefined}
+                      isDraggable={!!slot.image && !disabled}
                     />
                   </DndImageSlotWrapper>
                 </Box>
@@ -405,6 +406,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         // Keep pane-to-pane dragging on the dnd-kit wrapper only.
         // Native image dragging here competes with pointer-based activation.
         draggableImageId={undefined}
+        isDraggable={!!image && !disabled}
       />
     </DndImageSlotWrapper>
   );

@@ -508,8 +508,6 @@ export function ImageToolsWorkspace({
   // target, so clearing all ticks needs no "restore" logic — the previously
   // loaded target image is simply still there, unmodified.
   const [batchTickedIds, setBatchTickedIds] = useState<Set<string>>(() => new Set());
-  const [isPreviewModifierActive, setIsPreviewModifierActive] = useState(false);
-  const [previewSelectionImageIds, setPreviewSelectionImageIds] = useState<string[]>([]);
   const [previewDialogLayout, setPreviewDialogLayout] = useState<PreviewDialogLayout>("row");
   const [previewDialogImageIdGroups, setPreviewDialogImageIdGroups] = useState<string[][]>([]);
   const [visibleStripItemIdsByStrip, setVisibleStripItemIdsByStrip] = useState<
@@ -546,7 +544,6 @@ export function ImageToolsWorkspace({
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const creditsRequestAbortControllerRef = useRef<AbortController | null>(null);
   const oauthPollAbortControllerRef = useRef<AbortController | null>(null);
-  const pendingPreviewImageIdsRef = useRef<string[]>([]);
   const envApiKey = envApiKeyProp?.trim() || "";
   const initialApiKey = initialApiKeyProp?.trim() || "";
   const effectiveApiKey = apiKey || envApiKey;
@@ -3791,30 +3788,6 @@ export function ImageToolsWorkspace({
     setState((prev) => ({ ...prev, rightPanelImageId: null }));
   };
 
-  const queuePreviewImage = useCallback((id: string) => {
-    const nextIds = [
-      ...pendingPreviewImageIdsRef.current.filter((existingId) => existingId !== id),
-      id,
-    ];
-    pendingPreviewImageIdsRef.current = nextIds;
-    setPreviewSelectionImageIds(nextIds);
-  }, []);
-
-  const commitPreviewSelection = useCallback(() => {
-    const nextIds = pendingPreviewImageIdsRef.current.filter(
-      (id, index, ids) => ids.indexOf(id) === index,
-    );
-
-    pendingPreviewImageIdsRef.current = [];
-    setPreviewSelectionImageIds([]);
-    if (!nextIds.length) {
-      return;
-    }
-
-    setPreviewDialogLayout("row");
-    setPreviewDialogImageIdGroups(nextIds.map((id) => [id]));
-  }, []);
-
   const handleOpenStripPreview = useCallback(
     (stripId: ThumbnailStripId, itemIds: string[]) => {
       if (!itemIds.length) {
@@ -3837,39 +3810,6 @@ export function ImageToolsWorkspace({
     },
     [replacementImageIdByIncomingId],
   );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Control") {
-        setIsPreviewModifierActive(true);
-      }
-    };
-
-    const finishPreviewSelection = () => {
-      setIsPreviewModifierActive(false);
-      commitPreviewSelection();
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === "Control") {
-        finishPreviewSelection();
-      }
-    };
-
-    const handleWindowBlur = () => {
-      finishPreviewSelection();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleWindowBlur);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleWindowBlur);
-    };
-  }, [commitPreviewSelection]);
 
   // Ctrl/Cmd+C copies the currently selected image (the one shown in the right
   // panel) to the clipboard — mirroring the per-thumbnail copy button. We defer
@@ -3907,11 +3847,6 @@ export function ImageToolsWorkspace({
   }, []);
 
   const handleSelectHistoryItem = (id: string) => {
-    if (isPreviewModifierActive) {
-      queuePreviewImage(id);
-      return;
-    }
-
     setResultImageIds([]);
     // An explicit click always pins the inspector (see WP5): harmless outside
     // a batch run (nothing reads the pin then), and reset to unpinned at the
@@ -3930,11 +3865,6 @@ export function ImageToolsWorkspace({
   // panel and pins it there (PLAN-batch-processing.md WP5). Ctrl-click still
   // adds it to the full-screen comparison selection either way.
   const handleSelectBookImageCurrent = (id: string) => {
-    if (isPreviewModifierActive) {
-      queuePreviewImage(id);
-      return;
-    }
-
     const isInspectContext = batchTickedIds.size > 0 || batchRun !== null;
     if (isInspectContext) {
       const inspectedId = replacementImageIdByIncomingId[id] || id;
@@ -4561,29 +4491,8 @@ export function ImageToolsWorkspace({
               void handleEnableFolderStorage();
             }}
             generationProgress={generationProgress}
-            previewModifierActive={isPreviewModifierActive}
-            previewSelectionImageIds={previewSelectionImageIds}
             onDismissError={handleDismissError}
           />
-        </Box>
-
-        <Box
-          component="footer"
-          sx={{
-            px: 3,
-            py: 1.5,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            minHeight: 52,
-            backgroundColor: "rgba(15, 23, 42, 0.52)",
-            color: theme.colors.textMuted,
-            textAlign: "center",
-          }}
-        >
-          <Typography variant="body2" sx={{ lineHeight: 1.4, maxWidth: 720 }}>
-            💡Tip: To compare images, hold down the control key while clicking one or more of them.
-          </Typography>
         </Box>
 
         <ImagePreviewDialog
@@ -4593,10 +4502,7 @@ export function ImageToolsWorkspace({
           resolveSourceImage={(image) =>
             image.parentId ? (historyItemsById[image.parentId] ?? null) : null
           }
-          onClose={() => {
-            setPreviewSelectionImageIds([]);
-            setPreviewDialogImageIdGroups([]);
-          }}
+          onClose={() => setPreviewDialogImageIdGroups([])}
         />
 
         <PlaygroundNoticeDialog

@@ -330,7 +330,8 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "enhance_drawing",
-      preserveInEdit: "the composition, the characters, the perspective, and the line work.",
+      preserveInEdit:
+        "the composition, the characters, the perspective, the line work, and the colors of the original.",
       title: "Enhance Line Drawing",
       description: "",
       group: "enhance",
@@ -355,8 +356,12 @@ export const TOOLS: ToolDefinition[] = (
       promptTemplate: (params: Record<string, string>) => {
         const styleId = params.styleId || "cleanup-line-art";
         const extraInstructions = params.extraInstructions?.trim();
+        // Every clause here is load-bearing against GPT Image, which redraws
+        // rather than edits and will otherwise hand back a fully painted
+        // illustration: it reads "polished illustration" as the target genre,
+        // and says nothing about color unless the prompt does.
         const basePrompt =
-          "Transform this sketch into a polished illustration while keeping the exact composition, characters, and perspective. Clean up stray pencil marks, preserve the line work, and render it using the selected art direction.";
+          "Finish this drawing. The result is the same drawing, cleaned up and drawn well: the same composition, the same characters, the same perspective, and the same lines, with stray pencil marks, smudges, and construction lines gone and the intended lines made confident. It stays a line drawing. Form comes from the lines and from hatching that the original already uses, not from filled or painted areas. Use only the colors the original drawing uses, on the same paper or background: a drawing in one color stays in that one color. Introduce no hue that is not already there, and do not fill shapes with color or shade them into solid volumes, unless the art direction below explicitly asks for color.";
         const styledPrompt = applyArtStyleToPrompt(basePrompt, styleId);
         if (!extraInstructions) {
           return styledPrompt;

@@ -279,6 +279,35 @@ const DragPreview: React.FC<{
   );
 };
 
+// While a drag is running the pointer is over whatever happens to be underneath
+// it, and each of those elements has a cursor of its own, so the closed hand from
+// the slot you grabbed is lost the moment you leave it. The only thing that holds
+// a cursor across the whole page is a rule that outranks every element's own, so
+// the drag turns one on and off at the body. The rule is injected rather than
+// written into index.html because the tools also ship embedded in Bloom, which
+// serves its own page.
+const DRAGGING_BODY_CLASS = "bloom-dnd-dragging";
+
+const ensureDraggingCursorRule = () => {
+  if (typeof document === "undefined") return;
+  const id = "bloom-dnd-cursor-rule";
+  if (document.getElementById(id)) return;
+  const style = document.createElement("style");
+  style.id = id;
+  style.textContent = `body.${DRAGGING_BODY_CLASS}, body.${DRAGGING_BODY_CLASS} * { cursor: grabbing !important; }`;
+  document.head.appendChild(style);
+};
+
+const setDraggingCursor = (isDragging: boolean) => {
+  if (typeof document === "undefined") return;
+  if (isDragging) {
+    ensureDraggingCursorRule();
+    document.body.classList.add(DRAGGING_BODY_CLASS);
+    return;
+  }
+  document.body.classList.remove(DRAGGING_BODY_CLASS);
+};
+
 const DragOverlayLayer: React.FC<{
   historyItems: ImageRecord[];
   dragPreviewMode: DragPreviewMode;
@@ -338,8 +367,13 @@ const DragOverlayLayer: React.FC<{
     debugLog("overlay", summary);
   }, [activeDragPreview, activeDragStartRef, dragPreviewMode, debugLog]);
 
+  // A drag that is cut short by an unmount would otherwise leave the whole page
+  // stuck showing a closed hand.
+  React.useEffect(() => () => setDraggingCursor(false), []);
+
   useDndMonitor({
     onDragStart(event: DragStartEvent) {
+      setDraggingCursor(true);
       const now = typeof performance !== "undefined" ? performance.now() : Date.now();
       activeDragStartRef.current = now;
       if (pendingDragProbeRef.current) {
@@ -389,9 +423,11 @@ const DragOverlayLayer: React.FC<{
       });
     },
     onDragEnd(_event: DragEndEvent) {
+      setDraggingCursor(false);
       setActiveDragPreview(null);
     },
     onDragCancel(_event: DragCancelEvent) {
+      setDraggingCursor(false);
       setActiveDragPreview(null);
     },
   });
@@ -488,8 +524,6 @@ interface ImageToolsPanelBar {
   onAddCharacterImage: (file: File) => void;
   hasHiddenHistory: boolean;
   onRequestHistoryAccess: () => void;
-  previewModifierActive?: boolean;
-  previewSelectionImageIds?: string[];
   onDismissError: () => void;
   /** bookImages strip only: present when the active tool supports batch runs. */
   batchSelection?: BookImageBatchSelection;
@@ -577,8 +611,6 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onAddCharacterImage,
   hasHiddenHistory,
   onRequestHistoryAccess,
-  previewModifierActive = false,
-  previewSelectionImageIds = [],
   onDismissError,
   batchSelection,
   launchedBookImageId = null,
@@ -961,8 +993,6 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
               replacementItemsByIncomingId={replacementItemsByIncomingId}
               bookImagesAction={bookImagesAction}
               selectedId={appState.rightPanelImageId}
-              previewModifierActive={previewModifierActive}
-              previewSelectionImageIds={previewSelectionImageIds}
               stripConfigs={thumbnailStripConfigs}
               onOpenPreview={onOpenStripPreview}
               onSelect={onSelectHistoryItem}

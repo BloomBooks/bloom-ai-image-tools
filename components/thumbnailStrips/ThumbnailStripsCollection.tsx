@@ -22,8 +22,6 @@ interface ThumbnailStripsCollectionProps {
     onClick: () => void;
   };
   selectedId: string | null;
-  previewModifierActive?: boolean;
-  previewSelectionImageIds?: string[];
   stripConfigs?: Record<ThumbnailStripId, ThumbnailStripConfig>;
   onOpenPreview: (stripId: ThumbnailStripId, itemIds: string[]) => void;
   onSelect: (id: string) => void;
@@ -62,8 +60,6 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   replacementItemsByIncomingId = {},
   bookImagesAction,
   selectedId,
-  previewModifierActive = false,
-  previewSelectionImageIds = [],
   stripConfigs,
   onOpenPreview,
   onSelect,
@@ -158,8 +154,6 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         replacementItemsByIncomingId={replacementItemsByIncomingId}
         bookImagesAction={stripId === "bookImages" ? bookImagesAction : undefined}
         selectedId={selectedId}
-        previewModifierActive={previewModifierActive}
-        previewSelectionImageIds={previewSelectionImageIds}
         allowDrop={config.allowDrop}
         allowRemove={config.allowRemove}
         allowReorder={config.allowReorder}

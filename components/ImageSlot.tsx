@@ -69,13 +69,18 @@ export interface ImageSlotProps {
   disabled?: boolean;
   isDropZone?: boolean;
   onClick?: () => void;
-  previewModifierActive?: boolean;
-  previewSelected?: boolean;
   isSelected?: boolean;
   onDrop?: (imageId: string) => void;
   onUpload?: (file: File) => void;
   onRemove?: () => void;
   draggableImageId?: string;
+  /**
+   * The image in this slot can be picked up and dropped elsewhere. Most slots are
+   * dragged by a dnd-kit wrapper around them rather than by their own native drag
+   * (so draggableImageId is undefined there), and the slot has no other way to
+   * know, so the wrapper has to tell it.
+   */
+  isDraggable?: boolean;
   dragEffectAllowed?: DataTransfer["effectAllowed"];
   onImageDragStart?: (event: React.DragEvent) => void;
   isLoading?: boolean;
@@ -237,13 +242,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   disabled = false,
   isDropZone = false,
   onClick,
-  previewModifierActive = false,
-  previewSelected = false,
   isSelected = false,
   onDrop,
   onUpload,
   onRemove,
   draggableImageId,
+  isDraggable = false,
   dragEffectAllowed,
   onImageDragStart,
   isLoading = false,
@@ -273,6 +277,9 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
   const [isHovered, setIsHovered] = React.useState(false);
+  // True from the moment a draggable image is pressed until the button comes back
+  // up anywhere on the page, so the cursor can close from an open hand to a fist.
+  const [isPressed, setIsPressed] = React.useState(false);
   const [contextMenu, setContextMenu] = React.useState<{
     x: number;
     y: number;
@@ -531,6 +538,19 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     onImageDragStart?.(event);
   };
 
+  // The press can end anywhere — the pointer is usually well off the slot by then
+  // — so the release has to be watched for on the window rather than the element.
+  React.useEffect(() => {
+    if (!isPressed) return;
+    const release = () => setIsPressed(false);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
+  }, [isPressed]);
+
   const handleMouseEnter = () => {
     if (isAnyDndDragging) return;
     if (disabled) return;
@@ -592,6 +612,46 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   };
 
   const variantStyles = VARIANT_LAYOUT_STYLES[variant];
+
+  // Hovering a draggable image lifts it off the page like a card off a table, so
+  // people notice they can pick it up. The transform sits on the
+  // <img>, never on the slot container, because the container is the rect dnd-kit
+  // measures for drops. Thumbs crop their image to fill the frame, so their shadow
+  // has to go on the frame instead; panel and tile images are letterboxed inside
+  // theirs and can carry their own.
+  const canDrag = !!image && (isDraggable || !!draggableImageId) && !disabled;
+  // Pressing sets the card down again: hover raises it, taking hold of it puts it
+  // back on the table and into your hand. It also keeps the picture from staying
+  // raised for the whole drag, since dnd-kit captures the pointer and the slot
+  // never sees the mouse leave.
+  const isLifted = canDrag && isHovered && !isPressed && !isAnyDndDragging && !isMagnifierPinned;
+  // A thumb's picture is cropped flush to its frame, so raising the picture alone
+  // would open a gap along the bottom edge. Everything but a panel therefore raises
+  // the whole card — frame, border and all — which is the truer version of the
+  // gesture anyway. A panel is too big to move as a unit and its picture is
+  // letterboxed with room to spare, so there it is the picture that rises.
+  const liftsWholeCard = variant !== "panel";
+  //  const LIFT_TRANSFORM = "translateY(-3px) scale(1.03)";
+  const LIFT_TRANSFORM = "translateY(-2px) translateX(2px)";
+  // The app is dark throughout, so a dark shadow alone lands on near-black and
+  // reads as nothing. What carries the lift here is the light hairline rim and
+  // the pale halo; the black layer only deepens the edge against the mid-slate
+  // panel surfaces.
+  const LIFT_SHADOW =
+    "0 0 0 1px rgba(226, 232, 240, 0.34), 0 18px 34px rgba(0, 0, 0, 0.65), 0 0 26px rgba(148, 163, 184, 0.26)";
+  // Coming closer to the light. This is the part that still reads on a thumb,
+  // whose image fills its frame edge to edge and so has no visible rim of its own.
+  const LIFT_FILTER = "brightness(1.07)";
+  // Snap straight back when a drag begins instead of easing: dnd-kit fires at 2px
+  // of travel, and easing the image back down over 150ms right then looks like the
+  // drag itself was slow to start.
+  // No easing on the way down from a press: dnd-kit starts the drag after 2px of
+  // travel, and easing the card back over 150ms right then reads as the drag being
+  // slow off the mark.
+  const LIFT_TRANSITION =
+    isPressed || isAnyDndDragging
+      ? "none"
+      : "transform 150ms ease, box-shadow 150ms ease, filter 150ms ease";
 
   // Panel slots stay transparent until hovered or dragged for a lighter touch.
   const baseBackgroundColor = variant === "panel" ? "transparent" : theme.colors.surface;
@@ -681,6 +741,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           const isPotentiallyDraggable =
             (!disabled && !!draggableImageId) ||
             (variant === "thumb" && !!draggableImageId && !disabled);
+          if (canDrag) setIsPressed(true);
           if (!isPotentiallyDraggable) return;
           lastDragPointerDownRef.current = {
             t: typeof performance !== "undefined" ? performance.now() : Date.now(),
@@ -698,6 +759,14 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         onDragStart={handleContainerDragStart}
         style={{
           ...variantStyles.container,
+          ...(liftsWholeCard
+            ? {
+                transform: isLifted ? LIFT_TRANSFORM : "none",
+                transition: [variantStyles.container.transition, "transform 150ms ease"]
+                  .filter(Boolean)
+                  .join(", "),
+              }
+            : null),
           backgroundColor:
             variant === "thumb"
               ? "transparent"
@@ -715,12 +784,13 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                   ? 1
                   : 0.8
               : 1,
-          cursor:
-            !disabled && variant === "thumb" && !!image && previewModifierActive
-              ? "zoom-in"
-              : !disabled && (onClick || variant === "thumb")
-                ? "pointer"
-                : "default",
+          cursor: canDrag
+            ? isPressed
+              ? "grabbing"
+              : "grab"
+            : !disabled && (onClick || variant === "thumb")
+              ? "pointer"
+              : "default",
           pointerEvents: disabled ? "none" : "auto",
           filter: disabled ? "grayscale(1)" : "none",
           borderColor: isDragOver
@@ -733,11 +803,15 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
           borderWidth: borderless ? 0 : variantStyles.container.borderWidth,
           borderStyle: !image ? "dashed" : variantStyles.container.borderStyle,
           boxShadow:
-            variant === "thumb"
+            isLifted && liftsWholeCard
               ? isSelected
-                ? theme.colors.accentShadow
-                : "none"
-              : theme.colors.panelShadow,
+                ? `${theme.colors.accentShadow}, ${LIFT_SHADOW}`
+                : LIFT_SHADOW
+              : variant === "thumb"
+                ? isSelected
+                  ? theme.colors.accentShadow
+                  : "none"
+                : theme.colors.panelShadow,
           minHeight: variant === "tile" ? 0 : undefined,
           outline: "none",
         }}
@@ -777,7 +851,12 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         )}
 
         <div style={variantStyles.contentWrapper}>
-          <div style={variantStyles.innerWrapper}>
+          <div
+            style={{
+              ...variantStyles.innerWrapper,
+              ...(isLifted && !liftsWholeCard ? { overflow: "visible" } : null),
+            }}
+          >
             {image ? (
               image.imageData ? (
                 <div
@@ -809,6 +888,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                       ...(image.isEmptyBookSlot
                         ? { backgroundColor: "#ffffff" }
                         : TRANSPARENCY_BACKGROUND_STYLE),
+                      transition: LIFT_TRANSITION,
+                      transform: isLifted && !liftsWholeCard ? LIFT_TRANSFORM : "none",
+                      filter: isLifted ? LIFT_FILTER : "none",
+                      ...(isLifted && !liftsWholeCard ? { boxShadow: LIFT_SHADOW } : null),
                     }}
                     draggable={!!draggableImageId}
                     onDragStart={handleImageDragStart}
@@ -840,37 +923,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             ) : isLoading ? null : (
               emptyStateContent
             )}
-
-            {variant === "thumb" && image && previewSelected ? (
-              <div
-                data-testid="preview-selection-indicator"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(7, 12, 20, 0.34)",
-                  pointerEvents: "none",
-                }}
-              >
-                <div
-                  style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: "rgba(255, 255, 255, 0.92)",
-                    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.32)",
-                    color: theme.colors.textPrimary,
-                  }}
-                >
-                  <Icon path={Icons.Magnifier} width={28} height={28} />
-                </div>
-              </div>
-            ) : null}
 
             <ImageSlotActions
               ref={thumbActionsRef}

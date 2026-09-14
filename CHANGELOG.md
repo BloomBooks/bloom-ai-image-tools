@@ -1,5 +1,83 @@
 # bloom-ai-image-tools
 
+## 0.1.14
+
+### Patch Changes
+
+- [`96b14aa`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/96b14aa677d18f0336008f72bcc657509c474cb4) Thanks [@hatton](https://github.com/hatton)! - Inside Bloom, every tool that makes the picture for a book slot now asks for the size
+  Bloom says that slot wants. Bloom already told the editor the slot's pixel size, but only
+  the Upscale tool listened; Generate Image made a 1024-pixel square for a 1417x945 slot
+  unless someone hand-picked a size and shape, and the edit tools followed whatever size
+  the source image happened to be.
+
+  The Size picker on Generate Image and Coloring Book has a new first entry, "Auto", showing
+  the slot's pixels, and it is the default. With Auto selected the Shape control follows the
+  slot too and says so. Picking a size by hand turns Auto off. Outside Bloom there is no
+  slot, so Auto stands for the smallest size and the picker looks as it did.
+
+  The edit tools with no size picker (Remove Object, Change Ethnicity, Improve Drawing and
+  the rest) follow the slot whenever Bloom supplies one, keeping a shape you set at the
+  slot's long edge. Upscale keeps its own Auto option, and the tools that make something
+  other than the slot's picture (Break Comic, the cast and game-piece sheets, GIF frames,
+  the palette strip) are unchanged.
+
+- [`becf8a1`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/becf8a1feac2544f213bc4759870e076455647aa) Thanks [@hatton](https://github.com/hatton)! - The gallery now says what each image is: the model that made it, what it cost, how long it took,
+  the megabytes in and out, and the first line of the prompt, with the whole prompt in a popup on
+  hover. Ctrl+mouse-wheel zooms the images themselves, wrapping into more rows as they get smaller,
+  instead of zooming the window. Images whose bytes are no longer in storage hold their place with a
+  label saying so, rather than collapsing into a broken-image sliver.
+
+  Costs read the same everywhere: to the cent, or to a tenth of a cent when they are under one cent.
+
+- [`39570df`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/39570df3b681c2da19e8692662b726a8ef78c29e) Thanks [@hatton](https://github.com/hatton)! - The reasoning picker for Gemini 3.1 Flash and Flash Lite now offers the two levels
+  those models have. Google documents "minimal" and "high" for the 3.1 image models,
+  and measured against OpenRouter, "low", "medium" and "high" all bought the same
+  amount of thinking while "none" bought what leaving the parameter out buys. The
+  picker offered five names for two requests; it now offers "Default" (no thinking)
+  and "High". Flash starts at "High", which is what its old "Medium" start was doing.
+
+  A run with more input images than the model takes (14 for the Gemini keys, 16 for
+  GPT Image 2.5, counting the image being edited) is now refused before the upload
+  with a message saying how many to remove, instead of a 400 from OpenRouter after it.
+
+- [`16a1b85`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/16a1b8512b0143372b2d4053b21f4261aa804b32) Thanks [@hatton](https://github.com/hatton)! - The model picker offers a Quality setting for GPT Image 2.5 (Auto, Low, Medium, High,
+  Extra high, Max). It starts at Auto, which is what every request sent before, so nothing
+  changes until someone picks. Measured on a 1024x1024 generation, Low returned in 7.7s
+  against about 13s at Auto for the same price; how Low looks on book art is for you to
+  judge.
+
+  Size options now say what GPT Image 2.5 will actually be sent. That model takes exact
+  pixels within a budget (at most 3840 on an edge, at most about 8.3 million pixels), so
+  each tier in the size picker shows its pixels underneath ("4k" over "2880x2880" for a
+  square), and the Upscale tool's "4K" option reads the size that fits (3520 x 2352 for a
+  3:2 image) rather than 4096 on the long edge. Two tiers that come out the same ("512k"
+  and "1k" both become 1024) are offered once. The Gemini models, which take the tier names
+  as they are, show no pixel line.
+
+  The reasoning picker for Gemini 3 Pro Image no longer offers Medium. Google documents
+  Low and High for that model; Medium was accepted but silently turned into one of those.
+
+- [`66ea5dd`](https://github.com/BloomBooks/bloom-ai-image-tools/commit/66ea5ddea1bcd45ffdf47492948cc2fa24a86c4f) Thanks [@hatton](https://github.com/hatton)! - GPT Image 2.5 is the default model, so the prompts and the request parameters now suit it rather
+  than Gemini.
+
+  The 2.5 models write captions, labels and signs into pictures nobody asked for. Every tool prompt
+  except the two whose job is text now ends by saying not to. Tools that make a surgical edit also
+  name what must not change, each in its own words, so "remove the ball" no longer licenses redrawing
+  the faces.
+
+  Reasoning levels are declared per model instead of assumed to be the same everywhere. The picker
+  offers only the levels a model accepts and disappears for models with no reasoning control, and a
+  level remembered from one model is never sent to another that would reject it.
+
+  Output size is requested per model family: a Gemini key takes its tier token, and a GPT Image 2.5
+  key takes exact pixels, snapped to what it accepts. An image tool that knows the pixel size it
+  wants — the Upscale selector, or a book slot's dimensions — now gets that size instead of one of
+  three fixed shapes.
+
+  On the images API, where there is nowhere to put a label beside a picture, the prompt now lists the
+  input images by number, saying which is being edited and which are references, and names any
+  character a reference shows. Those names were previously dropped.
+
 ## 0.1.13
 
 ### Patch Changes

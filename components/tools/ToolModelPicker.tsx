@@ -12,6 +12,7 @@ import {
   Select,
   Stack,
   Tooltip,
+  Typography,
 } from "@mui/material";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import type {
@@ -42,6 +43,12 @@ interface ToolModelPickerProps {
   measuredStatsByKey: Record<string, MeasuredStats>;
   /** The output size token this tool would request now (drives the cost lookup). */
   sizeToken: string;
+  /**
+   * The pixels the host says the book slot wants for this image
+   * (IBloomHostBookImage.suggestedTarget), or null outside Bloom. Shown at the
+   * foot of the menu so a user can see what every tool here is aiming at.
+   */
+  hostTarget?: { width: number; height: number; memo?: string | null } | null;
   onModelChange: (modelId: string) => void;
   onReasoningChange: (level: ModelReasoningLevel) => void;
   onQualityChange: (quality: ModelImageQuality) => void;
@@ -89,6 +96,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   qualityByTool,
   measuredStatsByKey,
   sizeToken,
+  hostTarget = null,
   onModelChange,
   onReasoningChange,
   onQualityChange,
@@ -276,6 +284,29 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                   ))}
                 </Select>
               </FormControl>
+            </Box>
+          </Box>
+        )}
+
+        {hostTarget && hostTarget.width > 0 && hostTarget.height > 0 && (
+          <Box>
+            <Divider />
+            <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
+              <Typography
+                variant="caption"
+                data-testid={`tool-host-target-${tool.id}`}
+                sx={{ display: "block", color: theme.colors.textSecondary }}
+              >
+                {`Book slot wants ${hostTarget.width} x ${hostTarget.height}`}
+              </Typography>
+              {hostTarget.memo?.trim() && (
+                <Typography
+                  variant="caption"
+                  sx={{ display: "block", color: theme.colors.textMuted }}
+                >
+                  {hostTarget.memo.trim()}
+                </Typography>
+              )}
             </Box>
           </Box>
         )}

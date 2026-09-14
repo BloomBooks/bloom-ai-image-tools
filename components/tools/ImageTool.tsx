@@ -1180,6 +1180,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               qualityByTool={qualityByTool}
               measuredStatsByKey={measuredStatsByKey}
               sizeToken={resolveToolSizeToken(tool)}
+              hostTarget={targetImageSuggestedTarget ?? null}
               onModelChange={(modelId) => onToolModelChange(tool.id, modelId)}
               onReasoningChange={(level) => onToolReasoningChange(tool.id, level)}
               onQualityChange={(quality) => onToolQualityChange(tool.id, quality)}

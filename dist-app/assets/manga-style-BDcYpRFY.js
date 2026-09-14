@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/manga-style-D_tL0k4d.png`;export{e as default};

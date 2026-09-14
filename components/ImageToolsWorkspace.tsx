@@ -14,6 +14,8 @@ import {
   ModelImageQuality,
   ModelReasoningLevel,
   PersistedAppState,
+  PersistenceSaveResult,
+  SavedImageLocation,
   ThumbnailStripId,
   ThumbnailStripsSnapshot,
   ToolParamsById,
@@ -1808,6 +1810,44 @@ export function ImageToolsWorkspace({
     };
   }, []);
 
+  // Once a save has put a generated image's bytes where the host can serve them,
+  // point the record at that URL and drop its base64, the same shape host-enumerated
+  // history has from the start. Otherwise a batch run across a whole book keeps
+  // every result inline for the rest of the session. The URL is fetched and decoded
+  // before the swap so the image never blanks on screen, and a record whose bytes
+  // changed since the save is left alone.
+  const adoptSavedImageLocations = useCallback(async (locations?: SavedImageLocation[]) => {
+    if (!locations?.length || typeof Image === "undefined") return;
+    const loadable = await Promise.all(
+      locations.map(async (location) => {
+        try {
+          const probe = new Image();
+          probe.src = location.url;
+          await probe.decode();
+          return location;
+        } catch (error) {
+          console.warn("Saved image is not loadable by URL; keeping its bytes", location.id, error);
+          return null;
+        }
+      }),
+    );
+    const byId = new Map<string, SavedImageLocation>();
+    loadable.forEach((location) => {
+      if (location) byId.set(location.id, location);
+    });
+    if (byId.size === 0) return;
+    setState((prev) => {
+      let changed = false;
+      const history = prev.history.map((item) => {
+        const location = byId.get(item.id);
+        if (!location || item.imageData !== location.imageData) return item;
+        changed = true;
+        return { ...item, imageData: location.url };
+      });
+      return changed ? { ...prev, history } : prev;
+    });
+  }, []);
+
   useEffect(() => {
     if (!isHydrated || !persistence) return;
 
@@ -1934,7 +1974,10 @@ export function ImageToolsWorkspace({
       debugLog("save(start)");
 
       try {
-        await persistence.save(buildPersistableState());
+        const saveResult = (await persistence.save(buildPersistableState())) as
+          | PersistenceSaveResult
+          | undefined;
+        void adoptSavedImageLocations(saveResult?.savedImageLocations);
         const currentBinding = fsBindingRef.current;
         if (currentBinding && fsManifestReadyHandleRef.current === currentBinding.directoryHandle) {
           try {
@@ -1961,6 +2004,7 @@ export function ImageToolsWorkspace({
     };
   }, [
     persistence,
+    adoptSavedImageLocations,
     isHydrated,
     state.targetImageId,
     state.referenceImageIds,

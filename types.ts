@@ -485,8 +485,25 @@ export interface HistoryManifest {
   thumbnailStrips?: ThumbnailStripsSnapshot;
 }
 
+/**
+ * A history image whose bytes a `save` has put somewhere the browser can fetch
+ * them from. The workspace uses it to replace the record's inline base64
+ * (`imageData`, still the value that was saved) with `url`, so a long session
+ * does not keep every generated image in memory twice over.
+ */
+export interface SavedImageLocation {
+  id: string;
+  /** The data URL that was written; the swap only happens if the record still holds it. */
+  imageData: string;
+  url: string;
+}
+
+export interface PersistenceSaveResult {
+  savedImageLocations?: SavedImageLocation[];
+}
+
 export interface ImageToolsStatePersistence {
   load: () => Promise<PersistedImageToolsState | null>;
-  save: (state: PersistedImageToolsState) => Promise<void>;
+  save: (state: PersistedImageToolsState) => Promise<PersistenceSaveResult | void>;
   clear: () => Promise<void>;
 }

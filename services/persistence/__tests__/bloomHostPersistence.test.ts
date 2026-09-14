@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createBloomHostPersistence } from "../bloomHostPersistence";
 import { IBloomHostBridge, IBloomHostHistoryImage } from "../../host/BloomHostBridge";
-import { HistoryImageSidecar, ImageRecord, PersistedImageToolsState } from "../../../types";
+import {
+  HistoryImageSidecar,
+  ImageRecord,
+  PersistedImageToolsState,
+  PersistenceSaveResult,
+} from "../../../types";
 
 const makeSidecar = (id: string, over: Partial<HistoryImageSidecar> = {}): HistoryImageSidecar => ({
   id,
@@ -227,6 +232,62 @@ describe("createBloomHostPersistence", () => {
 
     const savedMeta = JSON.parse(fileStore.get("state.json")!) as PersistedImageToolsState;
     expect(savedMeta.appState.history).toEqual([]);
+  });
+
+  it("reports where the host serves each saved data-URL image, so the record can drop its bytes", async () => {
+    const { bridge } = createBridge();
+    bridge.getFileUrl = (name) => `https://host/file?name=${encodeURIComponent(name)}`;
+    const persistence = createBloomHostPersistence(bridge, {
+      historyImages: [
+        {
+          id: "old-1",
+          url: "https://host/history/old-1.png",
+          metadata: makeSidecar("old-1", { timestamp: 1000 }),
+        },
+      ],
+    });
+
+    const result = await persistence.save(
+      makeUiState({
+        appState: {
+          targetImageId: null,
+          referenceImageIds: [],
+          rightPanelImageId: null,
+          history: [
+            makeRecord("old-1", "https://host/history/old-1.png"),
+            makeRecord("gen-1", "data:image/png;base64,abc"),
+            makeRecord("book-1", "data:image/png;base64,book", { origin: "bookImages" }),
+          ],
+        },
+      }),
+    );
+
+    // Only the freshly generated image: URL-backed and book-image entries are not written.
+    expect((result as PersistenceSaveResult).savedImageLocations).toEqual([
+      {
+        id: "gen-1",
+        imageData: "data:image/png;base64,abc",
+        url: "https://host/file?name=history%2Fgen-1.png",
+      },
+    ]);
+  });
+
+  it("reports nothing when the host offers no file URLs", async () => {
+    const { bridge } = createBridge();
+    const persistence = createBloomHostPersistence(bridge, { historyImages: [] });
+
+    const result = await persistence.save(
+      makeUiState({
+        appState: {
+          targetImageId: null,
+          referenceImageIds: [],
+          rightPanelImageId: null,
+          history: [makeRecord("gen-1", "data:image/png;base64,abc")],
+        },
+      }),
+    );
+
+    expect((result as PersistenceSaveResult).savedImageLocations).toEqual([]);
   });
 
   it("does not persist book-image entries into the history folder", async () => {

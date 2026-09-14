@@ -215,6 +215,11 @@ export interface IBloomHostFiles {
   deleteFile: (name: string) => Promise<void>;
   /** Clear all files in the .ai-image-editor folder (used by the harness reset). */
   clearAllFiles: () => Promise<void>;
+  /** A URL the browser can fetch the named file from (an `<img src>`, a `fetch`),
+   *  or null when the host has no such URL to offer. Lets the editor reference a
+   *  freshly written image by URL, the way host-enumerated history already is,
+   *  instead of holding its base64 for the rest of the session. */
+  getFileUrl?: (name: string) => string | null;
 }
 
 /** A full bridge implements both planes. */
@@ -485,6 +490,12 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
         payload: { event, properties },
       });
     },
+    getFileUrl(name) {
+      if (!httpBase || !sessionToken) {
+        return null;
+      }
+      return fileUrl(name);
+    },
     async getFile(name) {
       if (!httpBase || !sessionToken) {
         throw new Error("Bloom host bridge is not initialized.");
@@ -554,6 +565,16 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
   const initListeners = new Set<(payload: IBloomHostInitPayload) => void>();
   const requestCloseListeners = new Set<() => void>();
   const fileStore = new Map<string, string>(Object.entries(options.initialFiles ?? {}));
+  // Object URLs handed out by getFileUrl, keyed by file name. A real host serves
+  // files over HTTP; here the nearest thing is a blob URL over the stored bytes, so
+  // the editor's swap from base64 to URL runs in the harness and its e2e tests too.
+  const objectUrlByName = new Map<string, string>();
+  const revokeObjectUrl = (name: string) => {
+    const url = objectUrlByName.get(name);
+    if (!url) return;
+    objectUrlByName.delete(name);
+    URL.revokeObjectURL(url);
+  };
 
   return {
     ready() {
@@ -597,16 +618,31 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
       // exactly what a real host would have been sent.
       console.info(`[BloomHarness] analytics: ${event}`, properties);
     },
+    getFileUrl(name) {
+      const existing = objectUrlByName.get(name);
+      if (existing) return existing;
+      const data = fileStore.get(name);
+      if (typeof URL === "undefined" || !data || !data.startsWith("data:")) {
+        return null;
+      }
+      const mimeType = data.slice("data:".length, data.indexOf(";")) || "image/png";
+      const url = URL.createObjectURL(new Blob([dataUrlToBytes(data)], { type: mimeType }));
+      objectUrlByName.set(name, url);
+      return url;
+    },
     async getFile(name) {
       return fileStore.get(name) ?? null;
     },
     async putFile(name, data) {
+      revokeObjectUrl(name);
       fileStore.set(name, data);
     },
     async deleteFile(name) {
+      revokeObjectUrl(name);
       fileStore.delete(name);
     },
     async clearAllFiles() {
+      Array.from(objectUrlByName.keys()).forEach(revokeObjectUrl);
       fileStore.clear();
     },
   };

@@ -128,11 +128,17 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
   // for items that have neither (nothing to apply).
   const buildReplacement = React.useCallback(
     async (incomingId: string, item: ImageRecord): Promise<IBloomCommitReplacement | null> => {
+      // A result whose bytes the debounced save has already written is referenced by
+      // the host's own URL for history/<id>.png; commit it by id like any other result.
+      const historyFile = `history/${item.id}.png`;
+      if (item.imageData && bridge.getFileUrl?.(historyFile) === item.imageData) {
+        return { incomingId, resultId: item.id, credits: item.credits ?? null };
+      }
       if (item.imageData?.startsWith("data:image/")) {
         // Ensure the bytes are on disk for the host to read. The persistence layer
         // normally writes this already; this guarantees presence (idempotent
         // overwrite) without racing the debounced save.
-        await bridge.putFile(`history/${item.id}.png`, item.imageData);
+        await bridge.putFile(historyFile, item.imageData);
         return { incomingId, resultId: item.id, credits: item.credits ?? null };
       }
       if (item.imageData) {

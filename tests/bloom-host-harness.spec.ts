@@ -241,6 +241,39 @@ test.describe("Bloom host harness", () => {
     await expect(payload).toContainText('"creator": "Pat Papercut"');
   });
 
+  test("a generated result is re-pointed at the host's URL once saved, and still commits by id", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    // Freshly generated images start life as base64 data URLs. Once the debounced save
+    // has written the bytes to history/<id>.png, the record should reference the host's
+    // URL for that file instead (a blob: URL in the harness), so a long session does not
+    // keep every result inline in memory. The commit must then still send a resultId,
+    // not the URL, since the bytes are the host's own history file.
+    await page.getByRole("button", { name: /Enhance/i }).click();
+    await page.getByText("Custom Edit", { exact: true }).click();
+    await page.getByTestId("tool-model-picker-custom").click();
+    await page.getByText("Local Dummy (No AI)").click();
+    await page.keyboard.press("Escape");
+
+    await page.getByTestId("input-prompt").fill("Add a dummy banner");
+    await page.getByRole("button", { name: /Apply Changes/i }).click();
+
+    // The save runs within a second of the result landing, so the base64 phase is too
+    // brief to assert on; the URL it settles at is the point.
+    const resultImg = page.getByTestId("result-panel").locator("img").first();
+    await expect(resultImg).toHaveAttribute("src", /^blob:/, { timeout: 30_000 });
+
+    const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
+    await expect(commitCurrentButton).toBeVisible();
+    await commitCurrentButton.click();
+
+    const payload = page.getByTestId("bloom-harness-commit-payload");
+    await expect(payload).toContainText('"incomingId": "book-image-3"');
+    await expect(payload).toContainText('"resultId"');
+    await expect(payload).not.toContainText('"sourceUrl"');
+  });
+
   test("an image created for an empty slot commits back into that slot", async ({ page }) => {
     test.setTimeout(60_000);
     // The other half of BL-16744: the point of launching on an empty slot is to put the

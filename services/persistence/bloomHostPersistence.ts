@@ -29,7 +29,12 @@
  * Book images (origin "bookImages") are re-supplied on every launch and are never
  * written into history/.
  */
-import { ImageRecord, ImageToolsStatePersistence, PersistedImageToolsState } from "../../types";
+import {
+  ImageRecord,
+  ImageToolsStatePersistence,
+  PersistedImageToolsState,
+  SavedImageLocation,
+} from "../../types";
 import { IMAGE_TOOLS_STATE_VERSION } from "./constants";
 import { prepareStateForPersistence, restoreStateFromPersistence } from "./stateTransforms";
 import { IBloomHostFiles, IBloomHostHistoryImage } from "../host/BloomHostBridge";
@@ -219,6 +224,19 @@ export const createBloomHostPersistence = (
       nextImageData.forEach((imageData, id) => lastSavedImageData.set(id, imageData));
       lastSavedSidecar.clear();
       nextSidecar.forEach((json, id) => lastSavedSidecar.set(id, json));
+
+      // Every data-URL image is now on disk (written this save or an earlier
+      // one), so report where the host serves each from. The workspace swaps the
+      // record over to that URL, which is how host-enumerated history already
+      // arrives, so a batch run across a book does not pile up base64 in memory.
+      const savedImageLocations: SavedImageLocation[] = [];
+      if (bridge.getFileUrl) {
+        nextImageData.forEach((imageData, id) => {
+          const url = bridge.getFileUrl?.(historyImageFile(id));
+          if (url) savedImageLocations.push({ id, imageData, url });
+        });
+      }
+      return { savedImageLocations };
     } catch (error) {
       console.error("Failed to save bloom host persisted state", error);
     }

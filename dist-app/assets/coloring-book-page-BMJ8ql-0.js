@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/coloring-book-page-B0Eyh0zb.png`;export{e as default};

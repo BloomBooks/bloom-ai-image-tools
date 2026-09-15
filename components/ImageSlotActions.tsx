@@ -260,6 +260,33 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
         } satisfies SlotActionButton)
       : orderedActions;
 
+    // Buttons sitting inside the overflow bar, which supplies the one surface
+    // they all share: no disc, no shadow, no blur, just the icon.
+    const menuButtonSx: SxProps<MuiTheme> = {
+      bgcolor: "transparent",
+      backgroundColor: "transparent",
+      boxShadow: "none",
+      backdropFilter: "none",
+      color: theme.colors.textPrimary,
+      "&:hover": {
+        bgcolor: "rgba(255, 255, 255, 0.12)",
+        backgroundColor: "rgba(255, 255, 255, 0.12)",
+        color: theme.colors.textPrimary,
+        filter: "none",
+      },
+      "&:active": {
+        bgcolor: "rgba(255, 255, 255, 0.18)",
+        backgroundColor: "rgba(255, 255, 255, 0.18)",
+        color: theme.colors.textPrimary,
+      },
+      "&.Mui-focusVisible": {
+        bgcolor: "rgba(255, 255, 255, 0.18)",
+        backgroundColor: "rgba(255, 255, 255, 0.18)",
+        color: theme.colors.textPrimary,
+        filter: "none",
+      },
+    };
+
     const renderActionButton = (action: SlotActionButton, sxOverride?: SxProps<MuiTheme>) => {
       const isActive = action.isActive ?? false;
       const usesInfoTooltip = action.key === "info" && !!image;
@@ -462,7 +489,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
               style={{
                 position: "absolute",
                 bottom: cornerOffset,
-                left: cornerOffset,
+                right: cornerOffset,
                 zIndex: 20,
                 pointerEvents: disabled ? "none" : "auto",
               }}
@@ -553,7 +580,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
                   <Popper
                     open={isThumbOverflowOpen}
                     anchorEl={moreButtonRef.current}
-                    placement="right-end"
+                    placement="left-end"
                     style={{ zIndex: 60 }}
                     modifiers={[
                       {
@@ -581,23 +608,24 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
                       style={{
                         border: `1px solid ${theme.colors.panelBorder}`,
                         borderRadius: 999,
-                        backgroundColor: theme.colors.overlay,
+                        // Opaque, and the buttons inside it carry no background
+                        // of their own (menuButtonSx): a translucent bar under
+                        // translucent discs washed the artwork through both.
+                        backgroundColor: theme.colors.surface,
                         boxShadow: theme.colors.panelShadow,
-                        backdropFilter: "blur(6px)",
                         display: "flex",
                         flexDirection: "row",
-                        gap: 4,
+                        gap: 2,
                         alignItems: "center",
                         justifyContent: "flex-start",
-                        padding: 4,
-                        paddingLeft: 8,
+                        padding: 3,
                         transition: "opacity 140ms ease, transform 140ms ease",
                         opacity: isThumbOverflowOpen ? 1 : 0,
                         transform: isThumbOverflowOpen ? "translateX(0)" : "translateX(-10px)",
                         pointerEvents: isThumbOverflowOpen ? "auto" : "none",
                       }}
                     >
-                      {overflowActions.map((action) => renderActionButton(action))}
+                      {overflowActions.map((action) => renderActionButton(action, menuButtonSx))}
                     </div>
                   </Popper>
                 </div>

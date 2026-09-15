@@ -83,7 +83,7 @@ consumes a prebuilt `dist-app/`. Each `dist-v*` tag holds `dist-app/` plus a min
 script-free `package.json`, so the package manager installs it as static files with no
 build step. The tag content is an orphan commit; `master` stays clean. Tags are
 **immutable**, and different Bloom branches can pin different editor builds. See the
-header comment in `.github/workflows/publish-dist.yml`.
+header comment in `.github/workflows/release.yml`.
 
 To wire that up:
 
@@ -108,40 +108,24 @@ never move, so re-installing against an unchanged ref can never change what Bloo
 
 ## Versioning & Releases
 
-We use [Changesets](https://github.com/changesets/changesets) for semver management, but
-**releasing is on demand — nothing publishes automatically when you merge.** No workflow
-here has a push trigger; `Release` and `Publish dist-app tag` are both
-`workflow_dispatch`.
+**Releasing is on demand — nothing publishes when you merge.** Push your work to `master`,
+then run the `Release` workflow (Actions -> Release -> Run workflow) and pick `patch`,
+`minor` or `major`. One click does the whole thing:
 
-In your PR:
+1. bumps the version in `package.json` and commits that to `master`
+2. builds `dist-app/`
+3. publishes the immutable tag `dist-v<new version>`
+4. writes a GitHub Release whose notes are the commit subjects since the last release
 
-1. Record the semver bump: `vp run changeset`, and commit the generated markdown file
-   alongside your code.
+The run's summary prints the exact line to paste into Bloom. Publishing is **refused if
+`dist-v<version>` already exists** — tags are immutable, so choose a larger bump or pass an
+exact `version` input.
 
-Then, when you want Bloom to be able to pick the change up:
+Then point Bloom at the new tag — step 2 of
+[Production](#production-immutable-dist-v-git-tag).
 
-2. Bump the version on `master`. This consumes the pending changeset files and writes
-   `CHANGELOG.md`:
-
-   ```bash
-   git pull
-   # GITHUB_TOKEN lets the changelog link to PRs/authors; deps must be installed.
-   GITHUB_TOKEN=$(gh auth token) npx changeset version
-   git commit -am "Version Packages: <new version>" && git push
-   ```
-
-3. Publish the tag: `gh workflow run "Publish dist-app tag"` (or the Actions tab). It
-   builds `dist-app/` and publishes `dist-v<version>`, taking the version from
-   `package.json`. Publishing is **refused if that tag already exists** — tags are
-   immutable, so bump the version first or pass a distinct `tag` input.
-
-4. Point Bloom at the new tag — step 2 of
-   [Production](#production-immutable-dist-v-git-tag).
-
-**npm:** this package has never been published to the registry. The `Release` workflow
-(dispatch-only) runs Changesets' action plus `vp run release` → `pnpm publish`, and needs a
-valid `NPM_TOKEN` in repo secrets. Don't dispatch it unless you intend a first npm
-publish; Bloom does not need it.
+**npm:** this package is not on the registry and Bloom does not import it as a library —
+Bloom loads `dist-app/` as static files in an iframe. Nothing publishes to npm.
 
 ## Tests
 

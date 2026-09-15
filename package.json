@@ -31,11 +31,6 @@
     "build:app": "vp build -- --base=/bloom/aiImageEditor/ --outDir dist-app",
     "build:lib": "tsup",
     "test": "vp test",
-    "// prepublishOnly ensures BOTH the library (dist/) and the hosted app (dist-app/) are": "",
-    "// freshly built before any publish, since `files` ships both.": "",
-    "prepublishOnly": "vp run build:lib && vp run build:app",
-    "release": "pnpm publish --access public",
-    "changeset": "changeset",
     "preview": "vp preview",
     "//note that e2e tests require that you run build to pick up new code in the app (but not in the e2e tests themselves)": "",
     "e2e": "npx playwright test",
@@ -65,8 +60,6 @@
     "rembg-webgpu": "^0.2.1"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.0",
-    "@changesets/cli": "^2.27.9",
     "@playwright/test": "^1.57.0",
     "@types/json5": "^2.2.0",
     "@types/node": "^25.0.3",

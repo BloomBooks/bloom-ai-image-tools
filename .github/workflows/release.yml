@@ -1,21 +1,90 @@
 name: Release
 
+# ONE button. Push your work to master, then run this workflow (Actions -> Release -> Run
+# workflow) and pick patch/minor/major. It does everything Bloom needs:
+#
+#   1. bumps the version in package.json and commits that to master ("Version 0.1.16")
+#   2. builds the hosted editor app (dist-app/)
+#   3. publishes the immutable tag `dist-v0.1.16` holding that build
+#   4. writes a GitHub Release whose notes are the commit subjects since the last release
+#
+# Bloom (BloomDesktop) then installs step 3's tag as a GitHub dependency:
+#
+#   "bloom-ai-image-tools": "github:BloomBooks/bloom-ai-image-tools#dist-v0.1.16"
+#
+# WHY A TAG (not npm, not a moving branch): Bloom is yarn 1 and cannot build this pnpm +
+# vite-plus project on install, so it needs a prebuilt dist-app. Different Bloom branches
+# need different editor builds (not always-latest), so each pins an exact, immutable ref.
+# The tag holds dist-app/ plus a minimal, script-free package.json so yarn installs it as
+# static files with no build step. The tag's content is an orphan commit; master stays clean.
+#
+# Tags are immutable: publishing is refused if `dist-v<version>` already exists.
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "How much to raise the version"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: "Exact version to release instead (e.g. 0.2.0). Overrides the bump."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
-      pull-requests: write
     steps:
+      - name: Refuse to release from anything but master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::Release runs on master only; this run is on ${GITHUB_REF}."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump the version
+        id: version
+        run: |
+          set -euo pipefail
+          PREVIOUS="$(node -p "require('./package.json').version")"
+          if [ -n "${{ inputs.version }}" ]; then
+            npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version >/dev/null
+          else
+            npm version "${{ inputs.bump }}" --no-git-tag-version >/dev/null
+          fi
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "previous=${PREVIOUS}" >> "$GITHUB_OUTPUT"
+          echo "current=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=dist-v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${PREVIOUS} -> ${VERSION} as dist-v${VERSION}"
+
+      - name: Refuse to overwrite an existing tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists and tags are immutable. Choose a larger bump, or pass an explicit 'version'."
+            exit 1
+          fi
 
       - name: Setup Vite Plus
         uses: voidzero-dev/setup-vp@v1
@@ -26,13 +95,94 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      - name: Build library
-        run: vp run build:lib
+      - name: Build hosted app (dist-app)
+        run: vp run build:app
 
-      - name: Create release PR or publish
-        uses: changesets/action@v1
-        with:
-          publish: vp run release
+      - name: Commit the version bump to master
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "Version ${{ steps.version.outputs.current }}"
+          git push origin HEAD:master
+
+      - name: Collect the release notes
+        run: |
+          set -euo pipefail
+          # Each dist tag records the master commit it was built from, so the notes are every
+          # commit subject since the previous release (the version-bump commits are not news).
+          PREVIOUS_TAG="dist-v${{ steps.version.outputs.previous }}"
+          git fetch --quiet origin "refs/tags/${PREVIOUS_TAG}:refs/tags/${PREVIOUS_TAG}" 2>/dev/null || true
+          SINCE="$(git show "${PREVIOUS_TAG}:BUILD_INFO.txt" 2>/dev/null | sed -n 's/^source-commit: //p' || true)"
+          if [ -n "${SINCE}" ] && git cat-file -e "${SINCE}^{commit}" 2>/dev/null; then
+            git log --no-merges --format='- %s' "${SINCE}..HEAD" |
+              grep -v -E '^- Version ' > "${RUNNER_TEMP}/notes.md" ||
+              echo "- No changes recorded." > "${RUNNER_TEMP}/notes.md"
+          else
+            echo "- Built from ${GITHUB_SHA}." > "${RUNNER_TEMP}/notes.md"
+          fi
+          cat "${RUNNER_TEMP}/notes.md"
+
+      - name: Assemble the tag's content
+        run: |
+          set -euo pipefail
+          rm -rf .publish
+          mkdir -p .publish
+          cp -r dist-app .publish/dist-app
+          node -e '
+            const fs = require("fs");
+            const src = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const out = {
+              name: src.name,
+              version: src.version,
+              private: false,
+              description: "Prebuilt Bloom AI Image Editor app (dist-app), published for consumption by BloomDesktop as a GitHub dependency. Auto-generated by release.yml; do not edit by hand.",
+              // Static files only: no scripts (so yarn 1 runs no build) and no dependencies.
+              files: ["dist-app"]
+            };
+            fs.writeFileSync(".publish/package.json", JSON.stringify(out, null, 2) + "\n");
+          '
+          {
+            echo "tag: ${{ steps.version.outputs.tag }}"
+            echo "source-commit: $(git rev-parse HEAD)"
+          } > .publish/BUILD_INFO.txt
+
+      - name: Publish the tag
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          git -C .publish init -q
+          git -C .publish config user.name "github-actions[bot]"
+          git -C .publish config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .publish add -A
+          git -C .publish commit -q -m "dist-app build for ${TAG} (source $(git rev-parse HEAD))"
+          git -C .publish tag "${TAG}"
+          git -C .publish push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${TAG}"
+          echo "Published ${TAG}."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Write the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          {
+            echo ""
+            echo "Bloom installs this release with:"
+            echo ""
+            echo '    "bloom-ai-image-tools": "github:BloomBooks/bloom-ai-image-tools#'"${TAG}"'",'
+          } >> "${RUNNER_TEMP}/notes.md"
+          gh release create "${TAG}" --title "${{ steps.version.outputs.current }}" --notes-file "${RUNNER_TEMP}/notes.md"
+
+      - name: Say what to put in Bloom
+        run: |
+          echo "### Released ${{ steps.version.outputs.current }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'In BloomDesktop, set `src/BloomBrowserUI/package.json` to:' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo '"bloom-ai-image-tools": "github:BloomBooks/bloom-ai-image-tools#${{ steps.version.outputs.tag }}",' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

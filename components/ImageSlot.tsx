@@ -6,7 +6,7 @@ import { MagnifiableImage } from "./MagnifiableImage";
 import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
-import { ImageSlotActions, ImageSlotActionsHandle } from "./ImageSlotActions";
+import { ImageSlotActions } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";
 import { ImageSlotRolePill } from "./ImageSlotRolePill";
 import { ImageSlotDropOverlay } from "./ImageSlotDropOverlay";
@@ -273,7 +273,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   const OVERLAY_CORNER_OFFSET = 4;
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const slotRef = React.useRef<HTMLDivElement>(null);
-  const thumbActionsRef = React.useRef<ImageSlotActionsHandle | null>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const dragDepthRef = React.useRef(0);
   const [isHovered, setIsHovered] = React.useState(false);
@@ -784,13 +783,17 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                   ? 1
                   : 0.8
               : 1,
-          cursor: canDrag
-            ? isPressed
-              ? "grabbing"
-              : "grab"
-            : !disabled && (onClick || variant === "thumb")
-              ? "pointer"
-              : "default",
+          // While the magnifier is on, the pointer is a lens over the picture,
+          // so it says so — dragging and clicking are not what it does here.
+          cursor: isMagnifierPinned
+            ? "zoom-in"
+            : canDrag
+              ? isPressed
+                ? "grabbing"
+                : "grab"
+              : !disabled && (onClick || variant === "thumb")
+                ? "pointer"
+                : "default",
           pointerEvents: disabled ? "none" : "auto",
           filter: disabled ? "grayscale(1)" : "none",
           borderColor: isDragOver
@@ -821,17 +824,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
         onDrop={handleDrop}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onMouseMove={() => {
-          if (variant !== "thumb") return;
-          if (!isHovered) return;
-          if (disabled) return;
-          // When dnd-kit is actively dragging, avoid hover-intent state churn.
-          if (isAnyDndDragging) return;
-
-          // Hover-intent: only reveal the "..." trigger after the pointer has
-          // settled for 500ms. Any movement resets the timer.
-          thumbActionsRef.current?.notifyPointerMove();
-        }}
         onContextMenu={handleContextMenu}
         onKeyDown={(event) => {
           if (!onClick || disabled) return;
@@ -925,7 +917,6 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
             )}
 
             <ImageSlotActions
-              ref={thumbActionsRef}
               placement="overlay"
               variant={variant}
               image={image}

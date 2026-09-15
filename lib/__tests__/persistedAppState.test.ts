@@ -134,4 +134,41 @@ describe("persistedAppState", () => {
     expect(merged.referenceImageIds).toEqual([]);
     expect(merged.rightPanelImageId).toBeNull();
   });
+
+  it("keeps the book's own images when folder state is authoritative", () => {
+    // The host hands these over on every launch and never writes them to the
+    // folder, so the folder's silence about them must not delete them.
+    const bookImage = buildImageRecord({
+      id: "book-image-1",
+      imageData: "https://host.invalid/book-image-1.png",
+      origin: "bookImages",
+    });
+    const folderRecord = buildImageRecord({
+      id: "folder",
+      imageData: "",
+      imageFileName: "folder.png",
+    });
+    const current: AppState = {
+      targetImageId: "book-image-1",
+      referenceImageIds: [],
+      rightPanelImageId: null,
+      history: [bookImage],
+      isProcessing: false,
+      isAuthenticated: false,
+      error: null,
+    };
+    const incoming: PersistedAppState = {
+      targetImageId: null,
+      referenceImageIds: [],
+      rightPanelImageId: null,
+      history: [folderRecord],
+    };
+
+    const merged = mergeHistoryFields(current, incoming, {
+      preserveCurrentOnlyHistory: false,
+    });
+
+    expect(merged.history.map((item) => item.id)).toEqual(["book-image-1", "folder"]);
+    expect(merged.targetImageId).toBe("book-image-1");
+  });
 });

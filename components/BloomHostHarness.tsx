@@ -356,68 +356,137 @@ export const BloomHostHarness: React.FC = () => {
     return unsubscribe;
   }, [bridge]);
 
+  // The panel sits on top of the editor's own header and sidebar, so it stays
+  // shut until asked for: open, it is an opaque card; shut, it is one small
+  // chip in the corner. Its readouts stay mounted either way, since the specs
+  // read their text without opening anything.
+  const [isPanelOpen, setIsPanelOpen] = React.useState(false);
+
+  const readouts = (
+    <>
+      <Typography
+        data-testid="bloom-harness-ready-count"
+        variant="caption"
+        sx={{ color: theme.colors.textPrimary }}
+      >
+        ready calls: {readyCount}
+      </Typography>
+      <Typography
+        data-testid="bloom-harness-cancelled"
+        variant="caption"
+        sx={{ color: theme.colors.textPrimary }}
+      >
+        cancelled: {wasCancelled ? "yes" : "no"}
+      </Typography>
+      <Box
+        data-testid="bloom-harness-commit-payload"
+        sx={{
+          p: 1.5,
+          borderRadius: 2,
+          maxHeight: 220,
+          overflow: "auto",
+          backgroundColor: "rgba(15, 23, 42, 0.9)",
+          color: "#fff",
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+          fontFamily: "monospace",
+        }}
+      >
+        {JSON.stringify(commitPayload, null, 2)}
+      </Box>
+    </>
+  );
+
   return (
     <Box sx={{ backgroundColor: theme.colors.appBackground, minHeight: "100vh" }}>
       <Box
         sx={{
           position: "fixed",
-          left: 12,
-          top: 12,
+          left: 0,
+          top: 0,
           zIndex: 1300,
           display: "flex",
           flexDirection: "column",
+          alignItems: "flex-start",
           gap: 1,
-          maxWidth: 360,
-          // The debug overlay floats above the editor's tool sidebar; it must
-          // never steal clicks meant for the app underneath (its own buttons
-          // opt back in).
+          maxWidth: 380,
+          // Never steal a click meant for the app underneath; the panel's own
+          // controls opt back in.
           pointerEvents: "none",
         }}
       >
-        <Stack direction="row" spacing={1} sx={{ pointerEvents: "auto" }}>
-          <Button
-            data-testid="bloom-harness-request-close"
-            variant="outlined"
-            onClick={() => bridge.cancel()}
-          >
-            Request Close
-          </Button>
-          <Button
-            data-testid="bloom-harness-reset-state"
-            variant="outlined"
-            onClick={() => void bridge.clearAllFiles()}
-          >
-            Reset State
-          </Button>
-        </Stack>
-        <Typography
-          data-testid="bloom-harness-ready-count"
-          variant="caption"
-          sx={{ color: theme.colors.textPrimary }}
-        >
-          ready calls: {readyCount}
-        </Typography>
-        <Typography
-          data-testid="bloom-harness-cancelled"
-          variant="caption"
-          sx={{ color: theme.colors.textPrimary }}
-        >
-          cancelled: {wasCancelled ? "yes" : "no"}
-        </Typography>
-        <Box
-          data-testid="bloom-harness-commit-payload"
+        <Button
+          data-testid="bloom-harness-panel-toggle"
+          size="small"
+          onClick={() => setIsPanelOpen((open) => !open)}
           sx={{
-            p: 1.5,
-            borderRadius: 2,
-            backgroundColor: "rgba(15, 23, 42, 0.8)",
-            color: "#fff",
-            fontSize: 12,
-            whiteSpace: "pre-wrap",
-            fontFamily: "monospace",
+            pointerEvents: "auto",
+            minWidth: 0,
+            padding: "1px 8px",
+            fontSize: 11,
+            lineHeight: 1.6,
+            textTransform: "none",
+            color: theme.colors.textMuted,
+            backgroundColor: "rgba(15, 23, 42, 0.85)",
+            borderBottomLeftRadius: 0,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            opacity: isPanelOpen ? 1 : 0.55,
+            "&:hover": { opacity: 1, color: theme.colors.textPrimary },
           }}
         >
-          {JSON.stringify(commitPayload, null, 2)}
-        </Box>
+          {isPanelOpen ? "hide fake-Bloom panel" : "fake Bloom"}
+        </Button>
+        {isPanelOpen ? (
+          <Box
+            sx={{
+              pointerEvents: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              m: 1,
+              p: 1.5,
+              borderRadius: 2,
+              border: `1px solid ${theme.colors.border}`,
+              backgroundColor: theme.colors.surface,
+              boxShadow: theme.colors.panelShadow,
+            }}
+          >
+            <Stack direction="row" spacing={1}>
+              <Button
+                data-testid="bloom-harness-request-close"
+                size="small"
+                variant="outlined"
+                onClick={() => bridge.cancel()}
+              >
+                Request Close
+              </Button>
+              <Button
+                data-testid="bloom-harness-reset-state"
+                size="small"
+                variant="outlined"
+                onClick={() => void bridge.clearAllFiles()}
+              >
+                Reset Host Files
+              </Button>
+            </Stack>
+            {readouts}
+          </Box>
+        ) : (
+          // Shut: kept in the DOM (the specs read the commit payload without
+          // opening the panel) but clipped to nothing on screen.
+          <Box
+            sx={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              overflow: "hidden",
+              clipPath: "inset(50%)",
+            }}
+          >
+            {readouts}
+          </Box>
+        )}
       </Box>
       <BloomHostedImageEditor bridge={bridge} />
     </Box>

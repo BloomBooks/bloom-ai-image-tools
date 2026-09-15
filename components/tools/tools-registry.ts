@@ -680,21 +680,17 @@ export const TOOLS: ToolDefinition[] = (
       },
       actionButtonLabel: "Improve Drawing",
       referenceImages: "0",
-      // Only offer these engines: Gemini 3 Pro Preview (default) plus the GPT
-      // Image 2.5 pair. Other catalog models are hidden.
-      modelIds: [
-        "google/gemini-3-pro-image",
-        "openai/gpt-image-2.5-flare",
-        "openai/gpt-image-2.5-sunburst",
-      ],
-      recommendedModelIds: ["google/gemini-3-pro-image"],
+      // Only offer these engines: GPT Image 2.5 Sunburst (default) and Gemini 3
+      // Pro Preview. Other catalog models are hidden.
+      modelIds: ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"],
+      recommendedModelIds: ["openai/gpt-image-2.5-sunburst"],
       allowBatch: true,
     },
     {
       id: "upscale",
       preserveInEdit: "the composition, the subjects, the colors, the style, and the framing.",
       title: "Upscale",
-      description: "Ask for the same picture at a higher resolution.",
+      description: "Create a higher-resolution version of this image.",
       group: "enhance",
       icon: PhotoSizeSelectLargeOutlinedIcon,
       parameters: [
@@ -717,7 +713,7 @@ export const TOOLS: ToolDefinition[] = (
       ],
       promptTemplate: (params: Record<string, string>) => {
         const parts = [
-          "Reproduce this exact image at a higher resolution. Do not change the composition, subjects, colors, style, framing, or any content. Add only the fine detail, sharpness, and clean edges that a genuinely higher-resolution version of this same picture would have.",
+          "Reproduce this exact image at a higher resolution. Do not change the composition, subjects, colors, style, framing, or any content. Add only the fine detail, sharpness, and clean edges that a genuinely higher-resolution version of this same image would have.",
         ];
         if (params.removeFuzziness === "true") {
           parts.push(

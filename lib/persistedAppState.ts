@@ -41,6 +41,14 @@ const mergeImageRecord = (current: ImageRecord, incoming: ImageRecord) => {
   };
 };
 
+// The book's own images arrive from the host (Bloom) on every launch and are
+// never written to a connected folder, so a folder manifest that doesn't list
+// them says nothing about whether they still exist. They must survive a merge
+// that otherwise treats the incoming snapshot as the full picture, or the book
+// strip empties a moment after the pages first appear.
+const comesFromTheBook = (item: ImageRecord) =>
+  item.origin === "bookImages" || item.origin === "bookOriginal";
+
 export const mergeHistoryFields = (
   current: AppState,
   incoming: PersistedAppState,
@@ -51,7 +59,7 @@ export const mergeHistoryFields = (
   const mergedHistory = current.history.reduce<ImageRecord[]>((result, item) => {
     const incomingItem = incomingById.get(item.id);
     if (!incomingItem) {
-      if (preserveCurrentOnlyHistory) {
+      if (preserveCurrentOnlyHistory || comesFromTheBook(item)) {
         result.push(item);
       }
       return result;

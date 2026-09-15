@@ -370,7 +370,11 @@ export interface ImageToolsWorkspaceProps {
     credits?: ImageCredits | null;
     /** Resolution the host says this slot wants, plus its explanatory memo
      *  (see IBloomHostBookImage.suggestedTarget). */
-    suggestedTarget?: { width: number; height: number; memo?: string | null } | null;
+    suggestedTarget?: {
+      width: number;
+      height: number;
+      memo?: string | null;
+    } | null;
   }>;
   /** Book image (by id) to pre-load into the "Image to Edit" slot on launch. */
   selectedBookImageId?: string;
@@ -714,6 +718,17 @@ export function ImageToolsWorkspace({
     [eligibleBatchBookImageIds],
   );
 
+  // One press ticks every eligible book image; pressing it again when they are
+  // all ticked clears the selection.
+  const handleToggleAllBatchTicks = useCallback(() => {
+    setBatchTickedIds((prev) => {
+      const allTicked =
+        eligibleBatchBookImageIds.size > 0 &&
+        [...eligibleBatchBookImageIds].every((id) => prev.has(id));
+      return allTicked ? new Set() : new Set(eligibleBatchBookImageIds);
+    });
+  }, [eligibleBatchBookImageIds]);
+
   const batchSelection = useMemo(
     () =>
       isBatchSelectionActive
@@ -721,6 +736,7 @@ export function ImageToolsWorkspace({
             eligibleIds: eligibleBatchBookImageIds,
             tickedIds: batchTickedIds,
             onToggle: handleToggleBatchTick,
+            onToggleAll: handleToggleAllBatchTicks,
             activeIncomingIds: new Set(batchRun?.currentIncomingIds ?? []),
             failedIncomingIds: new Set(batchRun?.failedIncomingIds ?? []),
           }
@@ -730,6 +746,7 @@ export function ImageToolsWorkspace({
       eligibleBatchBookImageIds,
       batchTickedIds,
       handleToggleBatchTick,
+      handleToggleAllBatchTicks,
       batchRun,
     ],
   );
@@ -2586,7 +2603,10 @@ export function ImageToolsWorkspace({
             useEnvDefaultModelId: Boolean(envApiKey && !apiKey),
             signal: abortController.signal,
             onProgressStart: (estimatedDurationMs) => {
-              setGenerationProgress({ startedAt: getNowMs(), estimatedDurationMs });
+              setGenerationProgress({
+                startedAt: getNowMs(),
+                estimatedDurationMs,
+              });
             },
             onPhase: setPhase,
           },
@@ -3337,7 +3357,10 @@ export function ImageToolsWorkspace({
         onStart: (incomingId) => {
           setBatchRun((prev) =>
             prev && !prev.currentIncomingIds.includes(incomingId)
-              ? { ...prev, currentIncomingIds: [...prev.currentIncomingIds, incomingId] }
+              ? {
+                  ...prev,
+                  currentIncomingIds: [...prev.currentIncomingIds, incomingId],
+                }
               : prev,
           );
         },
@@ -3694,7 +3717,11 @@ export function ImageToolsWorkspace({
         setApiKey(key);
         setAuthMethod("oauth");
         // Bloom owns the key: hand it up to the host to persist per-user.
-        onCredentialsChange?.({ apiKey: key, authMethod: "oauth", openRouterUser: null });
+        onCredentialsChange?.({
+          apiKey: key,
+          authMethod: "oauth",
+          openRouterUser: null,
+        });
         setState((prev) => ({ ...prev, isAuthenticated: true }));
         setAuthLoading(false);
         oauthPollAbortControllerRef.current = null;
@@ -3724,7 +3751,11 @@ export function ImageToolsWorkspace({
     setApiKey(null);
     setAuthMethod(null);
     // Clear the host's stored credentials too (sign-out).
-    onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
+    onCredentialsChange?.({
+      apiKey: null,
+      authMethod: null,
+      openRouterUser: null,
+    });
     setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
   };
 
@@ -3734,14 +3765,22 @@ export function ImageToolsWorkspace({
     if (!trimmed) {
       setApiKey(null);
       setAuthMethod(null);
-      onCredentialsChange?.({ apiKey: null, authMethod: null, openRouterUser: null });
+      onCredentialsChange?.({
+        apiKey: null,
+        authMethod: null,
+        openRouterUser: null,
+      });
       setState((prev) => ({ ...prev, isAuthenticated: !!envApiKey }));
       return;
     }
     setApiKey(trimmed);
     setAuthMethod("manual");
     // Bloom owns the key: hand it up to the host to persist per-user.
-    onCredentialsChange?.({ apiKey: trimmed, authMethod: "manual", openRouterUser: null });
+    onCredentialsChange?.({
+      apiKey: trimmed,
+      authMethod: "manual",
+      openRouterUser: null,
+    });
     setState((prev) => ({ ...prev, isAuthenticated: true }));
   };
 

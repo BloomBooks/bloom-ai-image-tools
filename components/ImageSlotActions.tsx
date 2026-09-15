@@ -3,7 +3,7 @@ import { ClickAwayListener, IconButton, Popper, Tooltip } from "@mui/material";
 import type { SxProps, Theme as MuiTheme } from "@mui/material/styles";
 import { ImageRecord, ImageSlotActionKey } from "../types";
 import { theme } from "../themes";
-import { Icon, Icons, PasteIcon } from "./Icons";
+import { Icon, Icons, MoreDotsIcon, PasteIcon } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 
 type SlotControls = {
@@ -47,10 +47,6 @@ const insertBeforeRemove = (actions: SlotActionButton[], actionToInsert: SlotAct
   return next;
 };
 
-export type ImageSlotActionsHandle = {
-  notifyPointerMove: () => void;
-};
-
 export type ImageSlotActionsProps = {
   placement: "header" | "overlay";
   variant: "panel" | "tile" | "thumb";
@@ -77,8 +73,8 @@ export type ImageSlotActionsProps = {
   onToggleMagnifier: () => void;
 };
 
-export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSlotActionsProps>(
-  function ImageSlotActions(props, ref) {
+export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
+  {
     const {
       placement,
       variant,
@@ -182,29 +178,6 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
         clearCloseTimeout();
       };
     }, [clearMoreDelayTimeout, clearCloseTimeout]);
-
-    React.useImperativeHandle(
-      ref,
-      () => ({
-        notifyPointerMove: () => {
-          if (variant !== "thumb") return;
-          if (isAnyDndDragging) return;
-          if (!isHovered) return;
-          if (isThumbOverflowOpen) return;
-
-          if (isThumbMoreReady) setIsThumbMoreReady(false);
-          scheduleMoreReady();
-        },
-      }),
-      [
-        variant,
-        isHovered,
-        isAnyDndDragging,
-        isThumbOverflowOpen,
-        isThumbMoreReady,
-        scheduleMoreReady,
-      ],
-    );
 
     const defaultActionLabels: Record<keyof SlotControls, string> = {
       upload: "Upload",
@@ -457,15 +430,9 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
       if (!image || disabled || orderedActions.length === 0) return null;
 
       const removeAction = orderedActions.find((action) => action.key === "remove");
-      // Surface copy as a dedicated, always-on-hover button (rather than burying
-      // it in the "..." overflow) so a single hover-click copies the thumbnail.
-      const copyAction = orderedActions.find((action) => action.key === "copy");
-      const overflowActions = orderedActions.filter(
-        (action) => action.key !== "remove" && action.key !== "copy",
-      );
+      const overflowActions = orderedActions.filter((action) => action.key !== "remove");
 
       const showRemove = isHovered;
-      const showCopy = isHovered;
       const showMoreTrigger =
         overflowActions.length > 0 && ((isHovered && isThumbMoreReady) || isThumbOverflowOpen);
 
@@ -487,25 +454,6 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
               }}
             >
               {renderActionButton(removeAction)}
-            </div>
-          ) : null}
-
-          {copyAction ? (
-            <div
-              style={{
-                position: "absolute",
-                bottom: cornerOffset,
-                right: cornerOffset,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                zIndex: 20,
-                opacity: showCopy ? 1 : 0,
-                pointerEvents: disabled ? "none" : showCopy ? "auto" : "none",
-                transition: "opacity 120ms ease",
-              }}
-            >
-              {renderActionButton(copyAction)}
             </div>
           ) : null}
 
@@ -599,7 +547,7 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
                       },
                     }}
                   >
-                    <Icon path={Icons.More} width={iconSize} height={iconSize} />
+                    <MoreDotsIcon width={iconSize} height={iconSize} />
                   </IconButton>
 
                   <Popper
@@ -661,5 +609,5 @@ export const ImageSlotActions = React.forwardRef<ImageSlotActionsHandle, ImageSl
     }
 
     return null;
-  },
-);
+  }
+};

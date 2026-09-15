@@ -31,9 +31,9 @@ test.describe("batch selection UI", () => {
 
     await selectCustomEditTool(page);
 
-    // One checkbox per book image (including the placeholder slot, which is
-    // rendered but disabled rather than hidden).
-    await expect(page.locator('[data-testid^="batch-tick-"]')).toHaveCount(5);
+    // One checkbox per book image: the harness's four real images plus its two
+    // placeholder slots, which are rendered but disabled rather than hidden.
+    await expect(page.locator('[data-testid^="batch-tick-"]')).toHaveCount(6);
   });
 
   test("the placeholder slot's checkbox is disabled and can't be ticked", async ({ page }) => {
@@ -61,7 +61,10 @@ test.describe("batch selection UI", () => {
 
     // Custom Edit has no custom actionButtonLabel, so the generic wording applies.
     await expect(
-      page.getByRole("button", { name: "Apply Changes to 2 Images", exact: true }),
+      page.getByRole("button", {
+        name: "Apply Changes to 2 Images",
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(page.getByTestId("image-panel-empty-state-message")).toHaveText(
       "Will edit the 2 selected images",
@@ -78,6 +81,46 @@ test.describe("batch selection UI", () => {
       "src",
       /paper-cut/,
     );
+  });
+
+  test("the select-all control ticks and clears every eligible image", async ({ page }) => {
+    await selectCustomEditTool(page);
+
+    const selectAll = page.getByTestId("batch-select-all");
+    await expect(selectAll).not.toBeChecked();
+
+    await selectAll.click();
+
+    // Four real book images tick; the placeholder slot stays out.
+    for (const id of ["book-image-1", "book-image-2", "book-image-3", "book-image-4"]) {
+      await expect(batchTickCheckbox(page, id)).toBeChecked();
+    }
+    await expect(batchTickCheckbox(page, "book-image-5")).not.toBeChecked();
+    await expect(batchTickCheckbox(page, "book-image-6")).not.toBeChecked();
+    await expect(selectAll).toBeChecked();
+    await expect(
+      page.getByRole("button", {
+        name: "Apply Changes to 4 Images",
+        exact: true,
+      }),
+    ).toBeVisible();
+
+    // Pressing it again clears them.
+    await selectAll.click();
+    await expect(selectAll).not.toBeChecked();
+    await expect(batchTickCheckbox(page, "book-image-1")).not.toBeChecked();
+    await expect(page.getByRole("button", { name: "Apply Changes", exact: true })).toBeVisible();
+  });
+
+  test("unticking one image unchecks the select-all control", async ({ page }) => {
+    await selectCustomEditTool(page);
+
+    const selectAll = page.getByTestId("batch-select-all");
+    await selectAll.click();
+    await expect(selectAll).toBeChecked();
+
+    await batchTickCheckbox(page, "book-image-2").click();
+    await expect(selectAll).not.toBeChecked();
   });
 
   test("a slot with an assigned replacement can't be ticked", async ({ page }) => {

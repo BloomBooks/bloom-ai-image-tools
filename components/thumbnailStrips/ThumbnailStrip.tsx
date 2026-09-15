@@ -23,6 +23,9 @@ export interface BookImageBatchSelection {
   eligibleIds: Set<string>;
   tickedIds: Set<string>;
   onToggle: (incomingId: string) => void;
+  /** Ticks every eligible image at once; clears them all when they are already
+   *  ticked. Drives the stacked-circles control in the strip's label column. */
+  onToggleAll?: () => void;
   /** Incoming ids currently being processed by an in-flight batch run (up to
    *  `BATCH_CONCURRENCY`, lib/batchPool.ts); each gets a spinner overlay on
    *  its "Current" slot. */
@@ -281,7 +284,9 @@ const BatchTickToggle: React.FC<{
     checkedIcon={<CheckCircleIcon sx={{ fontSize: 20 }} />}
     title={disabled ? "This image can't be added to the batch" : "Add to batch"}
     inputProps={
-      { "data-testid": `batch-tick-${incomingId}` } as React.InputHTMLAttributes<HTMLInputElement>
+      {
+        "data-testid": `batch-tick-${incomingId}`,
+      } as React.InputHTMLAttributes<HTMLInputElement>
     }
     sx={{
       position: "absolute",
@@ -310,6 +315,130 @@ const BatchTickToggle: React.FC<{
     }}
   />
 );
+
+// The select-all affordance: the same circle the individual ticks use, drawn
+// three deep so it reads as "all of these". The two circles behind are cut
+// away where the front one overlaps them (the masks), so the stack stays
+// legible over artwork instead of turning into a tangle of arcs.
+const StackedTickIcon: React.FC<{ checked: boolean }> = ({ checked }) => {
+  const stroke = 1.7;
+  // Each mask hides the part of a circle that the next one forward covers.
+  const cutRadius = 6.4 + stroke / 2 + 1.1;
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <defs>
+        <mask id="batch-select-all-cut-mid">
+          <rect x="0" y="0" width="24" height="24" fill="white" />
+          <circle cx="11.1" cy="11.1" r={cutRadius} fill="black" />
+        </mask>
+        <mask id="batch-select-all-cut-front">
+          <rect x="0" y="0" width="24" height="24" fill="white" />
+          <circle cx="14" cy="14" r={cutRadius} fill="black" />
+        </mask>
+      </defs>
+      <circle
+        cx="8.2"
+        cy="8.2"
+        r="6.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        mask="url(#batch-select-all-cut-mid)"
+      />
+      <circle
+        cx="11.1"
+        cy="11.1"
+        r="6.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        mask="url(#batch-select-all-cut-front)"
+      />
+      {checked ? (
+        <>
+          <circle cx="14" cy="14" r="6.4" fill="currentColor" />
+          <path
+            d="M11 14.1 L13.2 16.3 L17.2 11.9"
+            fill="none"
+            stroke={theme.colors.surface}
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : (
+        <circle cx="14" cy="14" r="6.4" fill="none" stroke="currentColor" strokeWidth={stroke} />
+      )}
+    </svg>
+  );
+};
+
+// Sits at the head of the book-images strip, in line with the per-image ticks,
+// and ticks or clears all of them at once.
+const BatchSelectAllToggle: React.FC<{
+  batchSelection: BookImageBatchSelection;
+}> = ({ batchSelection }) => {
+  const { eligibleIds, tickedIds, onToggleAll } = batchSelection;
+  const disabled = !onToggleAll || eligibleIds.size === 0;
+  const allTicked = eligibleIds.size > 0 && [...eligibleIds].every((id) => tickedIds.has(id));
+
+  return (
+    <Tooltip
+      title="Select all pages for batch processing"
+      placement="right"
+      // The tip opens over the first page's own tick circle, so it must not
+      // take the pointer: left interactive it swallows the next click.
+      disableInteractive
+      slotProps={{ popper: { sx: { pointerEvents: "none" } } }}
+    >
+      {/* A disabled control swallows the hover, so the tooltip needs a wrapper
+          that is still hoverable to have anything to anchor to. */}
+      <span
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 4,
+          zIndex: 2,
+          display: "inline-flex",
+        }}
+      >
+        <Checkbox
+          checked={allTicked}
+          disabled={disabled}
+          onChange={() => onToggleAll?.()}
+          icon={<StackedTickIcon checked={false} />}
+          checkedIcon={<StackedTickIcon checked />}
+          inputProps={
+            {
+              "data-testid": "batch-select-all",
+            } as React.InputHTMLAttributes<HTMLInputElement>
+          }
+          sx={{
+            padding: "3px",
+            color: theme.colors.textMuted,
+            filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
+            // Matches the per-image ticks: quiet at rest, full strength on
+            // hover or once it carries state.
+            opacity: disabled ? 0.15 : 0.5,
+            transition: "color 120ms, background-color 120ms, opacity 120ms",
+            "&:hover": {
+              color: theme.colors.textPrimary,
+              backgroundColor: "rgba(255, 255, 255, 0.08)",
+              opacity: 1,
+            },
+            "&.Mui-checked": {
+              color: theme.colors.accent,
+              opacity: 1,
+            },
+            "&.Mui-disabled": {
+              color: theme.colors.textMuted,
+            },
+          }}
+        />
+      </span>
+    </Tooltip>
+  );
+};
 
 // Shown over the "Current" slot of the book image the batch runner is
 // processing right now (PLAN-batch-processing.md WP5).
@@ -351,7 +480,9 @@ const BatchFailedBadge: React.FC = () => (
   </div>
 );
 
-const BookImageStripLabels: React.FC = () => (
+const BookImageStripLabels: React.FC<{
+  batchSelection?: BookImageBatchSelection;
+}> = ({ batchSelection }) => (
   <div
     style={{
       position: "sticky",
@@ -371,6 +502,7 @@ const BookImageStripLabels: React.FC = () => (
       background: theme.colors.surface,
     }}
   >
+    {batchSelection && <BatchSelectAllToggle batchSelection={batchSelection} />}
     {(["Current", "Replacement"] as const).map((label) => (
       <div
         key={label}
@@ -1167,9 +1299,9 @@ const CharacterStackThumb: React.FC<{
 // Dashed placeholder shown on the characters strip. Clicking pastes an image
 // from the clipboard (falling back to a file picker when the clipboard has no
 // image) and hands it to the parent to register as a new character.
-const CharacterPastePlaceholder: React.FC<{ onAddImage: (file: File) => void }> = ({
-  onAddImage,
-}) => {
+const CharacterPastePlaceholder: React.FC<{
+  onAddImage: (file: File) => void;
+}> = ({ onAddImage }) => {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -1562,7 +1694,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         )}
         {stripId === "bookImages" ? (
           <>
-            <BookImageStripLabels />
+            <BookImageStripLabels batchSelection={batchSelection} />
             {orderedItems.map((item) => (
               <BookImagePairThumb
                 key={`${stripId}-${item.id}`}

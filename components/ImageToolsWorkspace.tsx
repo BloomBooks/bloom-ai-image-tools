@@ -132,6 +132,7 @@ import {
   ThumbnailStripConfig,
 } from "../lib/thumbnailStrips";
 import { mergeHistoryFields, sanitizePersistedAppState } from "../lib/persistedAppState";
+import type { RunCostTarget } from "../lib/toolRunCostEstimate";
 
 // Helper to create UUIDs
 const uuid = () => Math.random().toString(36).substring(2, 9);
@@ -629,6 +630,22 @@ export function ImageToolsWorkspace({
   const bookImageSlotIds = useMemo(
     () => thumbnailStrips.itemIdsByStrip.bookImages || [],
     [thumbnailStrips.itemIdsByStrip.bookImages],
+  );
+  // What the tool card needs to price a batch run: each ticked image's own
+  // size and slot target, in strip order, since each image is edited at its
+  // own size (see processOneImage in handleApplyBatchTool).
+  const batchTargets = useMemo<RunCostTarget[]>(
+    () =>
+      bookImageSlotIds
+        .filter((id) => batchTickedIds.has(id))
+        .map((id) => {
+          const record = historyItemsById[id];
+          return {
+            resolution: record?.resolution ?? null,
+            suggestedTarget: record?.suggestedTarget ?? null,
+          };
+        }),
+    [bookImageSlotIds, batchTickedIds, historyItemsById],
   );
   // Eligible for batch ticking: no replacement assigned yet, and not the
   // book's own empty-slot placeholder graphic (Agreed UX in
@@ -4503,6 +4520,7 @@ export function ImageToolsWorkspace({
             batchSelection={batchSelection}
             launchedBookImageId={selectedBookImageId ?? null}
             batchTickedCount={batchTickedIds.size}
+            batchTargets={batchTargets}
             batchRun={batchRun}
             isBatchRunning={batchRun !== null}
             isInspectorPinned={isInspectorPinned}

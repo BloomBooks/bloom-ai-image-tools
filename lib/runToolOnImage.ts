@@ -18,23 +18,20 @@ import { resolveToolQuality, resolveToolReasoningLevel } from "./modelsCatalog";
 import { removeBackgroundFromImage } from "./backgroundRemoval";
 import { applyPostProcessingPipeline } from "./postProcessing";
 import { shrinkReferenceImage } from "./imageProcessing";
-import {
-  AUTO_ASPECT_RATIO,
-  getAspectRatioPromptHint,
-  resolveAspectRatioValue,
-} from "./aspectRatios";
+import { getAspectRatioPromptHint, resolveAspectRatioValue } from "./aspectRatios";
 import { ensureDataUrl, getImageDimensions } from "./imageUtils";
-import { pickSizeTokenForLongEdge } from "./imageSizes";
+import { estimateImageRunCostUsd } from "./imageCostEstimate";
 import {
-  findTargetResolutionParam,
+  type ImageRequestPlanInput,
+  planImageRequest,
+  predictOutputPixels,
+} from "./imageRequestPlan";
+import {
   formatUpscaleDimensions,
   RESOLVED_TARGET_PIXELS_PARAM,
-  resolveUpscaleTarget,
   type UpscaleHostTarget,
 } from "./upscale";
-import { getGifSheetAspectRatio, parseGifFrameCount } from "./gifAnimationPrompt";
-import { getRequestedAspectRatioValue } from "./toolHelpers";
-import { findSizeParam, resolveSizeTokenValue, resolveSlotTarget } from "./slotTarget";
+import { findSizeParam } from "./slotTarget";
 import {
   createPromptDurationKey,
   createToolDurationKey,
@@ -149,57 +146,6 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     targetImage?.resolution ??
     (targetImage?.imageData ? await getImageDimensions(targetImage.imageData) : undefined);
 
-  // The Upscale selector persists a tier token ("hd"), so this is the first
-  // point that knows the pixels it stands for — needed by both the prompt's
-  // size sentence and the size token the request carries.
-  const targetResolutionParam = findTargetResolutionParam(tool.parameters);
-  const upscaleTarget = targetResolutionParam
-    ? resolveUpscaleTarget(
-        params[targetResolutionParam.name],
-        targetImageResolution,
-        hostSuggestedTarget,
-      )
-    : null;
-
-  let requestedAspectRatio = getRequestedAspectRatioValue(tool, params);
-
-  // Inside Bloom, the host says how many pixels the book slot wants, and a
-  // result that belongs in the slot is asked for at that size (and, unless the
-  // user picked a shape, in that shape). See lib/slotTarget.ts for which tools
-  // follow the slot and how an Auto size settles without one.
-  const slotTarget = resolveSlotTarget({
-    tool,
-    params,
-    hostTarget: hostSuggestedTarget,
-    requestedAspectRatio,
-    supportedAspectRatios: toolModel?.supportedAspectRatios,
-  });
-  if (slotTarget) {
-    requestedAspectRatio = slotTarget.aspectRatio;
-  }
-  const sizeParam = findSizeParam(tool.parameters);
-  const settledSizeToken = resolveSizeTokenValue(sizeParam, params.size, slotTarget);
-
-  // The template reads params.size for its size sentence, so it gets the tier
-  // Auto settled to rather than the word "auto".
-  const paramsForPrompt =
-    sizeParam && settledSizeToken && settledSizeToken !== params.size
-      ? { ...params, size: settledSizeToken }
-      : params;
-  const basePrompt = tool.promptTemplate(
-    upscaleTarget
-      ? {
-          ...paramsForPrompt,
-          [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget),
-        }
-      : paramsForPrompt,
-  );
-  if (tool.derivedResultMode === "animated-gif") {
-    // The sheet's canvas shape follows the frame-count's grid layout
-    // (16 portrait cells don't fit a 16:9 canvas, so 4x4 goes square).
-    requestedAspectRatio = getGifSheetAspectRatio(parseGifFrameCount(params.frameCount));
-  }
-
   // Normalize every source to a base64 data URL. Book images from the Bloom
   // host (and anything else dragged in by URL) arrive as http(s) URLs, which
   // the OpenRouter client and local background removal cannot consume.
@@ -221,49 +167,42 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     ...constrainedReferences.map((h) => h.name ?? null),
   ];
 
-  // Tools that decompose a page (break-comic) must not downscale it. Match
-  // the output size + aspect ratio to the input so resolution is preserved
-  // (a 3508px poster -> 4K), instead of falling back to a square 1K default.
-  let requestedSize = settledSizeToken ?? tool.hiddenSizeDefault;
-  let autoSizeResolution: { width: number; height: number } | undefined;
-  if (tool.autoSizeFromInput && sourceImages[0]) {
-    const inputResolution = await getImageDimensions(sourceImages[0]);
-    if (inputResolution?.width && inputResolution?.height) {
-      autoSizeResolution = inputResolution;
-      requestedSize = pickSizeTokenForLongEdge(
-        Math.max(inputResolution.width, inputResolution.height),
-      );
-      requestedAspectRatio = resolveAspectRatioValue(
-        AUTO_ASPECT_RATIO,
-        inputResolution,
-        toolModel?.supportedAspectRatios,
-      );
-    }
-  }
+  // What this run asks the model for: size token, shape, exact pixels. The
+  // tool UI plans the same run from the same inputs (lib/imageRequestPlan.ts)
+  // to show the size it will send and estimate its cost.
+  const planInput: ImageRequestPlanInput = {
+    tool,
+    params,
+    toolModel,
+    requiresEditImage,
+    targetImageResolution,
+    hostTarget: hostSuggestedTarget,
+    autoSizeResolution:
+      tool.autoSizeFromInput && sourceImages[0] ? await getImageDimensions(sourceImages[0]) : null,
+  };
+  const plan = planImageRequest(planInput);
+  const {
+    upscaleTarget,
+    settledSizeToken,
+    requestedSize,
+    requestedAspectRatio,
+    autoSizeResolution,
+  } = plan;
 
-  if (upscaleTarget) {
-    // Real models accept only tier tokens, so the exact request becomes the
-    // smallest tier that isn't a downscale of it. The aspect ratio stays on
-    // auto (the source's shape) — upscaling must not reframe the picture.
-    requestedSize = pickSizeTokenForLongEdge(Math.max(upscaleTarget.width, upscaleTarget.height));
-  }
-
-  // The exact pixels the request should ask for, when the caller knows them.
-  // A model that takes pixels (GPT Image 2.5) is asked for these directly; a
-  // tier-token model never sees them. Upscale supplies its selector's target,
-  // and a run that follows the book slot supplies the slot. Any other edit
-  // whose tool set no size and whose shape follows the source gets the
-  // source's own resolution, because on such a model an explicit size
-  // overrides the source's shape: without this every edit would come back in
-  // the picker-less default tier (1K) and one of the model's canned shapes,
-  // shrinking a 2048x1536 illustration to 1024x768.
-  const shapeFollowsSource = requestedAspectRatio === AUTO_ASPECT_RATIO && !autoSizeResolution;
-  const targetDimensions =
-    upscaleTarget ??
-    slotTarget?.targetDimensions ??
-    (requiresEditImage && targetImageResolution && shapeFollowsSource && !requestedSize
-      ? targetImageResolution
-      : undefined);
+  // The template reads params.size for its size sentence, so it gets the tier
+  // Auto settled to rather than the word "auto".
+  const paramsForPrompt =
+    findSizeParam(tool.parameters) && settledSizeToken && settledSizeToken !== params.size
+      ? { ...params, size: settledSizeToken }
+      : params;
+  const basePrompt = tool.promptTemplate(
+    upscaleTarget
+      ? {
+          ...paramsForPrompt,
+          [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget),
+        }
+      : paramsForPrompt,
+  );
 
   const promptWithoutAspectRatio =
     tool.id === "custom"
@@ -360,7 +299,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
       toolModel?.supportedAspectRatios,
     ),
     size: requestedSize,
-    ...(targetDimensions ? { targetDimensions } : {}),
+    ...(plan.targetDimensions ? { targetDimensions: plan.targetDimensions } : {}),
   };
 
   if (tool.autoSizeFromInput) {
@@ -391,6 +330,28 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
     modelIdForRequest,
     editOptions,
   );
+
+  if (toolModel?.tokenPricing) {
+    // Whether the token rules in lib/imageCostEstimate.ts still fit what the
+    // provider bills: predicted from the pixels actually sent, next to the
+    // call's own usage block. Input tokens should match exactly.
+    const referenceDimensions = await Promise.all(referenceImageData.map(getImageDimensions));
+    const predicted = estimateImageRunCostUsd(
+      toolModel.tokenPricing,
+      [
+        ...(targetImageData && targetImageResolution ? [targetImageResolution] : []),
+        ...referenceDimensions.filter((d): d is { width: number; height: number } => !!d),
+      ],
+      predictOutputPixels(plan, planInput),
+    );
+    console.log("[cost-estimate] predicted vs actual", {
+      predicted,
+      actualCost: result.cost,
+      usage: result.usage ?? null,
+      requestedSize,
+      targetDimensions: plan.targetDimensions ?? null,
+    });
+  }
 
   const returnedImages = result.images?.length ? result.images : [result.imageData];
   processedImages = await Promise.all(

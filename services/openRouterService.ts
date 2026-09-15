@@ -94,6 +94,8 @@ export interface EditImageResult {
   duration: number;
   model: string; // Model ID used (from API response)
   cost: number; // Cost in dollars (from API response usage.cost)
+  /** The response's whole `usage` block (token counts, cost), for comparing against estimates. */
+  usage?: Record<string, unknown> | null;
   /** The model's text-channel response, if any (e.g. structured JSON alongside the image). */
   text?: string;
 }
@@ -1010,6 +1012,7 @@ const editImageViaImagesApi = async (
           duration: getNow() - startTime,
           model: (data?.model as string) || modelForRequest,
           cost: (data?.usage?.cost as number) ?? 0,
+          usage: (data?.usage as Record<string, unknown>) ?? null,
         };
       }
 
@@ -1159,9 +1162,9 @@ export const editImage = async (
   const geminiAspectRatio = mapAspectRatioToGeminiAspectRatio(imageConfig?.aspectRatio);
   // Each model key has its own image_size ceiling, and the ceiling belongs to
   // the snapshot the key points at, not to the family: the stable Gemini keys
-  // reject "4K" that their own "-preview" snapshots accept, and Flash Lite
-  // takes "1K" alone. Read it from the catalog per candidate rather than
-  // guessing from the id, because a wrong guess is a 400, not a smaller image.
+  // reject "4K" that their own "-preview" snapshots accept. Read it from the
+  // catalog per candidate rather than guessing from the id, because a wrong
+  // guess is a 400, not a smaller image.
   const requestedImageSize = sizeTokenToImageSizeTier(imageConfig?.size);
 
   // OpenAI-style size (pixel dimensions) for models that don't support

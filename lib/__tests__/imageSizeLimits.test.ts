@@ -22,7 +22,6 @@ import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 // when OpenRouter republishes a key.
 const GEMINI_3_PRO = "google/gemini-3-pro-image";
 const GEMINI_FLASH = "google/gemini-3.1-flash-image";
-const GEMINI_FLASH_LITE = "google/gemini-3.1-flash-lite-image";
 
 const TOOL_SIZE_OPTIONS = ["512k", "1k", "2k", "4k"];
 
@@ -66,10 +65,6 @@ describe("the catalog records a ceiling for every image_config model", () => {
     expect(getMaxImageSizeForModel(GEMINI_FLASH)).toBe("2K");
   });
 
-  it("caps Gemini 3.1 Flash Lite at 1K", () => {
-    expect(getMaxImageSizeForModel(GEMINI_FLASH_LITE)).toBe("1K");
-  });
-
   it("gives every google/* entry a valid ceiling", () => {
     const usesImageConfig = MODEL_CATALOG.filter(
       (model) => model.id !== LOCAL_DUMMY_MODEL_ID && model.id.startsWith("google/"),
@@ -89,13 +84,9 @@ describe("resolveImageSizeTierForModel", () => {
     expect(resolveImageSizeTierForModel(GEMINI_FLASH, "4K")).toBe("2K");
   });
 
-  it("reduces a 2K request on Flash Lite to 1K", () => {
-    expect(resolveImageSizeTierForModel(GEMINI_FLASH_LITE, "2K")).toBe("1K");
-  });
-
   it("passes a request the model accepts through unchanged", () => {
     expect(resolveImageSizeTierForModel(GEMINI_FLASH, "2K")).toBe("2K");
-    expect(resolveImageSizeTierForModel(GEMINI_FLASH_LITE, "1K")).toBe("1K");
+    expect(resolveImageSizeTierForModel(GEMINI_FLASH, "1K")).toBe("1K");
   });
 
   it("sends an unknown model id exactly what was asked for", () => {
@@ -114,13 +105,6 @@ describe("getSizeTokenOptionsForModel", () => {
     ]);
   });
 
-  it("leaves Flash Lite with the 1K tokens only", () => {
-    expect(getSizeTokenOptionsForModel(TOOL_SIZE_OPTIONS, GEMINI_FLASH_LITE)).toEqual([
-      "512k",
-      "1k",
-    ]);
-  });
-
   it("keeps every option for a model with no recorded ceiling", () => {
     expect(getSizeTokenOptionsForModel(TOOL_SIZE_OPTIONS, "some/unlisted-model")).toEqual(
       TOOL_SIZE_OPTIONS,
@@ -128,7 +112,7 @@ describe("getSizeTokenOptionsForModel", () => {
   });
 
   it("keeps one option when every declared size is above the ceiling", () => {
-    expect(getSizeTokenOptionsForModel(["2k", "4k"], GEMINI_FLASH_LITE)).toEqual(["2k"]);
+    expect(getSizeTokenOptionsForModel(["4k"], GEMINI_FLASH)).toEqual(["4k"]);
   });
 });
 
@@ -226,19 +210,19 @@ describe("resolveImageSizeRequest", () => {
       parameter: "image_config.image_size",
       value: "2K",
     });
-    expect(resolveImageSizeRequest("google/gemini-3.1-flash-lite-image", "2K")).toEqual({
+    expect(resolveImageSizeRequest("google/gemini-3-pro-image", "2K")).toEqual({
       parameter: "image_config.image_size",
-      value: "1K",
+      value: "2K",
     });
   });
 
   it("gives a GPT Image 2.5 key pixels in the shape that was asked for", () => {
     expect(
-      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", { aspectRatio: "1:1" }),
+      resolveImageSizeRequest("openai/gpt-image-2.5-sunburst", "1K", { aspectRatio: "1:1" }),
     ).toEqual({ parameter: "size", value: "1024x1024" });
     // The tier sets the long edge, as it does for the models taking the token.
     expect(
-      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "2K", { aspectRatio: "3:2" }),
+      resolveImageSizeRequest("openai/gpt-image-2.5-sunburst", "2K", { aspectRatio: "3:2" }),
     ).toEqual({ parameter: "size", value: "2048x1360" });
   });
 
@@ -246,7 +230,7 @@ describe("resolveImageSizeRequest", () => {
     // A Bloom book slot knows the pixels it wants. 1000 is not a multiple of
     // 16, so the nearest legal height is 1008.
     expect(
-      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", {
+      resolveImageSizeRequest("openai/gpt-image-2.5-sunburst", "1K", {
         desiredPixels: { width: 1500, height: 1000 },
         aspectRatio: "16:9",
       }),
@@ -257,9 +241,9 @@ describe("resolveImageSizeRequest", () => {
     // An explicit size overrides the source image's shape on an edit, so a
     // square guess here would crop every edit made by a tool with no shape
     // picker. Sending nothing lets the model follow the input.
-    expect(resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K")).toBeNull();
+    expect(resolveImageSizeRequest("openai/gpt-image-2.5-sunburst", "1K")).toBeNull();
     expect(
-      resolveImageSizeRequest("openai/gpt-image-2.5-flare", "1K", { aspectRatio: "auto" }),
+      resolveImageSizeRequest("openai/gpt-image-2.5-sunburst", "1K", { aspectRatio: "auto" }),
     ).toBeNull();
   });
 

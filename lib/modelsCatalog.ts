@@ -7,12 +7,7 @@ import type {
   ModelReasoningLevel,
   ToolDefinition,
 } from "../types";
-import {
-  canUseLocalDummyModelWithoutApiKey,
-  isLocalDummyModelOffered,
-  LOCAL_DUMMY_MODEL_ID,
-  withLocalModels,
-} from "./localModels";
+import { isLocalDummyModelOffered, LOCAL_DUMMY_MODEL_ID, withLocalModels } from "./localModels";
 import {
   clampImageSizeTier,
   DEFAULT_SIZE_TOKEN,
@@ -25,6 +20,7 @@ import {
   sizeTokenToImageSizeTier,
   snapToOpenAiImageSize,
 } from "./imageSizes";
+import type { TokenPricing } from "./imageCostEstimate";
 
 export const MODEL_CATALOG: ModelInfo[] = (() => {
   try {
@@ -299,7 +295,7 @@ export const isModelReasoningLevel = (value: unknown): value is ModelReasoningLe
 
 // Shared default option list for tools that don't declare their own `modelIds`:
 // every real image-capable catalog model (the localhost-only dummy is excluded),
-// with the catalog default (GPT Image 2.5 Flare) recommended.
+// with the catalog default (GPT Image 2.5 Sunburst) recommended.
 const DEFAULT_TOOL_MODEL_IDS = MODEL_CATALOG.filter(
   (model) => model.id !== LOCAL_DUMMY_MODEL_ID,
 ).map((model) => model.id);
@@ -412,26 +408,23 @@ export const resolveToolReasoningLevel = (
 };
 
 /**
- * The per-image USD price a tool would currently run at, for batch cost
- * estimates (N ticked images × this value). Returns null for tools/models with
- * no fixed per-image price: local-only tools (e.g. `remove_background`), the
- * localhost-only dummy model, or a catalog entry with no `pricePerImageUsd`.
+ * The per-token rates of a model priced by tokens (the GPT Image 2.5 keys), or
+ * null for a model with a fixed per-image price or no price at all. See
+ * ModelInfo.tokenPricing and lib/imageCostEstimate.ts.
  */
-export const getEstimatedCostPerImageUsd = (
-  tool: ToolDefinition,
-  modelByTool?: Record<string, string>,
-): number | null => {
-  // Mirrors the "requiresOpenRouter" check in ImageTool.tsx: remove_background
-  // runs free/local rather than through a priced catalog model.
-  if (tool.id === "remove_background" || tool.localOnly) {
+export const getTokenPricingForModel = (
+  modelId: string | null | undefined,
+): TokenPricing | null => {
+  const pricing = getModelInfoById(modelId)?.tokenPricing;
+  if (
+    !pricing ||
+    !Number.isFinite(pricing.textInputUsdPerMillion) ||
+    !Number.isFinite(pricing.imageInputUsdPerMillion) ||
+    !Number.isFinite(pricing.outputUsdPerMillion)
+  ) {
     return null;
   }
-  const modelId = resolveToolModelId(tool, modelByTool);
-  if (canUseLocalDummyModelWithoutApiKey(modelId)) {
-    return null;
-  }
-  const price = getModelInfoById(modelId)?.pricePerImageUsd;
-  return typeof price === "number" && price > 0 ? price : null;
+  return pricing;
 };
 
 export const buildMeasuredStatKey = (

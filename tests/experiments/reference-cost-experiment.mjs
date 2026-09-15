@@ -35,7 +35,7 @@ if (!KEY) {
   process.exit(1);
 }
 
-const MODEL = process.env.EXPERIMENT_MODEL || "openai/gpt-image-2.5-flare";
+const MODEL = process.env.EXPERIMENT_MODEL || "openai/gpt-image-2.5-sunburst";
 
 // The Generate Pallet tool's real prompt, 5 colors, no extra instructions.
 const PROMPT =

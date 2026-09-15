@@ -69,7 +69,12 @@ export interface ModelInfo {
   fallbackId?: string;
   name: string;
   description: string;
-  pricing: string;
+  /**
+   * Human-readable price line for a model with a fixed per-image price, shown
+   * in the model menu. Omitted for a model priced by tokens (`tokenPricing`),
+   * whose line is computed per run instead.
+   */
+  pricing?: string;
   /**
    * Which OpenRouter endpoint serves this model. Most catalog entries are chat
    * models that emit an image as part of a conversation, so the default is
@@ -85,9 +90,23 @@ export interface ModelInfo {
    * Numeric per-image price in USD, parallel to the human-readable `pricing`
    * string. Batch cost estimates (N ticked images × this value) need a number
    * to multiply, so this exists rather than parsing `pricing` at display time.
-   * Omitted for models with no fixed per-image price (e.g. free/local models).
+   * Omitted for models with no fixed per-image price (e.g. free/local models)
+   * and for models priced by tokens, which carry `tokenPricing` instead.
    */
   pricePerImageUsd?: number;
+  /**
+   * Per-token rates for a model whose price depends on the pixels it is shown
+   * and the pixels it draws (the GPT Image 2.5 keys). With this present the UI
+   * computes an estimate for the run it is about to make, from the images
+   * attached and the size it will request (lib/imageCostEstimate.ts), instead
+   * of showing `pricing`. The rates are OpenRouter's published ones, confirmed
+   * to the cent against real calls in MODEL-COSTS.md.
+   */
+  tokenPricing?: {
+    textInputUsdPerMillion: number;
+    imageInputUsdPerMillion: number;
+    outputUsdPerMillion: number;
+  };
   default?: boolean;
   badge?: string;
   /**

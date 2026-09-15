@@ -46,7 +46,6 @@ import {
   toolRunCallsOpenRouter,
 } from "../../lib/toolHelpers";
 import {
-  getEstimatedCostPerImageUsd,
   getModelInfoById,
   getSizeOptionsForModel,
   getSizeTokenOptionsForModel,
@@ -54,23 +53,23 @@ import {
   type SizeOption,
   snapPixelsForModel,
 } from "../../lib/modelsCatalog";
+import { formatPixelSize, type PixelSize } from "../../lib/imageSizes";
+import { planImageRequest } from "../../lib/imageRequestPlan";
 import {
-  DEFAULT_SIZE_TOKEN,
-  formatPixelSize,
-  pickSizeTokenForLongEdge,
-} from "../../lib/imageSizes";
+  estimateToolRunCostUsd,
+  type RunCostTarget,
+  type ToolRunCostEstimate,
+} from "../../lib/toolRunCostEstimate";
 import {
   AUTO_SIZE_TOKEN,
   findSizeParam,
   isAutoSizeValue,
-  resolveSizeTokenValue,
   resolveSlotTarget,
   toolCanFollowSlot,
 } from "../../lib/slotTarget";
 import {
   buildUpscaleOptions,
   findTargetResolutionParam,
-  resolveUpscaleTarget,
   type UpscaleHostTarget,
 } from "../../lib/upscale";
 import { ToolModelPicker } from "./ToolModelPicker";
@@ -137,7 +136,11 @@ interface ToolPanelProps {
   isProcessing: boolean;
   onCancelProcessing: () => void;
   onToolSelect: (toolId: string | null) => void;
-  referenceImageCount: number;
+  /**
+   * One entry per reference image attached, its pixels when known. The count
+   * gates the tools that need a reference; the sizes price the run.
+   */
+  referenceImageResolutions: (PixelSize | null)[];
   hasTargetImage: boolean;
   targetImageResolution?: { width: number; height: number } | null;
   /** Identity of the image in the "Image to Edit" panel. The JPEG default for
@@ -167,6 +170,12 @@ interface ToolPanelProps {
    *  PLAN-batch-processing.md WP3). >0 morphs the action button's label and
    *  cost estimate for any tool card that supports batch. */
   batchTickedCount?: number;
+  /**
+   * The ticked images' own sizes and slot targets, one per tick, so the batch
+   * estimate can price each image's edit at its own size. Defaults to unknown
+   * sizes for every tick when absent.
+   */
+  batchTargets?: RunCostTarget[];
   /** Live batch progress (PLAN-batch-processing.md WP5). While set and
    *  `isProcessing` is true, the active tool card's action-button area shows
    *  a determinate progress bar + Cancel instead of the generic
@@ -452,7 +461,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   isProcessing,
   onCancelProcessing,
   onToolSelect,
-  referenceImageCount,
+  referenceImageResolutions,
   hasTargetImage,
   targetImageResolution,
   targetImageId,
@@ -473,9 +482,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   selectedArtStyleId,
   onArtStyleChange,
   batchTickedCount = 0,
+  batchTargets,
   batchRun = null,
 }) => {
   const muiTheme = useTheme();
+  const referenceImageCount = referenceImageResolutions.length;
   const selectionTimingRef = useRef<string | null>(null);
   const resolvedActiveToolId = activeToolId;
   const [isLocalizeOpen, setIsLocalizeOpen] = useState(() => isLocalizedTool(activeToolId));
@@ -1065,39 +1076,39 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   );
 
   // The output-size token this tool would request right now, so the model
-  // picker can look up the remembered cost/time for that exact size. Mirrors
-  // the resolution in ImageToolsWorkspace.handleApplyTool.
+  // picker can look up the remembered time for that exact size. The same
+  // planner builds the real request in lib/runToolOnImage.ts.
   const resolveToolSizeToken = (tool: ToolDefinition): string => {
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool));
-    const sizeParam = findSizeParam(tool.parameters);
-    const slot = resolveSlotForTool(tool, toolModel);
-    if (sizeParam) {
-      return (
-        resolveSizeTokenValue(sizeParam, paramsByTool[tool.id]?.[sizeParam.name], slot) ||
-        DEFAULT_SIZE_TOKEN
-      );
-    }
-    if (slot) {
-      return slot.sizeToken;
-    }
-    const targetResolutionParam = findTargetResolutionParam(tool.parameters);
-    if (targetResolutionParam) {
-      const resolved = resolveUpscaleTarget(
-        paramsByTool[tool.id]?.[targetResolutionParam.name] ?? targetResolutionParam.defaultValue,
-        targetImageResolution,
-        targetImageSuggestedTarget,
-      );
-      if (resolved) {
-        return pickSizeTokenForLongEdge(Math.max(resolved.width, resolved.height));
-      }
-    }
-    if (tool.autoSizeFromInput && targetImageResolution?.width && targetImageResolution?.height) {
-      return pickSizeTokenForLongEdge(
-        Math.max(targetImageResolution.width, targetImageResolution.height),
-      );
-    }
-    return DEFAULT_SIZE_TOKEN;
+    return planImageRequest({
+      tool,
+      params: paramsByTool[tool.id],
+      toolModel,
+      requiresEditImage: toolRequiresEditImage(tool),
+      targetImageResolution,
+      hostTarget: targetImageSuggestedTarget,
+      autoSizeResolution: tool.autoSizeFromInput ? targetImageResolution : null,
+    }).sizeToken;
   };
+
+  // What one run of this tool on this model would cost for the given image to
+  // edit (null for none), with the references currently attached. Null when
+  // the run costs nothing we can price (see estimateToolRunCostUsd).
+  const estimateForTool = (
+    tool: ToolDefinition,
+    modelId: string,
+    target: RunCostTarget | null,
+  ): ToolRunCostEstimate | null =>
+    estimateToolRunCostUsd({
+      tool,
+      toolModel: getModelInfoById(modelId),
+      params: paramsByTool[tool.id],
+      target,
+      referenceResolutions: referenceImageResolutions.slice(
+        0,
+        getReferenceConstraints(tool.referenceImages).max,
+      ),
+    });
 
   const renderToolCard = (tool: ToolDefinition) => {
     const isSelected = resolvedActiveToolId === tool.id;
@@ -1141,11 +1152,44 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     const batchButtonLabel = tool.actionButtonLabel
       ? `${tool.actionButtonLabel} for ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`
       : `Apply Changes to ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`;
-    const estimatedCostPerImage = isBatchModeForTool
-      ? getEstimatedCostPerImageUsd(tool, modelByTool)
-      : null;
-    const estimatedBatchCost =
-      estimatedCostPerImage != null ? estimatedCostPerImage * batchTickedCount : null;
+    // Batch: each ticked image priced at its own size, then summed. A tick with
+    // no target details yet (the array is shorter than the count) is priced as
+    // an image of unknown size. Single run: the one image to edit, if any.
+    const toolModelId = resolveToolModelId(tool, modelByTool);
+    let estimatedBatchCost: number | null = null;
+    if (isBatchModeForTool) {
+      const targets: (RunCostTarget | null)[] = Array.from(
+        { length: batchTickedCount },
+        (_, index) => batchTargets?.[index] ?? null,
+      );
+      let sum = 0;
+      for (const target of targets) {
+        const estimate = estimateForTool(tool, toolModelId, target);
+        if (!estimate) {
+          sum = NaN;
+          break;
+        }
+        sum += estimate.usd;
+      }
+      estimatedBatchCost = Number.isFinite(sum) ? sum : null;
+    }
+    const singleRunEstimate =
+      !isBatchModeForTool && requiresOpenRouter
+        ? estimateForTool(
+            tool,
+            toolModelId,
+            hasTargetImage
+              ? {
+                  resolution: targetImageResolution ?? null,
+                  suggestedTarget: targetImageSuggestedTarget ?? null,
+                }
+              : null,
+          )
+        : null;
+    // Only a token-priced estimate earns a line under the button: a fixed
+    // per-image price already reads on the model's own menu row and would
+    // just repeat itself here.
+    const singleRunCostUsd = singleRunEstimate?.kind === "token" ? singleRunEstimate.usd : null;
 
     const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
     const cardBorderColor = isSelected ? theme.colors.focus : "transparent";
@@ -1181,6 +1225,30 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
               measuredStatsByKey={measuredStatsByKey}
               sizeToken={resolveToolSizeToken(tool)}
               hostTarget={targetImageSuggestedTarget ?? null}
+              estimateRunCostUsd={(modelId) => {
+                // The menu prices every row for the run the button would make:
+                // each ticked image in batch mode, else the one image to edit.
+                const targets: (RunCostTarget | null)[] = isBatchModeForTool
+                  ? Array.from(
+                      { length: batchTickedCount },
+                      (_, index) => batchTargets?.[index] ?? null,
+                    )
+                  : [
+                      hasTargetImage
+                        ? {
+                            resolution: targetImageResolution ?? null,
+                            suggestedTarget: targetImageSuggestedTarget ?? null,
+                          }
+                        : null,
+                    ];
+                let sum = 0;
+                for (const target of targets) {
+                  const estimate = estimateForTool(tool, modelId, target);
+                  if (estimate?.kind !== "token") return null;
+                  sum += estimate.usd;
+                }
+                return sum;
+              }}
               onModelChange={(modelId) => onToolModelChange(tool.id, modelId)}
               onReasoningChange={(level) => onToolReasoningChange(tool.id, level)}
               onQualityChange={(quality) => onToolQualityChange(tool.id, quality)}
@@ -1425,6 +1493,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         sx={{ textAlign: "center", fontSize: "0.85rem" }}
                       >
                         Estimated cost: {formatCost(estimatedBatchCost)}
+                      </FormHelperText>
+                    )}
+                    {!isBatchModeForTool && !isProcessing && singleRunCostUsd != null && (
+                      <FormHelperText
+                        data-testid="run-cost-estimate"
+                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Estimate {formatCost(singleRunCostUsd)}
                       </FormHelperText>
                     )}
                     {submitDisabledReason && !isProcessing && (

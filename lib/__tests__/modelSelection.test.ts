@@ -12,12 +12,15 @@ import {
   getRecommendedModelIds,
   getSizeOptionsForModel,
   getToolModelOptions,
+  getTokenPricingForModel,
+  MODEL_CATALOG,
   resolveToolModelId,
   resolveToolQuality,
   resolveToolReasoningLevel,
   snapPixelsForModel,
 } from "../modelsCatalog";
 import type { ToolDefinition } from "../../types";
+import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 
 const GEMINI_FLASH = "google/gemini-3.1-flash-image";
 const GEMINI_PRO = "google/gemini-3-pro-image";
@@ -104,6 +107,32 @@ describe("per-tool reasoning resolution", () => {
   });
 });
 
+describe("model pricing declarations", () => {
+  it("prices the GPT Image 2.5 keys by token and every other paid model by image", () => {
+    for (const model of MODEL_CATALOG) {
+      if (model.id === LOCAL_DUMMY_MODEL_ID) continue;
+      const byToken = model.tokenPricing != null;
+      const byImage = typeof model.pricePerImageUsd === "number";
+      // Exactly one of the two: the UI computes an estimate from one and
+      // shows the other as a fixed line.
+      expect(byToken !== byImage, model.id).toBe(true);
+      if (byToken) {
+        expect(model.pricing, model.id).toBeUndefined();
+        expect(getTokenPricingForModel(model.id)).toEqual({
+          textInputUsdPerMillion: 5,
+          imageInputUsdPerMillion: 8,
+          outputUsdPerMillion: 30,
+        });
+      } else {
+        expect(model.pricing, model.id).toBeTruthy();
+        expect(getTokenPricingForModel(model.id)).toBeNull();
+      }
+    }
+    expect(getModelInfoById(SUNBURST)?.tokenPricing).toBeDefined();
+    expect(getModelInfoById(GEMINI_FLASH)?.pricePerImageUsd).toBe(0.07);
+  });
+});
+
 describe("measured stats lookup", () => {
   it("reads back cost + time stored under the tool/model/reasoning/size key", () => {
     const key = buildMeasuredStatKey("generate_image", SUNBURST, "default", "2k");
@@ -130,7 +159,6 @@ describe("OpenRouter endpoint routing", () => {
   it("routes dedicated image models to the images API", () => {
     // chat/completions refuses these outright: "... is an image generation
     // model and cannot be used with the chat/completions endpoint."
-    expect(getOpenRouterEndpointForModel("openai/gpt-image-2.5-flare")).toBe("images");
     expect(getOpenRouterEndpointForModel(SUNBURST)).toBe("images");
   });
 
@@ -223,7 +251,7 @@ describe("reasoning levels per model", () => {
   });
 
   it("offers nothing for a model that takes no reasoning parameter", () => {
-    expect(getReasoningLevelsForModel("openai/gpt-image-2.5-flare")).toEqual([]);
+    expect(getReasoningLevelsForModel("openai/gpt-image-2.5-sunburst")).toEqual([]);
     expect(getReasoningLevelsForModel(SUNBURST)).toEqual([]);
   });
 

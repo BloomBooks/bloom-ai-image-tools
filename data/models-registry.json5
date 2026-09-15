@@ -10,18 +10,18 @@
 // successor that isn't live yet. With `fallbackId`, the day OpenRouter retires
 // the primary the app fails over on its own, no code change or redeploy needed.
 [
-  // GPT Image 2.5, OpenAI's September 2026 image pair. Same token rates as
-  // each other ($8/M image-input, $30/M image-output); the two differ in how
-  // long they take and how much detail they hold, not in price per token.
+  // GPT Image 2.5 Sunburst, from OpenAI's September 2026 image pair; its
+  // sibling Flare is quicker but weaker on small details and is not offered.
+  // Rates: $5/M text input, $8/M image input, $30/M image output.
   //
-  // Both are dedicated image models: OpenRouter serves them from the images
-  // API alone, and chat/completions refuses them outright ("... is an image
-  // generation model and cannot be used with the chat/completions endpoint").
-  // Hence `openRouterEndpoint: "images"`, which routes them to a different
-  // request shape entirely — see editImageViaImagesApi.
+  // A dedicated image model: OpenRouter serves it from the images API alone,
+  // and chat/completions refuses it outright ("... is an image generation
+  // model and cannot be used with the chat/completions endpoint"). Hence
+  // `openRouterEndpoint: "images"`, which routes it to a different request
+  // shape entirely — see editImageViaImagesApi.
   //
-  // Neither takes a reasoning parameter, so neither declares `reasoningLevels`
-  // and the picker offers no reasoning control for them.
+  // It takes no reasoning parameter, so it declares no `reasoningLevels` and
+  // the picker offers no reasoning control for it.
   //
   // Output size is `size`, in pixels ("1536x1024"), per OpenAI's image
   // prompting guide — not the tier token the Gemini keys take, so `maxImageSize`
@@ -34,18 +34,21 @@
   // `size` and a concrete `aspect_ratio` in the same request are a 400, so a
   // request carrying a size sends aspect_ratio "auto".
   {
-    id: "openai/gpt-image-2.5-flare",
-    name: "GPT Image 2.5 Flare",
-    description: "About twice as quick as Sunburst, and costs the same. Small details are not as good.",
-    // Measured 2026-09-11, two runs: $0.0064 to generate 1024x1024 with no
-    // reference image (~13s), and $0.0281 to edit one reference image at
-    // 1024x1536 (~19s). Cost tracks output pixels and input references, so it
-    // spans roughly 4x across ordinary uses. `pricePerImageUsd` seeds the batch
-    // estimate, and batch runs are always edits, so it carries the edit figure.
-    // Both are far below GPT-5.4 Image 2's $0.24 at the identical per-token
-    // rate — that model spends far more tokens per image.
-    pricing: "About $0.006 new, $0.03 to edit",
-    pricePerImageUsd: 0.028,
+    id: "openai/gpt-image-2.5-sunburst",
+    name: "GPT Image 2.5 Sunburst",
+    description: "Good with small details. Slower than the Gemini models.",
+    // Priced by tokens, so the price of a run depends on the images sent and
+    // the size asked for: about $0.003 for a small generation, $0.04 for an edit
+    // with three references. The rates are as published and were confirmed to
+    // the cent in MODEL-COSTS.md (2026-09-14); how many tokens an image is worth
+    // is encoded in lib/imageCostEstimate.ts, and the UI computes each run's
+    // estimate from them. Far below GPT-5.4 Image 2's $0.24 at the identical
+    // per-token rate — that model spends far more tokens per image.
+    tokenPricing: {
+      textInputUsdPerMillion: 5,
+      imageInputUsdPerMillion: 8,
+      outputUsdPerMillion: 30,
+    },
     openRouterEndpoint: "images",
     // Takes pixels, snapped to the rules in snapToOpenAiImageSize.
     sizeParameter: "size",
@@ -61,30 +64,6 @@
     // untested, which is why the picker starts at "auto".
     qualityLevels: ["auto", "low", "medium", "high", "xhigh", "max"],
     default: true,
-  },
-  {
-    id: "openai/gpt-image-2.5-sunburst",
-    name: "GPT Image 2.5 Sunburst",
-    badge: "Slower, more detail than Flare",
-    description: "Slower than Flare, and costs the same. Better with small details.",
-    // Measured 2026-09-11: $0.0064 to generate 1024x1024 (~21s) — the same cost
-    // as Flare for the same job, just slower. The two differ in time, not
-    // price. Editing is unmeasured; it carries Flare's measured edit figure,
-    // since generation matched exactly.
-    pricing: "About $0.006 new, $0.03 to edit",
-    pricePerImageUsd: 0.028,
-    openRouterEndpoint: "images",
-    // Takes pixels, snapped to the rules in snapToOpenAiImageSize.
-    sizeParameter: "size",
-    // From GET /api/v1/images/models: the images API normalizes these eight
-    // ratios (plus "auto") for this key.
-    supportedAspectRatios: ["2:3", "3:4", "9:16", "1:1", "4:3", "3:2", "16:9", "21:9"],
-    // From the same listing: input_references max 16, counting the image
-    // being edited.
-    maxInputImages: 16,
-    // Same `quality` values as Flare; see that entry.
-    qualityLevels: ["auto", "low", "medium", "high", "xhigh", "max"],
-    default: false,
   },
 
   {
@@ -170,49 +149,6 @@
     // ~480 reasoning tokens (the same amount), while "none", "minimal" and no
     // parameter at all spent 0. So the real dial has two positions, and that is
     // all the picker offers: "default" is no thinking, "high" is thinking.
-    reasoningLevels: ["default", "high"],
-    initialReasoningLevel: "high",
-    // OpenRouter's GET /api/v1/images/models: input_references max 14. The
-    // count includes the image being edited.
-    maxInputImages: 14,
-    default: false,
-  },
-
-  {
-    // Lighter/cheaper sibling of Gemini 3.1 Flash. Confirmed against
-    // OpenRouter 2026-09-11: image_output is $0.00003/token, and a Gemini
-    // image is 1120 output tokens, so $0.0336 per image.
-    id: "google/gemini-3.1-flash-lite-image",
-    name: "Gemini 3.1 Flash Lite",
-    badge: "Cheaper",
-    description: "Good for changing an image. It leaves alone the parts you did not ask it to change. Cheaper and simpler than Gemini 3.1 Flash.",
-    pricing: "About $0.035 per image",
-    pricePerImageUsd: 0.035,
-    // Measured against OpenRouter 2026-09-01: the
-    // google/gemini-3.1-flash-lite-image-20260630 snapshot takes 1K only. It
-    // rejects 2K with "Image size 2K is not supported for this model".
-    maxImageSize: "1K",
-    sizeParameter: "image_config.image_size",
-    // Mirror Flash's aspect-ratio support (same Gemini 3.1 Flash family).
-    supportedAspectRatios: [
-      "1:8",
-      "1:4",
-      "2:3",
-      "3:4",
-      "4:5",
-      "9:16",
-      "1:1",
-      "5:4",
-      "4:3",
-      "3:2",
-      "16:9",
-      "21:9",
-      "4:1",
-      "8:1",
-    ],
-    // Two thinking levels, as on Gemini 3.1 Flash above: "default" is no
-    // thinking (Google's "minimal"), "high" is thinking. See that entry for the
-    // measurement.
     reasoningLevels: ["default", "high"],
     initialReasoningLevel: "high",
     // OpenRouter's GET /api/v1/images/models: input_references max 14. The

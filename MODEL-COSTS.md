@@ -2,15 +2,19 @@
 
 Measured against OpenRouter on 2026-09-14, model `openai/gpt-image-2.5-flare`, using
 `tests/experiments/reference-cost-experiment.mjs`. Every number below is from a real call's
-own `usage` block, not from a price list. Re-run the script to refresh them.
+own `usage` block, not from a price list. Re-run the script to refresh them. The app now offers
+only Flare's sibling, `openai/gpt-image-2.5-sunburst`, which is published at the same rates and
+matched Flare to the cent on the generations measured 2026-09-11; the script defaults to it.
 
 The motivating question: a palette generation costs $0.003, but attaching reference images
 takes the same run past $0.04. This is where that goes.
 
 ## The rates are as published
 
-- **Input: $8.00 per 1M tokens.** Successive steps in the measurements give 138 tokens →
+- **Image input: $8.00 per 1M tokens.** Successive steps in the measurements give 138 tokens →
   $0.001074, 352 → $0.002816, 624 → $0.004992. All exactly $8/1M.
+- **Text input: $5.00 per 1M tokens.** The 127 text tokens of the palette prompt cost
+  $0.000635 on every run with no reference, which is $5/1M, not $8.
 - **Output: $30.00 per 1M tokens.** 75 image tokens × 30e-6 = $0.00225, to the cent.
 
 Nothing is marked up or rounded oddly. The surprise is entirely in how many tokens an image
@@ -155,3 +159,30 @@ bills the least. Against sending 2048px that is 46% off a one-reference call, 35
 off three.
 
 The image being edited is never capped. It is what the result is made from.
+
+## In the code
+
+The rates live on the two GPT Image 2.5 entries in `data/models-registry.json5` as
+`tokenPricing`. How many tokens an image is worth is `lib/imageCostEstimate.ts`, and
+`lib/__tests__/imageCostEstimate.test.ts` pins every measured point above, so a change to
+either has to explain the measurements it breaks.
+
+Two of the rules there are fitted to the points rather than documented anywhere:
+
+- The floor is encoded as "scaled up to a 1024 long edge, by at most 2x". That gives 490 for
+  512x239 and 768x359, 1034 image tokens for 512x512, and 138 for 256x120.
+- The ceiling is OpenAI's published patch algorithm with a cap of 1536 patches: shrink to the
+  budget keeping the shape, then pull both edges in by the same factor so the tighter one lands
+  on a whole patch, then round each up. It gives 1466 for 2048x958 and 4096x1916, and 1531 for
+  1536x1536 and 2048x2048.
+
+Note that the prompt-token figures in this file (617, 1161, 1593) include the prompt's ~127
+text tokens; the image-only figures the code and its tests use are those minus 127 (490, 1034,
+1466).
+
+`lib/imageRequestPlan.ts` works out what a run will ask for (size token, shape, exact pixels)
+for both the run itself and the tool card, and `lib/toolRunCostEstimate.ts` turns that plus
+the attached images into the estimate the model menu and the action button show. Every run on
+a token-priced model logs `[cost-estimate] predicted vs actual` beside the response's own
+`usage` block; input tokens should match exactly, and the total should be within the output
+noise described above.

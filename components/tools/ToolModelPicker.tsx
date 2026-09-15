@@ -49,6 +49,13 @@ interface ToolModelPickerProps {
    * foot of the menu so a user can see what every tool here is aiming at.
    */
   hostTarget?: { width: number; height: number; memo?: string | null } | null;
+  /**
+   * What running this tool on a given model would cost right now, in dollars,
+   * for a model priced by tokens; null for every other model. Computed per
+   * row, since the estimate depends on the model's own pricing and the size it
+   * would be sent (lib/toolRunCostEstimate.ts).
+   */
+  estimateRunCostUsd?: (modelId: string) => number | null;
   onModelChange: (modelId: string) => void;
   onReasoningChange: (level: ModelReasoningLevel) => void;
   onQualityChange: (quality: ModelImageQuality) => void;
@@ -89,6 +96,27 @@ const formatStats = (stats: MeasuredStats): string => {
   return parts.join(", ");
 };
 
+/**
+ * The price line for one model row. A model priced by tokens gets the
+ * estimate for this very run ("Estimate $0.012"), which knows about the images
+ * attached and the size requested; the measured stat does not (its key is
+ * tool, model, reasoning and size tier), so of it only the duration is kept.
+ * Every other model shows what it did before: the last measured figures, or
+ * its fixed price line.
+ */
+const describePrice = (
+  estimateUsd: number | null,
+  stats: MeasuredStats | null,
+  pricing: string | undefined,
+): string => {
+  if (estimateUsd != null) {
+    const duration = stats && stats.durationMs > 0 ? `, ~${formatDuration(stats.durationMs)}` : "";
+    return `Estimate ${formatCost(estimateUsd)}${duration}`;
+  }
+  if (stats != null) return `Last measured: ${formatStats(stats)}`;
+  return pricing ?? "";
+};
+
 export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   tool,
   modelByTool,
@@ -97,6 +125,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   measuredStatsByKey,
   sizeToken,
   hostTarget = null,
+  estimateRunCostUsd,
   onModelChange,
   onReasoningChange,
   onQualityChange,
@@ -229,7 +258,11 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                       )}
                     </Stack>
                   }
-                  secondary={stats != null ? `Last measured: ${formatStats(stats)}` : model.pricing}
+                  secondary={describePrice(
+                    estimateRunCostUsd?.(model.id) ?? null,
+                    stats,
+                    model.pricing,
+                  )}
                 />
               </Tooltip>
             </MenuItem>

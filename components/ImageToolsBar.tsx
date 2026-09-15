@@ -37,6 +37,7 @@ import { theme } from "../themes";
 import { emitDragDebugLog, isDragDebugEnabled } from "./dragConstants";
 import { Icon, Icons } from "./Icons";
 import type { ThumbnailStripConfig } from "../lib/thumbnailStrips";
+import type { RunCostTarget } from "../lib/toolRunCostEstimate";
 
 const DRAG_PREVIEW_SIZE = 112;
 
@@ -532,6 +533,11 @@ interface ImageToolsPanelBar {
   launchedBookImageId?: string | null;
   /** Count of ticked book images; morphs the tool's action button and cost estimate. */
   batchTickedCount?: number;
+  /**
+   * The ticked book images' sizes and slot targets, one per tick, so the tool
+   * card can price each image's own edit (lib/toolRunCostEstimate.ts).
+   */
+  batchTargets?: RunCostTarget[];
   /** Set while one or more book images are ticked; shown in place of the
    *  "Image to Edit" panel's image. */
   batchSelectionMessage?: string | null;
@@ -615,6 +621,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   batchSelection,
   launchedBookImageId = null,
   batchTickedCount = 0,
+  batchTargets,
   batchSelectionMessage = null,
   isBatchRunning = false,
   batchRun = null,
@@ -623,6 +630,12 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
 }) => {
   const majorElementGap = { xs: 1.5, md: 3.75 } as const;
   const hasTargetImage = !!targetImage;
+  // The tool card prices a run from the pixels each reference will be sent at;
+  // a reference whose size is not known yet is passed as null.
+  const referenceImageResolutions = React.useMemo(
+    () => referenceImages.map((image) => image.resolution ?? null),
+    [referenceImages],
+  );
   const debugLog = React.useCallback((...args: any[]) => {
     try {
       if (isDragDebugEnabled()) {
@@ -842,7 +855,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             isProcessing={appState.isProcessing}
             onCancelProcessing={onCancelProcessing}
             onToolSelect={onToolSelect}
-            referenceImageCount={referenceImages.length}
+            referenceImageResolutions={referenceImageResolutions}
             hasTargetImage={hasTargetImage}
             targetImageResolution={targetImage?.resolution ?? null}
             targetImageId={targetImage?.id ?? null}
@@ -863,6 +876,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             selectedArtStyleId={selectedArtStyleId}
             onArtStyleChange={onArtStyleChange}
             batchTickedCount={batchTickedCount}
+            batchTargets={batchTargets}
             batchRun={batchRun}
           />
         </Box>

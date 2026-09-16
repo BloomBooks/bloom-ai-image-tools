@@ -14,6 +14,8 @@ interface AspectRatioPickerProps {
   label?: string;
   allowAuto?: boolean;
   autoResolvedValue?: string;
+  /** What Auto follows, when it is not the input image (e.g. "The book slot"). */
+  autoDescription?: string;
   options?: readonly string[];
 }
 
@@ -61,7 +63,8 @@ const AspectRatioSwatch: React.FC<{ value: string; emphasized?: boolean }> = ({
 const AspectRatioValue: React.FC<{
   value: string;
   autoResolvedValue?: string;
-}> = ({ value, autoResolvedValue }) => {
+  autoDescription?: string;
+}> = ({ value, autoResolvedValue, autoDescription }) => {
   const isAuto = value === AUTO_ASPECT_RATIO;
   const previewValue = isAuto ? autoResolvedValue || "1:1" : value;
 
@@ -74,7 +77,9 @@ const AspectRatioValue: React.FC<{
         </Typography>
         {isAuto && (
           <Typography variant="caption" sx={{ color: "text.secondary", lineHeight: 1.2 }}>
-            {`Closest to input image${autoResolvedValue ? ` (${autoResolvedValue})` : ""}`}
+            {`${autoDescription ?? "Closest to input image"}${
+              autoResolvedValue ? ` (${autoResolvedValue})` : ""
+            }`}
           </Typography>
         )}
       </Stack>
@@ -89,6 +94,7 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
   label,
   allowAuto = false,
   autoResolvedValue,
+  autoDescription,
   options,
 }) => {
   const supportedOptions = getSupportedAspectRatioValues(options);
@@ -119,7 +125,11 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
         SelectProps={{
           MenuProps: { disablePortal: false },
           renderValue: (selected) => (
-            <AspectRatioValue value={String(selected)} autoResolvedValue={autoResolvedValue} />
+            <AspectRatioValue
+              value={String(selected)}
+              autoResolvedValue={autoResolvedValue}
+              autoDescription={autoDescription}
+            />
           ),
         }}
       >
@@ -129,7 +139,11 @@ export const AspectRatioPicker: React.FC<AspectRatioPickerProps> = ({
             value={option}
             data-testid={`aspect-ratio-option-${option.replace(":", "-")}`}
           >
-            <AspectRatioValue value={option} autoResolvedValue={autoResolvedValue} />
+            <AspectRatioValue
+              value={option}
+              autoResolvedValue={autoResolvedValue}
+              autoDescription={autoDescription}
+            />
           </MenuItem>
         ))}
       </TextField>

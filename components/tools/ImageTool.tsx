@@ -33,12 +33,7 @@ import { Icon, Icons } from "../Icons";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
 import { AspectRatioPicker } from "./AspectRatioPicker";
-import {
-  AUTO_ASPECT_RATIO,
-  DEFAULT_CREATE_ASPECT_RATIO,
-  getDefaultAspectRatioValue,
-  resolveAspectRatioValue,
-} from "../../lib/aspectRatios";
+import { AUTO_ASPECT_RATIO, resolveAspectRatioValue } from "../../lib/aspectRatios";
 import {
   getReferenceConstraints,
   getRequestedAspectRatioValue,
@@ -803,40 +798,40 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "aspect-ratio") {
-        const isEditTool = tool.editImage !== false;
         const supportedAspectRatios = toolModel?.supportedAspectRatios;
-        const fallbackValue = isEditTool
-          ? AUTO_ASPECT_RATIO
-          : getDefaultAspectRatioValue(supportedAspectRatios) || DEFAULT_CREATE_ASPECT_RATIO;
-        const rawAspectRatioValue = value || param.defaultValue || fallbackValue;
+        const rawAspectRatioValue = value || param.defaultValue || AUTO_ASPECT_RATIO;
         const aspectRatioValue =
-          isEditTool && rawAspectRatioValue === AUTO_ASPECT_RATIO
+          rawAspectRatioValue === AUTO_ASPECT_RATIO
             ? AUTO_ASPECT_RATIO
             : resolveAspectRatioValue(rawAspectRatioValue, undefined, supportedAspectRatios);
+        const sizeParam = findSizeParam(tool.parameters);
+        const slot = sizeParam ? resolveSlotForTool(tool, toolModel) : null;
         // While a tool with a size picker is on Auto inside Bloom, the whole
         // request follows the book slot, shape included, so the shape control
-        // shows the slot's shape and takes no input (see lib/slotTarget.ts).
-        const slot = findSizeParam(tool.parameters) ? resolveSlotForTool(tool, toolModel) : null;
+        // shows the slot's shape and takes no input. Picking a size releases
+        // the control but not the slot: Auto shape still means the slot's
+        // shape, now at the chosen size (see lib/slotTarget.ts).
+        const sizeIsAuto = !sizeParam || isAutoSizeValue(paramsByTool[tool.id]?.[sizeParam.name]);
+        const followsSlot = !!slot && sizeIsAuto;
         return (
           <Stack key={param.name} spacing={0.5}>
             <AspectRatioPicker
-              value={slot ? slot.aspectRatio : aspectRatioValue}
+              value={followsSlot ? slot!.aspectRatio : aspectRatioValue}
               onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
-              disabled={isProcessing || !!slot}
+              disabled={isProcessing || followsSlot}
               label={param.label}
-              allowAuto={isEditTool}
-              autoResolvedValue={resolveAspectRatioValue(
-                AUTO_ASPECT_RATIO,
-                targetImageResolution,
-                supportedAspectRatios,
-              )}
+              allowAuto
+              autoResolvedValue={
+                slot?.aspectRatio ??
+                resolveAspectRatioValue(
+                  AUTO_ASPECT_RATIO,
+                  targetImageResolution,
+                  supportedAspectRatios,
+                )
+              }
+              autoDescription={slot ? "The book slot" : undefined}
               options={supportedAspectRatios}
             />
-            {slot && (
-              <FormHelperText data-testid="aspect-ratio-follows-slot" sx={{ m: 0 }}>
-                Follows the book slot while Size is Auto.
-              </FormHelperText>
-            )}
           </Stack>
         );
       }

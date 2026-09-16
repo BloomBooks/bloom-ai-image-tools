@@ -1,6 +1,12 @@
 import type { ToolDefinition, ToolParameter, ToolParams } from "../types";
 import { AUTO_ASPECT_RATIO, resolveAspectRatioValue } from "./aspectRatios";
-import { parseAspectRatio, pickSizeTokenForLongEdge, type PixelSize } from "./imageSizes";
+import {
+  parseAspectRatio,
+  pickSizeTokenForLongEdge,
+  pixelsForTier,
+  sizeTokenToImageSizeTier,
+  type PixelSize,
+} from "./imageSizes";
 import { findTargetResolutionParam } from "./upscale";
 
 /**
@@ -21,7 +27,7 @@ import { findTargetResolutionParam } from "./upscale";
 export const AUTO_SIZE_TOKEN = "auto";
 
 export interface SlotTarget {
-  /** The tier token to request, the smallest whose long edge covers the slot. */
+  /** The tier token to request: the user's, or the smallest that covers the slot. */
   sizeToken: string;
   /** The shape to request: the slot's own unless the user picked one. */
   aspectRatio: string;
@@ -79,12 +85,16 @@ const fitShapeToLongEdge = (shape: PixelSize, longEdge: number): PixelSize => {
 
 /**
  * What a run of `tool` asks for when it follows the book slot, or null when it
- * does not: no host target, a tool that makes something other than the slot's
- * picture, or a size the user picked by hand.
+ * does not: no host target, or a tool that makes something other than the
+ * slot's picture.
  *
- * With a size picker, Auto size means the whole request follows the slot,
- * shape included (the picker shows the shape control disabled). Without one,
- * the slot supplies the size, and the shape too unless the user set one.
+ * The size picker says how many pixels, never what shape. A picture drawn for
+ * the slot has to fit the slot whatever size it is asked for, so a hand-picked
+ * tier comes back in the slot's shape at that tier's long edge: 512k in a
+ * 1472x1104 slot is 1024x768, which is what the size menu says it will be. The
+ * shape changes only when the user picks one, which the shape control lets
+ * them do once they have picked a tier; while the size is Auto the whole
+ * request follows the slot and that control is disabled.
  */
 export const resolveSlotTarget = (args: {
   tool: ToolDefinition;
@@ -99,26 +109,40 @@ export const resolveSlotTarget = (args: {
   if (!slot || !toolCanFollowSlot(tool)) return null;
 
   const sizeParam = findSizeParam(tool.parameters);
-  if (sizeParam && !isAutoSizeValue(params?.[sizeParam.name])) return null;
+  const sizeValue = sizeParam ? params?.[sizeParam.name]?.trim() : undefined;
+  const pickedTier = sizeValue && !isAutoSizeValue(sizeValue) ? sizeValue : null;
 
   const slotShape = resolveAspectRatioValue(AUTO_ASPECT_RATIO, slot, supportedAspectRatios);
   const longEdge = Math.max(slot.width, slot.height);
-  const sizeToken = pickSizeTokenForLongEdge(longEdge);
+  const sizeToken = pickedTier ?? pickSizeTokenForLongEdge(longEdge);
 
-  // A tool with a size picker on Auto follows the slot's shape as well; the
-  // picker shows that. A tool without one keeps a shape the user set.
+  // A tool with a size picker follows the slot's shape while its size is Auto;
+  // the picker disables the shape control and shows that. A tool without one,
+  // and a tool whose user has picked a tier, keeps a shape the user set.
+  const shapeIsTheUsers = !sizeParam || !!pickedTier;
   const chosenShape =
-    !sizeParam && requestedAspectRatio !== AUTO_ASPECT_RATIO
+    shapeIsTheUsers && requestedAspectRatio !== AUTO_ASPECT_RATIO
       ? parseAspectRatio(requestedAspectRatio)
       : null;
+  const aspectRatio = chosenShape ? requestedAspectRatio : slotShape;
+
+  // The tier sets the long edge; without one the slot's own pixels are exact,
+  // so pass them through rather than reconstructing them from the ratio.
+  if (pickedTier) {
+    return {
+      sizeToken,
+      aspectRatio,
+      targetDimensions: pixelsForTier(sizeTokenToImageSizeTier(pickedTier), aspectRatio),
+    };
+  }
   if (chosenShape) {
     return {
       sizeToken,
-      aspectRatio: requestedAspectRatio,
+      aspectRatio,
       targetDimensions: fitShapeToLongEdge(chosenShape, longEdge),
     };
   }
-  return { sizeToken, aspectRatio: slotShape, targetDimensions: slot };
+  return { sizeToken, aspectRatio, targetDimensions: slot };
 };
 
 /**

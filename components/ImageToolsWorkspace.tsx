@@ -2508,10 +2508,15 @@ export function ImageToolsWorkspace({
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
     const requiresEditImage = tool.editImage !== false;
-    const targetImage =
-      requiresEditImage && state.targetImageId
-        ? state.history.find((h) => h.id === state.targetImageId) || null
-        : null;
+    // The selected book image, which is where the slot Bloom described comes
+    // from. A tool that makes a picture from nothing has nothing to edit, so it
+    // gets no targetImage — but it is still drawing for that slot, and the tool
+    // panel is already showing the slot's size and shape, so the slot goes to
+    // the run either way (see lib/slotTarget.ts).
+    const slotImage = state.targetImageId
+      ? state.history.find((h) => h.id === state.targetImageId) || null
+      : null;
+    const targetImage = requiresEditImage ? slotImage : null;
     if (requiresEditImage && !targetImage) {
       setState((prev) => ({
         ...prev,
@@ -2609,8 +2614,8 @@ export function ImageToolsWorkspace({
             toolModel,
             requiresEditImage,
             targetImage,
-            targetSlotPageLabel: resolveTargetSlotPageLabel(targetImage),
-            hostSuggestedTarget: targetImage?.suggestedTarget ?? null,
+            targetSlotPageLabel: resolveTargetSlotPageLabel(slotImage),
+            hostSuggestedTarget: slotImage?.suggestedTarget ?? null,
             params,
             constrainedReferences,
             reasoningByTool,

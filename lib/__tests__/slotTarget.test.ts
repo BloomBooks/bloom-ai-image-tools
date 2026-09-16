@@ -19,6 +19,8 @@ const getTool = (id: string): ToolDefinition => {
 
 // A landscape book slot, as Bloom describes one.
 const SLOT = { width: 1417, height: 945 };
+// The 4:3 slot from the square-image bug report.
+const BLOOM_SLOT = { width: 1472, height: 1104 };
 const GEMINI_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
 
 const resolveFor = (tool: ToolDefinition, params: Record<string, string>, host = SLOT) =>
@@ -76,8 +78,28 @@ describe("resolveSlotTarget", () => {
     expect(resolveFor(tool, {})).not.toBeNull();
   });
 
-  it("does not follow the slot when the user picked a size", () => {
-    expect(resolveFor(getTool("generate_image"), { size: "4k" })).toBeNull();
+  it("keeps the slot's shape when the user picked a size", () => {
+    // The reported bug: picking a tier handed the shape back to the tool's own
+    // default, so a 4:3 slot got a prompt asking for a 1:1 square.
+    const target = resolveFor(getTool("generate_image"), { size: "512k" }, BLOOM_SLOT);
+    expect(target?.aspectRatio).toBe("4:3");
+    // The smallest tier's long edge is 1024, which is what the size menu
+    // offers as "512k 1024x768".
+    expect(target?.targetDimensions).toEqual({ width: 1024, height: 768 });
+    expect(target?.sizeToken).toBe("512k");
+  });
+
+  it("asks for the picked tier's pixels rather than the slot's", () => {
+    const target = resolveFor(getTool("generate_image"), { size: "4k" });
+    expect(target?.sizeToken).toBe("4k");
+    expect(target?.aspectRatio).toBe("3:2");
+    expect(target?.targetDimensions).toEqual({ width: 3840, height: 2560 });
+  });
+
+  it("lets the user's own shape win once they have picked a tier", () => {
+    const target = resolveFor(getTool("generate_image"), { size: "1k", aspectRatio: "9:16" });
+    expect(target?.aspectRatio).toBe("9:16");
+    expect(target?.targetDimensions).toEqual({ width: 576, height: 1024 });
   });
 
   it("does nothing without a host target", () => {

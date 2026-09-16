@@ -58,6 +58,20 @@ export const getRequestedAspectRatioValue = (
     return configuredValue;
   }
 
+  // A tool with a shape picker carries its own default in `parameters` — that
+  // is where Create an Image's Auto (the book slot's shape) comes from — and
+  // params normally holds it already. This matters for a caller that passes
+  // params without one: reading the tool's default keeps its shape from
+  // silently becoming a square.
+  const declaredDefault = tool?.parameters
+    ?.find((parameter) => parameter.name === "aspectRatio")
+    ?.defaultValue?.trim();
+  if (declaredDefault) {
+    return declaredDefault;
+  }
+
+  // Nothing to take a shape from: a tool that makes a picture from scratch
+  // makes a square, an edit follows its source.
   return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO;
 };
 

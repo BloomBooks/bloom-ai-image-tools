@@ -140,7 +140,9 @@ export const TOOLS: ToolDefinition[] = (
           optional: true,
         },
         {
-          ...createAspectRatioParameter(DEFAULT_CREATE_ASPECT_RATIO),
+          // Auto is the book slot's shape when Bloom supplies one, and a
+          // square otherwise (see lib/slotTarget.ts and resolveAspectRatioValue).
+          ...createAspectRatioParameter(AUTO_ASPECT_RATIO),
         },
         {
           name: "size",

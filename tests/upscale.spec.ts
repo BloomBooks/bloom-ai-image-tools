@@ -82,6 +82,8 @@ test.describe("upscale tool", () => {
     // Enough detail to fill the launched slot, in the picture's own shape.
     await expect(targetResolutionSelect(page)).toHaveText(`Auto (${LAUNCH_AUTO_TARGET})`);
     await expect(page.getByTestId("upscale-target-memo")).toContainText("300 dpi");
+    // The memo is the host's own words, so it still quotes the slot itself.
+    await expect(page.getByTestId("upscale-target-memo")).toContainText(LAUNCH_SLOT_TARGET);
     // The memo is the host's, so it quotes the slot; the note says what Auto
     // asks for instead, rather than leaving two numbers to disagree on screen.
     await expect(page.getByTestId("upscale-shape-note")).toContainText(LAUNCH_AUTO_TARGET);

@@ -12,6 +12,7 @@ import {
   resolveImageSizeTierForModel,
 } from "../lib/modelsCatalog";
 import { sizeTokenToImageSizeTier } from "../lib/imageSizes";
+import { getImageDimensions } from "../lib/imageUtils";
 import { layoutDummyText, pickDummyTextColor } from "../lib/dummyImageText";
 
 /**
@@ -1004,6 +1005,21 @@ const editImageViaImagesApi = async (
         cost: (data?.usage?.cost as number) ?? null,
         usage: data?.usage ?? null,
       });
+
+      // What came back, in pixels, beside what was asked for. A result of a
+      // size or shape nobody requested is otherwise invisible in the log, and
+      // answering "did we ask wrongly or did the model ignore us?" then needs
+      // the whole run done again (BL-16742). Measured off to one side so a
+      // slow decode never holds up the result.
+      if (collectedImages.length > 0) {
+        void getImageDimensions(collectedImages[0]).then((returned) => {
+          console.log("[openRouter] images-API result size", {
+            requested: pixelSize ?? `(none; aspect ratio ${aspectRatio})`,
+            returned: `${returned.width}x${returned.height}`,
+            matchesRequest: pixelSize ? pixelSize === `${returned.width}x${returned.height}` : null,
+          });
+        });
+      }
 
       if (collectedImages.length > 0) {
         return {

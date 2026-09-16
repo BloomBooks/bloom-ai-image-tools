@@ -16,6 +16,12 @@ const json5RawPlugin = () => ({
   },
 });
 
+// The header shows this. The release workflow bumps package.json before it
+// builds dist-app, so a released build carries the version of its own tag.
+const appVersion: string = JSON.parse(
+  fs.readFileSync(path.resolve(process.cwd(), "package.json"), "utf8"),
+).version;
+
 const e2eApiKey = process.env.E2E_OPENROUTER_API_KEY || "";
 const configuredBasePath = process.env.VITE_BASE_PATH || "/";
 const basePath = configuredBasePath.endsWith("/") ? configuredBasePath : `${configuredBasePath}/`;
@@ -166,6 +172,7 @@ export default defineConfig({
   plugins: [json5RawPlugin(), react(), artStyleThumbnailPlugin()],
   define: {
     "process.env.E2E_OPENROUTER_API_KEY": JSON.stringify(e2eApiKey),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   resolve: {
     alias: {

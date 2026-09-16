@@ -1,5 +1,8 @@
 /// <reference types="vite-plus/client" />
 
+/** The package version, baked in at build time (see vite.config.ts). */
+declare const __APP_VERSION__: string;
+
 declare module "*.json5" {
   const content: string;
   export default content;

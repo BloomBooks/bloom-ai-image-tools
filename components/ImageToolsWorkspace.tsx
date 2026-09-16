@@ -4389,9 +4389,18 @@ export function ImageToolsWorkspace({
             sx={{ flex: 1, minWidth: 0, flexWrap: "wrap", rowGap: 0.75 }}
           >
             <Box component="img" src={bloomLogo} alt="Bloom" sx={{ width: 28, height: 28 }} />
-            <Typography variant="h6" component="h1" fontWeight={700}>
-              Bloom AI Image Tools
-            </Typography>
+            <Stack spacing={0}>
+              <Typography variant="h6" component="h1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                Bloom AI Image Tools
+              </Typography>
+              <Typography
+                variant="caption"
+                data-testid="app-version"
+                sx={{ color: "text.secondary", lineHeight: 1.2 }}
+              >
+                {`v${__APP_VERSION__}`}
+              </Typography>
+            </Stack>
             {showReconnectHistoryFolderButton && (
               <Button
                 type="button"

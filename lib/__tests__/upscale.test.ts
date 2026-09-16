@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildUpscaleOptions,
+  describeAutoShapeChange,
   fitInBox,
   HD_BOX_LONG_EDGE,
   HD_BOX_SHORT_EDGE,
+  resolveAutoTarget,
   resolveUpscaleTarget,
 } from "../upscale";
 import { pickSizeTokenForLongEdge } from "../imageSizes";
@@ -155,5 +157,73 @@ describe("size tier the request maps to", () => {
     )!;
 
     expect(pickSizeTokenForLongEdge(Math.max(target.width, target.height))).toBe("1k");
+  });
+});
+
+// BL-16742: a square picture in a 4:3 slot came back stretched into 4:3,
+// because Auto asked the model for the slot's own dimensions. Auto now keeps
+// the picture's shape and scales it until it covers the slot.
+describe("resolveAutoTarget", () => {
+  const slot = { width: 1468, height: 1088 };
+
+  it("keeps a square source square, big enough to cover the slot", () => {
+    expect(resolveAutoTarget({ width: 1024, height: 1024 }, slot)).toEqual({
+      width: 1468,
+      height: 1468,
+    });
+  });
+
+  it("returns the slot itself when the shapes already agree", () => {
+    expect(resolveAutoTarget({ width: 734, height: 544 }, slot)).toEqual(slot);
+  });
+
+  it("returns the slot itself for a shape that differs only by measurement noise", () => {
+    // 3:2 source, slot measured at 1.4995:1 — a picture already the shape of
+    // its slot must not be nudged off the host's own number.
+    expect(resolveAutoTarget({ width: 900, height: 600 }, { width: 1417, height: 945 })).toEqual({
+      width: 1417,
+      height: 945,
+    });
+  });
+
+  it("covers the slot from a portrait source", () => {
+    expect(resolveAutoTarget({ width: 1000, height: 1500 }, slot)).toEqual({
+      width: 1468,
+      height: 2202,
+    });
+  });
+
+  it("falls back to the slot when the source dimensions are unknown", () => {
+    expect(resolveAutoTarget(null, slot)).toEqual(slot);
+  });
+
+  it("is null without a host target", () => {
+    expect(resolveAutoTarget({ width: 1024, height: 1024 }, null)).toBeNull();
+  });
+
+  it("drives the Auto option and the resolved request alike", () => {
+    const source = { width: 1024, height: 1024 };
+    const options = buildUpscaleOptions(source, { ...slot, memo: "for a 124mm x 92mm container" });
+
+    expect(options[0].label).toBe("Auto (1468 x 1468)");
+    expect(resolveUpscaleTarget("auto", source, slot)).toEqual({ width: 1468, height: 1468 });
+  });
+});
+
+describe("describeAutoShapeChange", () => {
+  const slot = { width: 1468, height: 1088 };
+
+  it("says nothing when Auto matches the size the host's memo names", () => {
+    expect(describeAutoShapeChange(slot, slot)).toBeNull();
+  });
+
+  it("names the size Auto asks for instead when the shapes differ", () => {
+    const note = describeAutoShapeChange({ width: 1472, height: 1472 }, slot);
+    expect(note).toContain("1472 x 1472");
+  });
+
+  it("says nothing without a host target or Auto dimensions", () => {
+    expect(describeAutoShapeChange({ width: 1472, height: 1472 }, null)).toBeNull();
+    expect(describeAutoShapeChange(null, slot)).toBeNull();
   });
 });

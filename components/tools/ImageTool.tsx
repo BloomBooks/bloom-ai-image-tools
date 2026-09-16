@@ -69,6 +69,7 @@ import {
 } from "../../lib/slotTarget";
 import {
   buildUpscaleOptions,
+  describeAutoShapeChange,
   findTargetResolutionParam,
   type UpscaleHostTarget,
 } from "../../lib/upscale";
@@ -955,6 +956,13 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           ? value
           : options[0]?.token || "hd";
         const memo = targetImageSuggestedTarget?.memo?.trim();
+        // The memo is the host's own words about the slot, so it quotes the
+        // slot's size. Auto asks for the same detail in the image's shape,
+        // which is a different pair of numbers whenever the two shapes differ.
+        const shapeNote = describeAutoShapeChange(
+          options.find((option) => option.token === "auto")?.dimensions,
+          targetImageSuggestedTarget,
+        );
         return (
           <Stack key={param.name} spacing={0.75}>
             <Typography
@@ -994,6 +1002,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             {memo && (
               <FormHelperText data-testid="upscale-target-memo" sx={{ m: 0 }}>
                 {memo}
+              </FormHelperText>
+            )}
+            {shapeNote && (
+              <FormHelperText data-testid="upscale-shape-note" sx={{ m: 0 }}>
+                {shapeNote}
               </FormHelperText>
             )}
           </Stack>

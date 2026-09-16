@@ -107,8 +107,95 @@ const normalizeHostTarget = (
 ): ImageDimensions | null =>
   isUsableDimensions(hostTarget) ? { width: hostTarget.width, height: hostTarget.height } : null;
 
+/**
+ * Smallest size with the source's aspect ratio that covers the given box on
+ * both edges. Null when the source dimensions aren't known.
+ */
+const coverBox = (
+  source: ImageDimensions | null | undefined,
+  box: ImageDimensions,
+): ImageDimensions | null => {
+  if (!isUsableDimensions(source)) {
+    return null;
+  }
+
+  const scale = Math.max(box.width / source.width, box.height / source.height);
+  return {
+    width: Math.max(1, Math.round(source.width * scale)),
+    height: Math.max(1, Math.round(source.height * scale)),
+  };
+};
+
+/**
+ * How far the source's shape may sit from the slot's before Auto stops asking
+ * for the slot's own dimensions. Two percent is below what anyone can see in a
+ * picture, and below what the 16-pixel grid GPT Image 2.5 rounds to moves the
+ * shape by anyway, so reshaping for less than this would trade the host's
+ * exact number for nothing.
+ */
+const SHAPE_MATCH_TOLERANCE = 0.02;
+
+/**
+ * What Auto asks for: enough pixels to fill the book slot, in the SOURCE's
+ * shape rather than the slot's.
+ *
+ * Upscaling must not reframe the picture, and asking a model for the slot's
+ * own dimensions does exactly that whenever the two shapes differ. A 1024 x
+ * 1024 source in a 1468 x 1088 slot came back stretched into 4:3 — flatter
+ * mountains, a wider bird (BL-16742) — because the model was handed a canvas
+ * of a different shape and had to fill it somehow. So Auto keeps the source's
+ * shape and scales it until it covers the slot on both edges, which is what
+ * the HD/2K/4K options have always done with their own boxes.
+ *
+ * Covering rather than fitting inside is deliberate: a slot shows its image
+ * either whole, where covering costs a few pixels nobody sees, or cropped to
+ * fill, as a canvas background is, where fitting inside would leave the
+ * picture short of 300 DPI along the edge that gets cropped. The pixel budget
+ * in snapToOpenAiImageSize caps whatever a wild mismatch of shapes produces.
+ *
+ * With no source dimensions there is no shape to keep, so the slot's own size
+ * stands.
+ */
+export const resolveAutoTarget = (
+  source: ImageDimensions | null | undefined,
+  hostTarget: UpscaleHostTarget | null | undefined,
+): ImageDimensions | null => {
+  const slot = normalizeHostTarget(hostTarget);
+  if (!slot) return null;
+  if (!isUsableDimensions(source)) return slot;
+
+  // A slot is measured from a laid-out page, so its shape is never exactly a
+  // picture's even when the two are meant to match; asking for the slot itself
+  // in that case keeps the request the same number the host's memo quotes.
+  const shapeRatio = source.width / source.height / (slot.width / slot.height);
+  if (Math.abs(shapeRatio - 1) <= SHAPE_MATCH_TOLERANCE) return slot;
+
+  return coverBox(source, slot) ?? slot;
+};
+
 export const formatUpscaleDimensions = (dimensions: ImageDimensions): string =>
   `${dimensions.width} x ${dimensions.height}`;
+
+/**
+ * The extra sentence shown under the host's memo when Auto is asking for
+ * something other than the size the memo names, so that two numbers on the
+ * same screen never silently disagree. Pass the Auto option's dimensions (the
+ * snapped ones the user is reading). Null when they match, the ordinary case
+ * of an image already the shape of its slot.
+ */
+export const describeAutoShapeChange = (
+  autoDimensions: ImageDimensions | null | undefined,
+  hostTarget: UpscaleHostTarget | null | undefined,
+): string | null => {
+  const slot = normalizeHostTarget(hostTarget);
+  if (!slot || !isUsableDimensions(autoDimensions)) return null;
+  if (autoDimensions.width === slot.width && autoDimensions.height === slot.height) return null;
+  return (
+    `Asking for ${formatUpscaleDimensions(autoDimensions)} instead, which is that much ` +
+    `detail in this image's own shape. Upscaling never re-crops or stretches the picture, ` +
+    `so Bloom fits the result to the container as it does now.`
+  );
+};
 
 const withDimensions = (baseLabel: string, dimensions: ImageDimensions | null): string =>
   dimensions ? `${baseLabel} (${formatUpscaleDimensions(dimensions)})` : baseLabel;
@@ -128,7 +215,7 @@ export const buildUpscaleOptions = (
   hostTarget?: UpscaleHostTarget | null,
   snap: (dimensions: ImageDimensions | null) => ImageDimensions | null = (d) => d,
 ): UpscaleOption[] => {
-  const hostDimensions = snap(normalizeHostTarget(hostTarget));
+  const hostDimensions = snap(resolveAutoTarget(source, hostTarget));
   const options: UpscaleOption[] = [];
 
   if (hostDimensions) {
@@ -165,10 +252,10 @@ export const resolveUpscaleTarget = (
   hostTarget?: UpscaleHostTarget | null,
 ): ImageDimensions | null => {
   const token = (paramValue || "").trim().toLowerCase();
-  const hostDimensions = normalizeHostTarget(hostTarget);
+  const autoDimensions = resolveAutoTarget(source, hostTarget);
 
-  if (token === "auto" && hostDimensions) {
-    return hostDimensions;
+  if (token === "auto" && autoDimensions) {
+    return autoDimensions;
   }
   if (token === "2k" || token === "4k") {
     return fitToLongEdge(source, TIER_LONG_EDGES[token]);

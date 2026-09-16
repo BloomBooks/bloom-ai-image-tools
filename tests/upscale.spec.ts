@@ -12,9 +12,12 @@ import { resetImageToolsPersistence, uploadImageToTarget } from "./playwright_he
 // Harness data (components/BloomHostHarness.tsx):
 //   book-image-1 / book-image-3 carry a suggestedTarget + memo, as Bloom will;
 //   book-image-2 / book-image-4 deliberately carry none, so the no-Auto path is
-//   testable too. The harness launches on book-image-3 (1063 x 1417).
+//   testable too. The harness launches on book-image-3, a 400 x 400 picture in
+//   a 1063 x 1417 slot — the mismatch BL-16742 was about, so Auto asks for the
+//   square that covers the slot rather than the slot's own shape.
 const HARNESS_ROUTE = "/?mode=bloom-harness";
 const LAUNCH_SLOT_TARGET = "1063 x 1417";
+const LAUNCH_AUTO_TARGET = "1417 x 1417";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 // The repo's only JPEG. Its subject is irrelevant here; what matters is that
@@ -76,9 +79,12 @@ test.describe("upscale tool", () => {
     });
     await selectUpscaleToolWithDummyModel(page);
 
-    // The launched slot's host target, verbatim from the harness payload.
-    await expect(targetResolutionSelect(page)).toHaveText(`Auto (${LAUNCH_SLOT_TARGET})`);
+    // Enough detail to fill the launched slot, in the picture's own shape.
+    await expect(targetResolutionSelect(page)).toHaveText(`Auto (${LAUNCH_AUTO_TARGET})`);
     await expect(page.getByTestId("upscale-target-memo")).toContainText("300 dpi");
+    // The memo is the host's, so it quotes the slot; the note says what Auto
+    // asks for instead, rather than leaving two numbers to disagree on screen.
+    await expect(page.getByTestId("upscale-shape-note")).toContainText(LAUNCH_AUTO_TARGET);
 
     // Upscale has no Shape picker: the output always follows the source.
     await expect(upscaleCard(page).getByText("Shape", { exact: true })).toHaveCount(0);
@@ -93,11 +99,14 @@ test.describe("upscale tool", () => {
         width: (image as HTMLImageElement).naturalWidth,
         height: (image as HTMLImageElement).naturalHeight,
       }));
-      expect(naturalSize).toEqual({ width: 1063, height: 1417 });
+      // Square in, square out: the dummy reproduces the requested size
+      // exactly, so this is the assertion that upscaling did not reshape the
+      // picture to its slot.
+      expect(naturalSize).toEqual({ width: 1417, height: 1417 });
     }).toPass({ timeout: 10_000 });
 
     await openInfoDialogFor(page, "result-panel");
-    await expect(page.getByTestId("history-resolution")).toHaveText(LAUNCH_SLOT_TARGET);
+    await expect(page.getByTestId("history-resolution")).toHaveText(LAUNCH_AUTO_TARGET);
     await closeInfoDialog(page);
   });
 

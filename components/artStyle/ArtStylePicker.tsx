@@ -4,6 +4,8 @@ import { Box, Stack, Typography, Button } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
 import { CLEAR_ART_STYLE_ID, loadArtStylePreviewUrl } from "../../lib/artStyles";
+import { useL10n } from "../../lib/localization";
+import { artStyleName } from "../../lib/artStyleStrings";
 
 const LazyArtStyleChooserDialog = React.lazy(async () => {
   const module = await import("./ArtStyleChooserDialog");
@@ -27,6 +29,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
   disabled = false,
   "data-testid": dataTestId,
 }) => {
+  const l10n = useL10n();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [hasOpenedDialog, setHasOpenedDialog] = useState(false);
   const frozenPreviewCacheRef = useRef<Map<string, string>>(new Map());
@@ -204,7 +207,15 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
               <Box
                 component="img"
                 src={displayPreview}
-                alt={selected ? `${selected.name} preview` : "Art style preview"}
+                alt={
+                  selected
+                    ? l10n(
+                        "AiImageEditor.ArtStyle.PreviewOfAlt",
+                        "{0} preview",
+                        artStyleName(l10n, selected),
+                      )
+                    : l10n("AiImageEditor.ArtStyle.PreviewAlt", "Art style preview")
+                }
                 sx={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             )}
@@ -221,7 +232,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
                 textTransform: "uppercase",
               }}
             >
-              Style:
+              {l10n("AiImageEditor.ArtStyle.StyleLabel", "Style:")}
             </Typography>
             <Typography
               variant="subtitle1"
@@ -233,7 +244,9 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
                 lineHeight: 1.3,
               }}
             >
-              {selected ? selected.name : "Choose an art style"}
+              {selected
+                ? artStyleName(l10n, selected)
+                : l10n("AiImageEditor.ArtStyle.ChoosePrompt", "Choose an art style")}
             </Typography>
           </Box>
           <ExpandMoreIcon

@@ -47,6 +47,33 @@ See `App.tsx` for a concrete integration example.
 > Art-style preview thumbnails rely on bundlers that support `import.meta.glob`
 > (Vite/Rollup). Other bundlers fall back to text-only style selection.
 
+### Localization
+
+Every user-visible string goes through `l10n(id, english)`, the same shape
+[bloom-image-gallery](https://github.com/BloomBooks/bloom-image-gallery) uses. A host that
+can translate passes `getLocalizations`, which is called once on mount with every string ID
+and its English default and returns whatever translations it has; anything missing falls
+back to the English. With no `getLocalizations`, the editor is in English.
+
+```tsx
+<ImageToolsWorkspace
+	persistence={...}
+	getLocalizations={(strings) => bloomApi.getLocalizations(strings)}
+/>
+```
+
+IDs are namespaced `AiImageEditor.*`, except where Bloom already has the string (`Common.Close`,
+`EditTab.PasteButton`, …). `ALL_IMAGE_EDITOR_STRINGS` is the whole set, exported for a host that
+wants to pre-fetch or inspect it; a tool's or art style's text is keyed by its own id (e.g.
+`AiImageEditor.Tool.make_gif.Title`), read from the registry so the English is written once.
+
+After adding or changing an `l10n()` call, run `node dev/generateStaticStrings.mjs` to update
+`lib/staticStrings.ts`; `lib/__tests__/staticStrings.test.ts` fails when the two disagree.
+
+Two things stay English on purpose: a select option's stored **value** (it is what the tool's
+prompt sends to the model, so only the menu text is translated) and the messages thrown by the
+service layer (`services/*`), which have no React context to read a translation from.
+
 ## How Bloom hosts this editor
 
 Bloom embeds the editor as an **iframe overlay inside its existing edit-tab WebView2** —

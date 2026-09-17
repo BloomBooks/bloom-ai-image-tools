@@ -36,6 +36,7 @@ import type { BookImageBatchSelection } from "./thumbnailStrips/ThumbnailStrip";
 import { theme } from "../themes";
 import { emitDragDebugLog, isDragDebugEnabled } from "./dragConstants";
 import { Icon, Icons } from "./Icons";
+import { useL10n } from "../lib/localization";
 import type { ThumbnailStripConfig } from "../lib/thumbnailStrips";
 import type { RunCostTarget } from "../lib/toolRunCostEstimate";
 import type { UpscaleHostTarget } from "../lib/upscale";
@@ -169,6 +170,7 @@ const DragPreview: React.FC<{
   activeDragStartRef: React.MutableRefObject<number | null>;
   debugLog: (...args: any[]) => void;
 }> = ({ preview, mode, activeDragStartRef, debugLog }) => {
+  const l10n = useL10n();
   const imageRef = React.useRef<HTMLImageElement | null>(null);
 
   React.useLayoutEffect(() => {
@@ -261,7 +263,7 @@ const DragPreview: React.FC<{
             textTransform: "uppercase",
           }}
         >
-          Dragging
+          {l10n("AiImageEditor.Drag.Dragging", "Dragging")}
         </div>
       ) : (
         <img
@@ -634,6 +636,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   isInspectorPinned = false,
   onUnpinInspector,
 }) => {
+  const l10n = useL10n();
   const majorElementGap = { xs: 1.5, md: 3.75 } as const;
   const hasTargetImage = !!targetImage;
   // The tool card prices a run from the pixels each reference will be sent at;
@@ -836,7 +839,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           </Typography>
           <IconButton
             onClick={onDismissError}
-            aria-label="Dismiss message"
+            aria-label={l10n("AiImageEditor.Error.DismissMessage", "Dismiss message")}
             size="small"
             sx={{ color: theme.colors.accent }}
           >

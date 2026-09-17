@@ -3,6 +3,7 @@ import { Box, IconButton, Stack, Typography } from "@mui/material";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { theme } from "../themes";
+import { useL10n } from "../lib/localization";
 
 interface ImageSlotHeaderProps {
   label: string;
@@ -17,6 +18,7 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
   isStarred = false,
   onToggleStar,
 }) => {
+  const l10n = useL10n();
   return (
     <Box
       sx={{
@@ -77,7 +79,11 @@ export const ImageSlotHeader: React.FC<ImageSlotHeaderProps> = ({
                 bgcolor: isStarred ? theme.colors.accent : theme.colors.overlay,
               },
             }}
-            title={isStarred ? "Unstar image" : "Star image"}
+            title={
+              isStarred
+                ? l10n("AiImageEditor.Slot.UnstarImage", "Unstar image")
+                : l10n("AiImageEditor.Slot.StarImage", "Star image")
+            }
             aria-pressed={isStarred}
           >
             {isStarred ? <StarIcon fontSize="inherit" /> : <StarBorderIcon fontSize="inherit" />}

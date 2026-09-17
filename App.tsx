@@ -119,6 +119,7 @@ export default function App() {
         <BloomHostedImageEditor
           bridge={bloomBridge}
           onCommitComplete={() => bloomBridge.cancel()}
+          getLocalizations={(strings) => bloomBridge.getLocalizations(strings)}
         />
       ) : (
         <StandaloneImageEditor envApiKey={envApiKey} bloomFeatures={standaloneBloomFeatures} />

@@ -17,6 +17,7 @@ import { TRANSPARENCY_BACKGROUND_STYLE } from "./transparencyBackground";
 import { formatMegabytes, getDataUrlByteSize } from "../lib/imageUtils";
 import { getModelNameById } from "../lib/modelsCatalog";
 import { formatCost } from "../lib/formatters";
+import { useL10n } from "../lib/localization";
 
 export interface ImagePreviewDialogItem {
   id: string;
@@ -84,6 +85,7 @@ const PreviewImage: React.FC<{
   index: number;
   sourceImage: ImageRecord | null;
 }> = ({ image, index, sourceImage }) => {
+  const l10n = useL10n();
   // A record can hold a URL whose bytes are no longer there (an object URL from
   // a past session, a history file since removed). That only shows up as a load
   // error, so the placeholder has to be reachable from there too.
@@ -135,7 +137,10 @@ const PreviewImage: React.FC<{
         {image.imageData && !loadFailed ? (
           <img
             src={image.imageData}
-            alt={image.imageFileName || `Preview image ${index + 1}`}
+            alt={
+              image.imageFileName ||
+              l10n("AiImageEditor.Preview.ImageAlt", "Preview image {0}", String(index + 1))
+            }
             draggable={false}
             loading="lazy"
             decoding="async"
@@ -174,10 +179,10 @@ const PreviewImage: React.FC<{
             }}
           >
             {loadFailed
-              ? "Image could not be loaded"
+              ? l10n("AiImageEditor.Preview.CouldNotLoad", "Image could not be loaded")
               : image.imageFileName
-                ? "Loading…"
-                : "Image not in storage"}
+                ? l10n("AiImageEditor.Preview.Loading", "Loading…")
+                : l10n("AiImageEditor.Preview.NotInStorage", "Image not in storage")}
           </Box>
         )}
         {resolution && (
@@ -238,6 +243,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
   resolveSourceImage,
   onClose,
 }) => {
+  const l10n = useL10n();
   const visibleItems = React.useMemo(() => items.filter((item) => item.images.length > 0), [items]);
   const [zoom, setZoom] = React.useState(1);
   // The scroll container is held in state, set through a callback ref, rather
@@ -293,7 +299,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
     >
       <DialogTitle sx={{ px: { xs: 2, sm: 3 }, py: 2, pr: 8, position: "relative" }}>
         <Typography component="span" variant="h6" sx={{ fontWeight: 600 }}>
-          Gallery
+          {l10n("AiImageEditor.Preview.Gallery", "Gallery")}
         </Typography>
         <Typography
           component="span"
@@ -301,10 +307,10 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
           sx={{ ml: 1.5, color: "#94a3b8" }}
           data-testid="image-preview-dialog-zoom-hint"
         >
-          Ctrl + mouse wheel to resize the images
+          {l10n("AiImageEditor.Preview.ZoomHint", "Ctrl + mouse wheel to resize the images")}
         </Typography>
         <IconButton
-          aria-label="Close image preview"
+          aria-label={l10n("AiImageEditor.Preview.CloseLabel", "Close image preview")}
           onClick={onClose}
           data-testid="image-preview-dialog-close"
           sx={{
@@ -373,7 +379,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
 
       <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2.5, justifyContent: "flex-end" }}>
         <Button onClick={onClose} variant="contained" color="inherit">
-          Close
+          {l10n("Common.Close", "Close")}
         </Button>
       </DialogActions>
     </Dialog>

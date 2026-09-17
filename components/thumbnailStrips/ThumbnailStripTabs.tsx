@@ -16,7 +16,9 @@ import {
   THUMBNAIL_STRIP_ORDER,
   THUMBNAIL_STRIP_CONFIGS,
   ThumbnailStripConfig,
+  stripLabel,
 } from "../../lib/thumbnailStrips";
+import { useL10n } from "../../lib/localization";
 import { theme } from "../../themes";
 import { STRIP_BORDER, STRIP_ACTIVE_BORDER_COLOR, STRIP_TAB_RADIUS } from "./stripStyleConstants";
 
@@ -61,6 +63,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
   onTogglePin,
   onDragActivate,
 }) => {
+  const l10n = useL10n();
   if (!stripIds.length) {
     return null;
   }
@@ -91,7 +94,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
     const isPinned = pinnedStripIds.has(stripId);
     const isActive = resolvedActiveId === stripId;
     const tabId = `thumbnail-tab-${stripId}`;
-    const label = resolvedStripConfigs[stripId].label;
+    const label = stripLabel(l10n, resolvedStripConfigs[stripId]);
 
     return (
       <Tooltip title={label} placement="left" arrow>
@@ -152,11 +155,15 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
               size="small"
               disableRipple
               onClick={(event) => handlePinClick(event, stripId)}
-              title={isPinned ? "Unpin strip" : "Pin strip"}
+              title={
+                isPinned
+                  ? l10n("AiImageEditor.Strip.Unpin", "Unpin strip")
+                  : l10n("AiImageEditor.Strip.Pin", "Pin strip")
+              }
               aria-label={
                 isPinned
-                  ? `Unpin ${resolvedStripConfigs[stripId].label}`
-                  : `Pin ${resolvedStripConfigs[stripId].label}`
+                  ? l10n("AiImageEditor.Strip.UnpinNamed", "Unpin {0}", label)
+                  : l10n("AiImageEditor.Strip.PinNamed", "Pin {0}", label)
               }
               data-testid={`thumbnail-tab-pin-${stripId}`}
               sx={{

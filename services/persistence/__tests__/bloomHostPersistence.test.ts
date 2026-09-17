@@ -70,6 +70,9 @@ const createBridge = () => {
     openExternalUrl() {},
     saveCredentials() {},
     trackEvent() {},
+    async getLocalizations(strings: Record<string, string>) {
+      return strings;
+    },
     async getFile(name) {
       return fileStore.get(name) ?? null;
     },

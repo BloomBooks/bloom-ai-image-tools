@@ -5,6 +5,7 @@ import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 import { setInternalImageDragData } from "./dragConstants";
+import { useL10n } from "../lib/localization";
 
 interface HistoryStripProps {
   items: HistoryItem[];
@@ -23,6 +24,7 @@ const HistoryCard: React.FC<{
   onDragStart: (e: React.DragEvent) => void;
   onRemove: () => void;
 }> = ({ item, isSelected, onSelect, onDragStart, onRemove }) => {
+  const l10n = useL10n();
   const popoverRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +67,11 @@ const HistoryCard: React.FC<{
             }}
           >
             <div className="w-full h-full rounded-[inherit] overflow-hidden">
-              <img src={item.imageData} alt="History item" className="w-full h-full object-cover" />
+              <img
+                src={item.imageData}
+                alt={l10n("AiImageEditor.History.ItemAlt", "History item")}
+                className="w-full h-full object-cover"
+              />
             </div>
           </div>
 
@@ -82,7 +88,7 @@ const HistoryCard: React.FC<{
               backgroundColor: theme.colors.overlay,
               color: theme.colors.textPrimary,
             }}
-            title="Remove from history"
+            title={l10n("AiImageEditor.History.RemoveFromHistory", "Remove from history")}
           >
             <Icon path={Icons.X} className="w-3 h-3" />
           </IconButton>
@@ -121,6 +127,7 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
   hasHiddenHistory = false,
   onRequestHistoryAccess,
 }) => {
+  const l10n = useL10n();
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setInternalImageDragData(e.dataTransfer, id);
     if (e.dataTransfer) {
@@ -176,16 +183,21 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
               boxShadow: theme.colors.panelShadow,
             }}
           >
-            <span className="text-sm font-semibold">More history available</span>
+            <span className="text-sm font-semibold">
+              {l10n("AiImageEditor.History.MoreHistoryAvailable", "More history available")}
+            </span>
             <span className="text-xs text-left opacity-80">
-              Connect to a folder on your computer for more history.
+              {l10n(
+                "AiImageEditor.History.ConnectFolderForMore",
+                "Connect to a folder on your computer for more history.",
+              )}
             </span>
             <span
               className="mt-2 inline-flex items-center gap-2 text-xs font-semibold"
               style={{ color: theme.colors.accent }}
             >
               <Icon path={Icons.Refresh} className="w-3.5 h-3.5" />
-              Reconnect folder
+              {l10n("AiImageEditor.History.ReconnectFolder", "Reconnect folder")}
             </span>
           </ButtonBase>
         )}

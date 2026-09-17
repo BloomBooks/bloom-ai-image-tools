@@ -3,6 +3,7 @@ import { Box, Button, Dialog, DialogContent, Stack, Typography } from "@mui/mate
 import { ThemeProvider } from "@mui/material/styles";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme } from "../themes";
+import { interpolateJsx, useL10n } from "../lib/localization";
 
 interface OpenRouterWelcomeDialogProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export function OpenRouterWelcomeDialog({
   onDismiss,
 }: OpenRouterWelcomeDialogProps) {
   const darkTheme = useBrandedDarkTheme();
+  const l10n = useL10n();
   return (
     <ThemeProvider theme={darkTheme}>
       <Dialog
@@ -34,23 +36,32 @@ export function OpenRouterWelcomeDialog({
         <DialogContent sx={{ p: 4 }}>
           <Stack spacing={3}>
             <Typography variant="h6" fontWeight={700}>
-              Connect to generate images
+              {l10n("AiImageEditor.Welcome.Title", "Connect to generate images")}
             </Typography>
 
             <Typography variant="body1" sx={{ color: theme.colors.textSecondary, lineHeight: 1.7 }}>
-              Bloom AI Image Tools creates images using AI models from Google and other providers.
-              These models charge per image — you pay for them through{" "}
-              <Box component="span" sx={{ color: theme.colors.textPrimary, fontWeight: 600 }}>
-                OpenRouter
-              </Box>
-              , a service that lets you pre-load credits and use them across providers. Credits
-              start at $5 — enough for roughly 25–50 images — and are only spent when you generate
-              images. There's no subscription.
+              {interpolateJsx(
+                l10n(
+                  "AiImageEditor.Welcome.Explanation",
+                  "Bloom AI Image Tools creates images using AI models from Google and other providers. These models charge per image — you pay for them through {0}, a service that lets you pre-load credits and use them across providers. Credits start at $5 — enough for roughly 25–50 images — and are only spent when you generate images. There's no subscription.",
+                ),
+                [
+                  <Box
+                    key="openrouter"
+                    component="span"
+                    sx={{ color: theme.colors.textPrimary, fontWeight: 600 }}
+                  >
+                    OpenRouter
+                  </Box>,
+                ],
+              )}
             </Typography>
 
             <Typography variant="body2" sx={{ color: theme.colors.textMuted, lineHeight: 1.6 }}>
-              Your credits are purchased directly from OpenRouter. Bloom doesn't receive any part of
-              what you spend.
+              {l10n(
+                "AiImageEditor.Welcome.CreditsNote",
+                "Your credits are purchased directly from OpenRouter. Bloom doesn't receive any part of what you spend.",
+              )}
             </Typography>
 
             <Stack spacing={1.5} pt={1}>
@@ -72,7 +83,7 @@ export function OpenRouterWelcomeDialog({
                   },
                 }}
               >
-                Connect to AI Image Generators
+                {l10n("AiImageEditor.Welcome.Connect", "Connect to AI Image Generators")}
               </Button>
               <Button
                 variant="text"
@@ -84,7 +95,7 @@ export function OpenRouterWelcomeDialog({
                   "&:hover": { color: theme.colors.textSecondary, backgroundColor: "transparent" },
                 }}
               >
-                I just want to look around
+                {l10n("AiImageEditor.Welcome.JustLookAround", "I just want to look around")}
               </Button>
             </Stack>
           </Stack>

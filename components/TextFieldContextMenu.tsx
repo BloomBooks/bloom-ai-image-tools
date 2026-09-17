@@ -5,6 +5,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import { theme } from "../themes";
 import { Icon, Icons, PasteIcon } from "./Icons";
+import { useL10n } from "../lib/localization";
 
 const MENU_ICON_SIZE = 16;
 
@@ -77,6 +78,7 @@ interface MenuState {
  * styled to match the rest of the UI.
  */
 export const TextFieldContextMenu: React.FC = () => {
+  const l10n = useL10n();
   const [menu, setMenu] = React.useState<MenuState | null>(null);
   const [canPaste, setCanPaste] = React.useState(true);
 
@@ -231,7 +233,9 @@ export const TextFieldContextMenu: React.FC = () => {
         <ListItemIcon sx={iconSx}>
           <Icon path={Icons.Cut} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Cut</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("EditTab.CutButton", "Cut")}
+        </ListItemText>
       </MenuItem>
 
       <MenuItem
@@ -243,7 +247,9 @@ export const TextFieldContextMenu: React.FC = () => {
         <ListItemIcon sx={iconSx}>
           <Icon path={Icons.Copy} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Copy</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("Common.Copy", "Copy")}
+        </ListItemText>
       </MenuItem>
 
       <MenuItem
@@ -255,7 +261,9 @@ export const TextFieldContextMenu: React.FC = () => {
         <ListItemIcon sx={iconSx}>
           <PasteIcon width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Paste</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("EditTab.PasteButton", "Paste")}
+        </ListItemText>
       </MenuItem>
 
       <MenuItem
@@ -267,7 +275,9 @@ export const TextFieldContextMenu: React.FC = () => {
         <ListItemIcon sx={iconSx}>
           <Icon path={Icons.SelectAll} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Select All</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("Common.SelectAll", "Select all")}
+        </ListItemText>
       </MenuItem>
     </Menu>
   );

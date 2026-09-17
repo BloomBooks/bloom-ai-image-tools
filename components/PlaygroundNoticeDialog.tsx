@@ -3,7 +3,8 @@ import { Button, Dialog, DialogContent, Stack, Typography } from "@mui/material"
 import { ThemeProvider } from "@mui/material/styles";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme } from "../themes";
-import { LOOK_AROUND_MODE_MESSAGE } from "../lib/lookAroundMode";
+import { LOOK_AROUND_MODE_MESSAGE, LOOK_AROUND_MODE_MESSAGE_ID } from "../lib/lookAroundMode";
+import { useL10n } from "../lib/localization";
 
 /**
  * What a playground session is told on opening: the editor is here to be looked at, and
@@ -17,6 +18,7 @@ interface PlaygroundNoticeDialogProps {
 
 export function PlaygroundNoticeDialog({ isOpen, onDismiss }: PlaygroundNoticeDialogProps) {
   const darkTheme = useBrandedDarkTheme();
+  const l10n = useL10n();
   return (
     <ThemeProvider theme={darkTheme}>
       <Dialog
@@ -37,7 +39,7 @@ export function PlaygroundNoticeDialog({ isOpen, onDismiss }: PlaygroundNoticeDi
         <DialogContent sx={{ p: 4 }}>
           <Stack spacing={3}>
             <Typography variant="body1" sx={{ color: theme.colors.textPrimary, lineHeight: 1.7 }}>
-              {LOOK_AROUND_MODE_MESSAGE}
+              {l10n(LOOK_AROUND_MODE_MESSAGE_ID, LOOK_AROUND_MODE_MESSAGE)}
             </Typography>
 
             <Button
@@ -60,7 +62,7 @@ export function PlaygroundNoticeDialog({ isOpen, onDismiss }: PlaygroundNoticeDi
                 },
               }}
             >
-              OK
+              {l10n("Common.OK", "OK")}
             </Button>
           </Stack>
         </DialogContent>

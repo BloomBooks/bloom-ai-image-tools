@@ -8,6 +8,8 @@ import { getArtStyleById, isClearArtStyleId } from "../lib/artStyles";
 import { copyTextToClipboard } from "../lib/textClipboard";
 import { formatMimeLabel } from "../lib/imageUtils";
 import { formatCost } from "../lib/formatters";
+import { L10nFunc, useL10n } from "../lib/localization";
+import { toolTitle } from "./tools/toolStrings";
 
 const rowStyle: React.CSSProperties = {
   display: "grid",
@@ -28,18 +30,21 @@ interface ImageInfoPanelProps {
   item: ImageRecord;
 }
 
-const formatReasoningLevel = (value: ImageRecord["reasoningLevel"]): string | null => {
+const formatReasoningLevel = (
+  l10n: L10nFunc,
+  value: ImageRecord["reasoningLevel"],
+): string | null => {
   switch (value) {
     case "default":
-      return "Default";
+      return l10n("Common.Default", "Default");
     case "none":
-      return "None";
+      return l10n("AiImageEditor.Reasoning.None", "None");
     case "low":
-      return "Low";
+      return l10n("AiImageEditor.Reasoning.Low", "Low");
     case "medium":
-      return "Medium";
+      return l10n("AiImageEditor.Reasoning.Medium", "Medium");
     case "high":
-      return "High";
+      return l10n("AiImageEditor.Reasoning.High", "High");
     default:
       return null;
   }
@@ -66,9 +71,12 @@ const resolveStyleSummary = (item: ImageRecord): string | null => {
 const PROMPT_COLLAPSE_THRESHOLD = 280;
 
 export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
+  const l10n = useL10n();
   const tool = TOOLS.find((t) => t.id === item.toolId);
   const promptContent =
-    item.promptUsed && item.promptUsed.length ? item.promptUsed : "Prompt unavailable.";
+    item.promptUsed && item.promptUsed.length
+      ? item.promptUsed
+      : l10n("AiImageEditor.Info.PromptUnavailable", "Prompt unavailable.");
   const isPromptLong = promptContent.length > PROMPT_COLLAPSE_THRESHOLD;
 
   const [promptCopied, setPromptCopied] = React.useState(false);
@@ -122,26 +130,26 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
     testId?: string;
   }> = [
     {
-      label: "Model",
+      label: l10n("AiImageEditor.Info.Model", "Model"),
       value: item.model || null,
       testId: "history-model",
     },
     {
-      label: "Reasoning",
-      value: formatReasoningLevel(item.reasoningLevel),
+      label: l10n("AiImageEditor.Info.Reasoning", "Reasoning"),
+      value: formatReasoningLevel(l10n, item.reasoningLevel),
       testId: "history-reasoning",
     },
     {
-      label: "Art Style",
+      label: l10n("AiImageEditor.Info.ArtStyle", "Art Style"),
       value: resolveStyleSummary(item),
       testId: "history-art-style",
     },
     {
-      label: "Duration",
+      label: l10n("AiImageEditor.Info.Duration", "Duration"),
       value: item.durationMs > 0 ? (item.durationMs / 1000).toFixed(2) + "s" : null,
     },
     {
-      label: "Cost",
+      label: l10n("AiImageEditor.Info.Cost", "Cost"),
       value: tool ? formatCost(item.cost) : null,
       style: {
         color: tool ? theme.colors.success : theme.colors.textSecondary,
@@ -150,12 +158,12 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       testId: "history-cost",
     },
     {
-      label: "Resolution",
+      label: l10n("AiImageEditor.Info.Resolution", "Resolution"),
       value: item.resolution ? `${item.resolution.width} x ${item.resolution.height}` : null,
       testId: "history-resolution",
     },
     {
-      label: "Format",
+      label: l10n("AiImageEditor.Info.Format", "Format"),
       value: formatMimeLabel(item.sourceMime),
       testId: "history-format",
     },
@@ -184,7 +192,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
               color: theme.colors.textMuted,
             }}
           >
-            Associated text:
+            {l10n("AiImageEditor.Info.AssociatedText", "Associated text:")}
           </span>
           <div
             data-testid="image-caption"
@@ -201,14 +209,16 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       )}
 
       <div style={rowStyle}>
-        <span style={{ color: theme.colors.textMuted }}>Tool:</span>
+        <span style={{ color: theme.colors.textMuted }}>
+          {l10n("AiImageEditor.Info.Tool", "Tool:")}
+        </span>
         <span
           style={{
             ...valueStyle,
             fontWeight: 600,
           }}
         >
-          {tool?.title || "Import"}
+          {tool ? toolTitle(l10n, tool) : l10n("AiImageEditor.Info.Import", "Import")}
         </span>
       </div>
       {rows
@@ -237,7 +247,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
               color: theme.colors.textMuted,
             }}
           >
-            Sources:
+            {l10n("AiImageEditor.Info.Sources", "Sources:")}
           </span>
           <div style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>
             {item.sourceSummary}
@@ -262,7 +272,9 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
             color: theme.colors.textMuted,
           }}
         >
-          <span style={{ display: "block" }}>Full Prompt:</span>
+          <span style={{ display: "block" }}>
+            {l10n("AiImageEditor.Info.FullPrompt", "Full Prompt:")}
+          </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             {isPromptLong && (
               <Button
@@ -279,12 +291,20 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
                   textDecoration: "underline",
                 }}
               >
-                {promptExpanded ? "Show less" : "Show more"}
+                {promptExpanded
+                  ? l10n("AiImageEditor.Info.ShowLess", "Show less")
+                  : l10n("AiImageEditor.Info.ShowMore", "Show more")}
               </Button>
             )}
-            <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
+            <Tooltip
+              title={
+                promptCopied
+                  ? l10n("AiImageEditor.InfoDialog.Copied", "Copied")
+                  : l10n("AiImageEditor.InfoDialog.CopyPrompt", "Copy prompt")
+              }
+            >
               <IconButton
-                aria-label="Copy full prompt"
+                aria-label={l10n("AiImageEditor.InfoDialog.CopyFullPrompt", "Copy full prompt")}
                 onClick={handleCopyPrompt}
                 size="small"
                 data-testid="copy-full-prompt"
@@ -330,7 +350,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
               color: theme.colors.textMuted,
             }}
           >
-            Parameters:
+            {l10n("AiImageEditor.Info.Parameters", "Parameters:")}
           </span>
           <div style={{ color: theme.colors.textSecondary }}>
             {displayedParameters.map(([k, v]) => (

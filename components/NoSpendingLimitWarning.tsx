@@ -1,5 +1,6 @@
 import React from "react";
 import { Alert, Link } from "@mui/material";
+import { interpolateJsx, useL10n } from "../lib/localization";
 
 // Where the user manages Auto Top-Up (the setting that turns an uncapped key from a
 // "limited to current balance" risk into an unbounded one).
@@ -17,22 +18,30 @@ export function NoSpendingLimitWarning({
 }: {
   onOpenExternalUrl?: (url: string) => void;
 }) {
+  const l10n = useL10n();
   return (
     <Alert severity="warning" sx={{ fontSize: "0.8rem", py: 0.5 }}>
-      This key has no spending limit. Make sure that{" "}
-      <Link
-        href={OPENROUTER_ACCOUNT_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => {
-          if (!onOpenExternalUrl) return;
-          e.preventDefault();
-          onOpenExternalUrl(OPENROUTER_ACCOUNT_URL);
-        }}
-      >
-        OpenRouter account
-      </Link>{" "}
-      does not have {"'Auto Top-Up'"} on
+      {interpolateJsx(
+        l10n(
+          "AiImageEditor.OpenRouter.NoSpendingLimit",
+          "This key has no spending limit. Make sure that {0} does not have 'Auto Top-Up' on",
+        ),
+        [
+          <Link
+            key="account"
+            href={OPENROUTER_ACCOUNT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              if (!onOpenExternalUrl) return;
+              e.preventDefault();
+              onOpenExternalUrl(OPENROUTER_ACCOUNT_URL);
+            }}
+          >
+            {l10n("AiImageEditor.OpenRouter.AccountLink", "OpenRouter account")}
+          </Link>,
+        ],
+      )}
     </Alert>
   );
 }

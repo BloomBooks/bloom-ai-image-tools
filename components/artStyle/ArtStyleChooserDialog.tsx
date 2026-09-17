@@ -4,6 +4,8 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
 import { CLEAR_ART_STYLE_ID, loadArtStylePreviewUrl } from "../../lib/artStyles";
+import { useL10n } from "../../lib/localization";
+import { artStyleDescription, artStyleName } from "../../lib/artStyleStrings";
 
 const DIALOG_MAX_WIDTH = "min(1000px, 92vw)";
 const DIALOG_MAX_HEIGHT = "min(900px, 90vh)";
@@ -24,6 +26,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   onSelect,
   onClose,
 }) => {
+  const l10n = useL10n();
   // Keep the "None" option pinned to the top of the list for quick access.
   const displayStyles = useMemo(() => {
     if (!styles.length) return styles;
@@ -167,7 +170,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                 variant="h5"
                 sx={{ fontWeight: 600, mt: 1, color: theme.colors.textPrimary }}
               >
-                Choose an Art Style
+                {l10n("AiImageEditor.ArtStyle.ChooseTitle", "Choose an Art Style")}
               </Typography>
               <Button
                 variant="outlined"
@@ -175,7 +178,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                 onClick={onClose}
                 sx={{ borderRadius: "999px" }}
               >
-                Close
+                {l10n("Common.Close", "Close")}
               </Button>
             </Stack>
           </Box>
@@ -233,7 +236,11 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                       {previewSrc ? (
                         <img
                           src={previewSrc}
-                          alt={`${style.name} preview`}
+                          alt={l10n(
+                            "AiImageEditor.ArtStyle.PreviewOfAlt",
+                            "{0} preview",
+                            artStyleName(l10n, style),
+                          )}
                           style={{
                             position: "absolute",
                             inset: 0,
@@ -256,7 +263,9 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                             color: theme.colors.textSecondary,
                           }}
                         >
-                          {hasPreviewSource ? "Loading preview" : "No preview"}
+                          {hasPreviewSource
+                            ? l10n("AiImageEditor.ArtStyle.LoadingPreview", "Loading preview")
+                            : l10n("AiImageEditor.ArtStyle.NoPreview", "No preview")}
                         </Box>
                       )}
                     </Box>
@@ -270,7 +279,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                     >
                       <Stack direction="row" spacing={1} alignItems="center">
                         <Typography variant="subtitle1" fontWeight={600} flex={1}>
-                          {style.name}
+                          {artStyleName(l10n, style)}
                         </Typography>
                       </Stack>
                       <Typography
@@ -280,7 +289,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                           lineHeight: 1.4,
                         }}
                       >
-                        {style.description || style.promptDetail}
+                        {artStyleDescription(l10n, style) || style.promptDetail}
                       </Typography>
                     </Box>
                   </Box>

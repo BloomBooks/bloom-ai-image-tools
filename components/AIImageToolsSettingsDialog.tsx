@@ -19,6 +19,7 @@ import { Icon, Icons } from "./Icons";
 import { OpenRouterConnect } from "./OpenRouterConnect";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import { theme as appTheme } from "../themes";
+import { interpolateJsx, useL10n } from "../lib/localization";
 
 interface OpenRouterSectionProps {
   isAuthenticated: boolean;
@@ -95,8 +96,11 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
   history,
 }) => {
   const darkTheme = useBrandedDarkTheme();
+  const l10n = useL10n();
   const folderPath = history ? folderPathFromName(history.directoryName) : null;
-  const historyLoadingLabel = history?.isLoading ? "Working..." : undefined;
+  const historyLoadingLabel = history?.isLoading
+    ? l10n("AiImageEditor.Settings.Working", "Working...")
+    : undefined;
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -130,12 +134,12 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
           <Stack direction="row" spacing={2} alignItems="center">
             <Icon path={Icons.Gear} width={20} height={20} />
             <Typography variant="h6" component="p" fontWeight={600}>
-              AI Image Tools settings
+              {l10n("AiImageEditor.Settings.Title", "AI Image Tools settings")}
             </Typography>
           </Stack>
           <IconButton
             onClick={onClose}
-            aria-label="Close settings dialog"
+            aria-label={l10n("AiImageEditor.Settings.CloseDialog", "Close settings dialog")}
             size="small"
             sx={{
               color: appTheme.colors.textSecondary,
@@ -170,7 +174,10 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                     sx={{ width: 24, height: 24 }}
                   />
                   <Typography id="openrouter-section-title" variant="subtitle1" fontWeight={600}>
-                    Connection to AI Image Generators
+                    {l10n(
+                      "AiImageEditor.Settings.ConnectionSection",
+                      "Connection to AI Image Generators",
+                    )}
                   </Typography>
                 </Stack>
 
@@ -205,10 +212,13 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                     <Icon path={Icons.History} width={20} height={20} />
                     <Box>
                       <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
-                        History storage
+                        {l10n("AiImageEditor.Settings.HistoryStorage", "History storage")}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Link a folder on your computer to save your full history.
+                        {l10n(
+                          "AiImageEditor.Settings.HistoryStorageDescription",
+                          "Link a folder on your computer to save your full history.",
+                        )}
                       </Typography>
                     </Box>
                   </Stack>
@@ -223,11 +233,16 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       }
                     >
                       <Typography variant="body2" fontWeight={600}>
-                        Local folders need Chromium-based browsers
+                        {l10n(
+                          "AiImageEditor.Settings.ChromiumNeeded",
+                          "Local folders need Chromium-based browsers",
+                        )}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed
-                        history.
+                        {l10n(
+                          "AiImageEditor.Settings.ChromiumNeededDetails",
+                          "Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed history.",
+                        )}
                       </Typography>
                     </Alert>
                   )}
@@ -235,11 +250,22 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                   {history.isFolderPersistenceActive ? (
                     <Box sx={nestedCardStyles}>
                       <Typography variant="body2" color="text.secondary">
-                        Images are written to{" "}
-                        <Box component="span" sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                          {folderPath || "your folder"}
-                        </Box>
-                        .
+                        {interpolateJsx(
+                          l10n(
+                            "AiImageEditor.Settings.ImagesAreWrittenTo",
+                            "Images are written to {0}.",
+                          ),
+                          [
+                            <Box
+                              key="folder"
+                              component="span"
+                              sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                            >
+                              {folderPath ||
+                                l10n("AiImageEditor.Settings.YourFolder", "your folder")}
+                            </Box>,
+                          ],
+                        )}
                       </Typography>
                       <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
                         <Button
@@ -258,7 +284,11 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                             },
                           }}
                         >
-                          {historyLoadingLabel || "Stop storing history in folder"}
+                          {historyLoadingLabel ||
+                            l10n(
+                              "AiImageEditor.Settings.StopStoringHistoryInFolder",
+                              "Stop storing history in folder",
+                            )}
                         </Button>
                       </Stack>
                     </Box>
@@ -273,7 +303,8 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                         alignSelf: "flex-start",
                       }}
                     >
-                      {historyLoadingLabel || "Choose folder"}
+                      {historyLoadingLabel ||
+                        l10n("AiImageEditor.Settings.ChooseFolder", "Choose folder")}
                     </Button>
                   )}
 
@@ -296,7 +327,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
           }}
         >
           <Button onClick={onClose} color="primary">
-            Close
+            {l10n("Common.Close", "Close")}
           </Button>
         </DialogActions>
       </Dialog>

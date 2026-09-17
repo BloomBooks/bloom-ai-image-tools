@@ -12,7 +12,8 @@ import {
 } from "@mui/material";
 import { theme } from "../themes";
 import { fetchOpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
-import { LOOK_AROUND_MODE_MESSAGE } from "../lib/lookAroundMode";
+import { LOOK_AROUND_MODE_MESSAGE, LOOK_AROUND_MODE_MESSAGE_ID } from "../lib/lookAroundMode";
+import { useL10n } from "../lib/localization";
 import { NoSpendingLimitWarning } from "./NoSpendingLimitWarning";
 
 // NOTE: We previously also supported connecting to OpenRouter via OAuth login.
@@ -49,6 +50,7 @@ export function OpenRouterConnect({
   onOpenExternalUrl,
   playgroundMode = false,
 }: OpenRouterConnectProps) {
+  const l10n = useL10n();
   const [keyValue, setKeyValue] = useState(() => apiKeyPreview || "");
   const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
@@ -101,15 +103,27 @@ export function OpenRouterConnect({
       const remaining = status.limitRemaining ?? status.accountRemainingCredits;
       const balancePart =
         remaining !== null
-          ? `, ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", currencyDisplay: "symbol" }).format(remaining)} available`
+          ? l10n(
+              "AiImageEditor.OpenRouter.AvailableBalance",
+              ", {0} available",
+              new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: "USD",
+                currencyDisplay: "symbol",
+              }).format(remaining),
+            )
           : "";
       setTestState("success");
-      setTestMessage(`Key verified${balancePart}`);
+      setTestMessage(l10n("AiImageEditor.OpenRouter.KeyVerified", "Key verified{0}", balancePart));
       // A null limit means there's no per-key spending cap; warn so the user can set one.
       setKeyHasNoLimit(status.limit === null);
     } catch (err) {
       setTestState("error");
-      setTestMessage(err instanceof Error ? err.message : "Key verification failed");
+      setTestMessage(
+        err instanceof Error
+          ? err.message
+          : l10n("AiImageEditor.OpenRouter.KeyVerificationFailed", "Key verification failed"),
+      );
     }
   };
 
@@ -209,25 +223,33 @@ export function OpenRouterConnect({
     <Stack
       component="fieldset"
       spacing={3}
-      aria-label="OpenRouter connection"
+      aria-label={l10n("AiImageEditor.OpenRouter.ConnectionFieldset", "OpenRouter connection")}
       sx={{ border: "none", p: 0, m: 0, minInlineSize: 0 }}
     >
       <Typography variant="body2">
-        OpenRouter credits are how you pre-pay for use of the AI Image Tools from Google and others.
-        Once you have an OpenRouter account, paste in an API key below.
+        {l10n(
+          "AiImageEditor.OpenRouter.CreditsExplanation",
+          "OpenRouter credits are how you pre-pay for use of the AI Image Tools from Google and others. Once you have an OpenRouter account, paste in an API key below.",
+        )}
       </Typography>
 
       {playgroundMode && (
         <Typography variant="body2" sx={{ color: theme.colors.textSecondary, fontStyle: "italic" }}>
-          {LOOK_AROUND_MODE_MESSAGE}
+          {l10n(LOOK_AROUND_MODE_MESSAGE_ID, LOOK_AROUND_MODE_MESSAGE)}
         </Typography>
       )}
 
       {renderOptionCard(
         "apiKey",
         {
-          active: "Connected with OpenRouter API key",
-          inactive: "Connect with OpenRouter API key",
+          active: l10n(
+            "AiImageEditor.OpenRouter.ConnectedWithKey",
+            "Connected with OpenRouter API key",
+          ),
+          inactive: l10n(
+            "AiImageEditor.OpenRouter.ConnectWithKey",
+            "Connect with OpenRouter API key",
+          ),
         },
         apiKeyDescriptions,
         <Stack spacing={1.5}>
@@ -242,7 +264,10 @@ export function OpenRouterConnect({
               setKeyHasNoLimit(false);
             }}
             onBlur={handleKeyBlur}
-            placeholder="Paste OpenRouter key"
+            placeholder={l10n(
+              "AiImageEditor.OpenRouter.PasteKeyPlaceholder",
+              "Paste OpenRouter key",
+            )}
             disabled={usingEnvKey || playgroundMode}
             size="small"
             fullWidth
@@ -256,7 +281,7 @@ export function OpenRouterConnect({
                   <IconButton
                     size="small"
                     onClick={handlePaste}
-                    aria-label="Paste API key"
+                    aria-label={l10n("AiImageEditor.OpenRouter.PasteApiKey", "Paste API key")}
                     edge="end"
                     sx={{
                       color: theme.colors.textSecondary,
@@ -289,7 +314,9 @@ export function OpenRouterConnect({
                   "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
                 }}
               >
-                {testState === "testing" ? "Testing…" : "Test Key"}
+                {testState === "testing"
+                  ? l10n("AiImageEditor.OpenRouter.Testing", "Testing…")
+                  : l10n("AiImageEditor.OpenRouter.TestKey", "Test Key")}
               </Button>
             )}
             {hasManualKey && !usingEnvKey && (
@@ -302,7 +329,7 @@ export function OpenRouterConnect({
                 size="small"
                 sx={{ opacity: playgroundMode ? 0.5 : 1 }}
               >
-                Forget Key
+                {l10n("AiImageEditor.OpenRouter.ForgetKey", "Forget Key")}
               </Button>
             )}
           </Stack>

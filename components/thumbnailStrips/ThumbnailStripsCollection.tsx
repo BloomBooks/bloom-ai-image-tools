@@ -2,12 +2,14 @@ import React, { useMemo } from "react";
 import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../../types";
 import {
   getOtherStripsContainingItem,
-  STRIP_TIPS,
+  stripLabel,
+  stripTip,
   THUMBNAIL_STRIP_ORDER,
   ThumbnailStripConfig,
   THUMBNAIL_STRIP_CONFIGS,
 } from "../../lib/thumbnailStrips";
 import { BookImageBatchSelection, ThumbnailStrip } from "./ThumbnailStrip";
+import { useL10n } from "../../lib/localization";
 import { ThumbnailStripTabs } from "./ThumbnailStripTabs";
 
 interface ThumbnailStripsCollectionProps {
@@ -81,6 +83,7 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
   batchSelection,
   launchedBookImageId = null,
 }) => {
+  const l10n = useL10n();
   const resolvedStripConfigs = stripConfigs ?? THUMBNAIL_STRIP_CONFIGS;
   const pinnedStripIds = new Set(snapshot.pinnedStripIds);
 
@@ -113,14 +116,25 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
     const historyItemIds = snapshot.itemIdsByStrip.history || [];
 
     const formatStripNames = (stripIds: ThumbnailStripId[]) => {
-      const labels = stripIds.map((stripId) => `${resolvedStripConfigs[stripId].label} strip`);
+      const labels = stripIds.map((stripId) =>
+        l10n(
+          "AiImageEditor.Strip.NamedStrip",
+          "{0} strip",
+          stripLabel(l10n, resolvedStripConfigs[stripId]),
+        ),
+      );
       if (labels.length <= 1) {
-        return labels[0] || "another strip";
+        return labels[0] || l10n("AiImageEditor.Strip.AnotherStrip", "another strip");
       }
       if (labels.length === 2) {
-        return `${labels[0]} and ${labels[1]}`;
+        return l10n("AiImageEditor.Strip.TwoStrips", "{0} and {1}", labels[0], labels[1]);
       }
-      return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+      return l10n(
+        "AiImageEditor.Strip.ManyStrips",
+        "{0}, and {1}",
+        labels.slice(0, -1).join(", "),
+        labels[labels.length - 1],
+      );
     };
 
     historyItemIds.forEach((itemId) => {
@@ -129,18 +143,20 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         return;
       }
 
-      reasons[itemId] =
-        `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
+      reasons[itemId] = l10n(
+        "AiImageEditor.History.CannotDeleteInOtherStrips",
+        "Cannot delete this image because it also exists in the {0}.",
+        formatStripNames(otherStripIds),
+      );
     });
 
     return reasons;
-  }, [resolvedStripConfigs, snapshot]);
+  }, [l10n, resolvedStripConfigs, snapshot]);
 
   const renderStrip = (stripId: ThumbnailStripId, activeOverride?: boolean) => {
     const config = resolvedStripConfigs[stripId];
     const itemIds = snapshot.itemIdsByStrip[stripId] || [];
-    const tipSource = STRIP_TIPS[stripId];
-    const tip = typeof tipSource === "function" ? tipSource(config) : tipSource;
+    const tip = stripTip(l10n, config);
 
     return (
       <ThumbnailStrip

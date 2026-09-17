@@ -13,6 +13,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { ImageRecord } from "../types";
 import { ImageInfoPanel } from "./ImageInfoPanel";
 import { copyTextToClipboard } from "../lib/textClipboard";
+import { useL10n } from "../lib/localization";
 
 export interface ImageSlotInfoDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
   label,
   onClose,
 }) => {
+  const l10n = useL10n();
   const [promptCopied, setPromptCopied] = React.useState(false);
   const copyResetTimeoutRef = React.useRef<number | null>(null);
 
@@ -79,10 +81,18 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
       }}
     >
       <DialogTitle sx={{ pr: 12 }}>
-        {label ? `${label} info` : "Image info"}
-        <Tooltip title={promptCopied ? "Copied" : "Copy prompt"}>
+        {label
+          ? l10n("AiImageEditor.InfoDialog.TitleForSlot", "{0} info", label)
+          : l10n("AiImageEditor.InfoDialog.Title", "Image info")}
+        <Tooltip
+          title={
+            promptCopied
+              ? l10n("AiImageEditor.InfoDialog.Copied", "Copied")
+              : l10n("AiImageEditor.InfoDialog.CopyPrompt", "Copy prompt")
+          }
+        >
           <IconButton
-            aria-label="Copy full prompt"
+            aria-label={l10n("AiImageEditor.InfoDialog.CopyFullPrompt", "Copy full prompt")}
             onClick={handleCopyPrompt}
             size="small"
             data-testid="image-info-dialog-copy-prompt"
@@ -92,7 +102,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
           </IconButton>
         </Tooltip>
         <IconButton
-          aria-label="Close"
+          aria-label={l10n("Common.Close", "Close")}
           onClick={onClose}
           data-testid="image-info-dialog-close"
           sx={{
@@ -107,7 +117,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
       <DialogContent dividers>{image ? <ImageInfoPanel item={image} /> : null}</DialogContent>
       <DialogActions>
         <Button onClick={onClose} variant="contained">
-          Close
+          {l10n("Common.Close", "Close")}
         </Button>
       </DialogActions>
     </Dialog>

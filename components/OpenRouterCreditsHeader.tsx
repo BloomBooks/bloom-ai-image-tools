@@ -3,6 +3,7 @@ import { Box, Button, Stack, Tooltip, Typography } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { keyframes } from "@emotion/react";
 import { NoSpendingLimitWarning, OPENROUTER_ACCOUNT_URL } from "./NoSpendingLimitWarning";
+import { useL10n } from "../lib/localization";
 
 const OPENROUTER_CREDITS_URL = "https://openrouter.ai/settings/credits";
 const wiggle = keyframes`
@@ -74,6 +75,7 @@ export function OpenRouterCreditsHeader({
   progressFillColor,
   appColors,
 }: OpenRouterCreditsHeaderProps) {
+  const l10n = useL10n();
   const [isWiggling] = useState(false);
 
   if (shouldShowConnectToOpenRouterCTA) {
@@ -109,7 +111,7 @@ export function OpenRouterCreditsHeader({
           },
         }}
       >
-        Connect to AI Image Generators
+        {l10n("AiImageEditor.Welcome.Connect", "Connect to AI Image Generators")}
       </Button>
     );
   }
@@ -123,7 +125,10 @@ export function OpenRouterCreditsHeader({
             href={OPENROUTER_ACCOUNT_URL}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="OpenRouter spending-limit warning"
+            aria-label={l10n(
+              "AiImageEditor.OpenRouter.SpendingLimitWarningLabel",
+              "OpenRouter spending-limit warning",
+            )}
             onClick={(e) => {
               if (!onOpenExternalUrl) return;
               e.preventDefault();
@@ -175,7 +180,7 @@ export function OpenRouterCreditsHeader({
             display: "block",
           }}
         >
-          AI image generator credits
+          {l10n("AiImageEditor.Credits.Label", "AI image generator credits")}
         </Typography>
 
         <Stack spacing={0.75} alignItems="flex-end" mt={0.5}>

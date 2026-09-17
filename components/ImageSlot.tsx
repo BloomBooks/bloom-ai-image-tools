@@ -6,6 +6,7 @@ import { MagnifiableImage } from "./MagnifiableImage";
 import { Icon, Icons } from "./Icons";
 import { theme } from "../themes";
 import { ImageSlotHeader } from "./ImageSlotHeader";
+import { useL10n } from "../lib/localization";
 import { ImageSlotActions } from "./ImageSlotActions";
 import { ImageSlotOverlayStar } from "./ImageSlotOverlayStar";
 import { ImageSlotRolePill } from "./ImageSlotRolePill";
@@ -257,7 +258,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   variant = "panel",
   rolePill,
   renderEmptyState,
-  dropLabel = "Drop image",
+  dropLabel,
   dataTestId,
   headerActions: customHeaderActions,
   overlayContent,
@@ -267,6 +268,8 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
   starState,
   isAnyDndDragging: isAnyDndDraggingProp = false,
 }) => {
+  const l10n = useL10n();
+  const resolvedDropLabel = dropLabel ?? l10n("AiImageEditor.Slot.DropImage", "Drop image");
   const isAnyDndDragging = isAnyDndDraggingProp;
   const ACTION_ICON_SIZE = 16;
   const ACTION_BUTTON_PADDING = 6;
@@ -675,7 +678,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     >
       <img
         src={imagePlaceholder}
-        alt="Placeholder"
+        alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
         style={{ width: 48, height: 48, opacity: 0.3 }}
       />
       {/* Drop/upload helper text intentionally omitted for cleaner UI */}
@@ -862,7 +865,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 >
                   <MagnifiableImage
                     src={image.imageData}
-                    alt={label || "Reference"}
+                    alt={label || l10n("AiImageEditor.Slot.ReferenceAlt", "Reference")}
                     enableLens={isMagnifierPinned}
                     // For book-image strips that can hold an entire book's worth of
                     // images, let the browser defer fetching off-screen thumbnails
@@ -895,7 +898,10 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 // placeholder rather than a broken-image icon.
                 <div
                   data-testid="image-slot-unavailable"
-                  title="Image not loaded — reconnect history folder to view"
+                  title={l10n(
+                    "AiImageEditor.Slot.ImageNotLoaded",
+                    "Image not loaded — reconnect history folder to view",
+                  )}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -954,7 +960,11 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
 
             {rolePill ? <ImageSlotRolePill pill={rolePill} /> : null}
 
-            <ImageSlotDropOverlay isVisible={isDragOver} label={dropLabel} borderRadius={0} />
+            <ImageSlotDropOverlay
+              isVisible={isDragOver}
+              label={resolvedDropLabel}
+              borderRadius={0}
+            />
 
             <ImageSlotLoadingOverlay
               isVisible={isLoading}

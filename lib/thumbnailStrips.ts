@@ -1,4 +1,5 @@
 import { ImageRecord, ThumbnailStripId, ThumbnailStripsSnapshot } from "../types";
+import { L10nFunc } from "./localization";
 
 export interface ThumbnailStripConfig {
   id: ThumbnailStripId;
@@ -72,6 +73,22 @@ export const THUMBNAIL_STRIP_CONFIGS: Record<ThumbnailStripId, ThumbnailStripCon
     allowReorder: false,
     allowDrop: false,
   },
+};
+
+/**
+ * A strip's name as the user sees it. A label the host overrode is the host's own
+ * text and is shown verbatim; only our own default is looked up for translation.
+ */
+export const stripLabel = (l10n: L10nFunc, config: ThumbnailStripConfig): string =>
+  config.label === THUMBNAIL_STRIP_CONFIGS[config.id].label
+    ? l10n(`AiImageEditor.Strip.${config.id}.Label`, config.label)
+    : config.label;
+
+/** The tip shown in a strip's lower-right corner, translated. */
+export const stripTip = (l10n: L10nFunc, config: ThumbnailStripConfig): string => {
+  const source = STRIP_TIPS[config.id];
+  const english = typeof source === "function" ? source(config) : source;
+  return english ? l10n(`AiImageEditor.Strip.${config.id}.Tip`, english) : english;
 };
 
 export const resolveThumbnailStripConfigs = (

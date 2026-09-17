@@ -4,6 +4,7 @@ import { GenerationProgressState, ImageRecord } from "../types";
 import { getReferenceConstraints } from "../lib/toolHelpers";
 import { ImagePanel, ImagePanelSlot } from "./ImagePanel";
 import { TOOLS } from "./tools/tools-registry";
+import { useL10n } from "../lib/localization";
 import { theme } from "../themes";
 
 const SPLITTER_STORAGE_KEY = "workspacePanelSplitters";
@@ -188,18 +189,22 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   isInspectorPinned = false,
   onUnpinInspector,
 }) => {
+  const l10n = useL10n();
   const tool = activeToolId ? TOOLS.find((t) => t.id === activeToolId) : null;
   const referenceMode = tool?.referenceImages ?? "0";
   const { max: maxReferenceCount } = getReferenceConstraints(referenceMode);
   const showReferencePanel = maxReferenceCount > 0;
   const showTargetPanel = tool ? tool.editImage !== false : true;
-  const derivedResultLabel = tool?.id === "break_into_pieces" ? "Pieces" : "Result";
+  const derivedResultLabel =
+    tool?.id === "break_into_pieces"
+      ? l10n("AiImageEditor.Panel.Pieces", "Pieces")
+      : l10n("AiImageEditor.Panel.Result", "Result");
   const targetPanelLabel =
     tool?.id === "ethnicity"
-      ? "Character grid or scene to change"
+      ? l10n("AiImageEditor.Panel.CharacterGridOrScene", "Character grid or scene to change")
       : tool?.id === "break_comic_into_images"
-        ? "Original Comic"
-        : "Image to Edit";
+        ? l10n("AiImageEditor.Panel.OriginalComic", "Original Comic")
+        : l10n("AiImageEditor.Panel.ImageToEdit", "Image to Edit");
   const needsEditImage =
     activeToolId !== null && showTargetPanel && !targetImage && !batchSelectionMessage;
   const canAddReferenceSlot =
@@ -223,8 +228,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             dndDragId: `panelItem:reference:${i}:${image.id}`,
             dataTestId: `reference-slot-${i}`,
             uploadInputTestId: `reference-upload-input-${i}`,
-            dropLabel: "Drop to add",
-            actionLabels: { remove: "Remove reference" },
+            dropLabel: l10n("AiImageEditor.Slot.DropToAdd", "Drop to add"),
+            actionLabels: {
+              remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
+            },
           };
         }),
         ...(canAddReferenceSlot
@@ -236,8 +243,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 dndDropId: `panel:reference:${referenceImages.length}`,
                 dataTestId: `reference-slot-${referenceImages.length}`,
                 uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
-                dropLabel: "Drop to add",
-                actionLabels: { remove: "Remove reference" },
+                dropLabel: l10n("AiImageEditor.Slot.DropToAdd", "Drop to add"),
+                actionLabels: {
+                  remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
+                },
               },
             ]
           : []),
@@ -245,8 +254,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
 
   const referenceLabel =
     tool?.id === "extract_cast_of_characters"
-      ? "Images from the book that show all the characters"
-      : "Characters and other Reference Images";
+      ? l10n(
+          "AiImageEditor.Panel.ImagesShowingCharacters",
+          "Images from the book that show all the characters",
+        )
+      : l10n("AiImageEditor.Panel.ReferenceImages", "Characters and other Reference Images");
   const resultSlots: ImagePanelSlot[] = resultImages.map((image, index) => ({
     image,
     slotIndex: index,
@@ -286,7 +298,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
           },
         }}
       >
-        {currentResultActionLabel ?? "Use this"}
+        {currentResultActionLabel ?? l10n("AiImageEditor.Result.UseThis", "Use this")}
       </Button>
     ) : undefined;
   const resultCancelButton = onCancel ? (
@@ -313,7 +325,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         },
       }}
     >
-      {cancelActionLabel ?? "Cancel"}
+      {cancelActionLabel ?? l10n("Common.Cancel", "Cancel")}
     </Button>
   ) : undefined;
   // The result actions ("Use this Image" then "Cancel") are pinned to the
@@ -343,7 +355,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const followLatestChip =
     isBatchRunning && isInspectorPinned ? (
       <Chip
-        label="Follow latest"
+        label={l10n("AiImageEditor.Result.FollowLatest", "Follow latest")}
         data-testid="batch-follow-latest-chip"
         onClick={onUnpinInspector}
         size="small"
@@ -584,7 +596,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             {showTargetPanel && showReferencePanel && (
               <Splitter
                 orientation="horizontal"
-                ariaLabel="Resize Image to Edit and Reference panels"
+                ariaLabel={l10n(
+                  "AiImageEditor.Splitter.EditAndReference",
+                  "Resize Image to Edit and Reference panels",
+                )}
                 onPointerDown={handleVerticalPointerDown}
                 onKeyDown={handleVerticalKeyDown}
               />
@@ -618,7 +633,10 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         {showLeftColumn && (
           <Splitter
             orientation="vertical"
-            ariaLabel="Resize Image to Edit and Result panels"
+            ariaLabel={l10n(
+              "AiImageEditor.Splitter.EditAndResult",
+              "Resize Image to Edit and Result panels",
+            )}
             onPointerDown={handleHorizontalPointerDown}
             onKeyDown={handleHorizontalKeyDown}
           />
@@ -650,7 +668,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             <ImagePanel
               image={rightImage}
               isAnyDndDragging={isAnyDndDragging}
-              label="Result"
+              label={l10n("AiImageEditor.Panel.Result", "Result")}
               panelTestId="result-panel"
               onUpload={onUploadRight}
               isDropZone={true}

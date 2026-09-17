@@ -5,6 +5,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import { theme } from "../themes";
 import { Icon, Icons, PasteIcon } from "./Icons";
+import { useL10n } from "../lib/localization";
 
 const MENU_ICON_SIZE = 16;
 
@@ -29,6 +30,7 @@ export const ImageSlotContextMenu: React.FC<ImageSlotContextMenuProps> = ({
   canSetThumbnail = false,
   onSetThumbnail,
 }) => {
+  const l10n = useL10n();
   const runAndClose = (action: () => void) => () => {
     onClose();
     action();
@@ -79,7 +81,9 @@ export const ImageSlotContextMenu: React.FC<ImageSlotContextMenuProps> = ({
         <ListItemIcon sx={iconSx}>
           <Icon path={Icons.Copy} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Copy</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("Common.Copy", "Copy")}
+        </ListItemText>
       </MenuItem>
 
       <MenuItem
@@ -91,7 +95,9 @@ export const ImageSlotContextMenu: React.FC<ImageSlotContextMenuProps> = ({
         <ListItemIcon sx={iconSx}>
           <PasteIcon width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
         </ListItemIcon>
-        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>Paste</ListItemText>
+        <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
+          {l10n("EditTab.PasteButton", "Paste")}
+        </ListItemText>
       </MenuItem>
 
       {canSetThumbnail && onSetThumbnail ? (
@@ -104,7 +110,7 @@ export const ImageSlotContextMenu: React.FC<ImageSlotContextMenuProps> = ({
             <Icon path={Icons.Save} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
           </ListItemIcon>
           <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
-            Set thumbnail
+            {l10n("AiImageEditor.ContextMenu.SetThumbnail", "Set thumbnail")}
           </ListItemText>
         </MenuItem>
       ) : null}

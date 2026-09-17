@@ -33,23 +33,30 @@ import {
 import { ImageToolsWorkspace } from "./ImageToolsWorkspace";
 import { setHostDeveloperToolsEnabled } from "../lib/localModels";
 import { theme } from "../themes";
+import { LocalizationProvider, useL10n } from "../lib/localization";
 
 interface BloomHostedImageEditorProps {
   bridge: IBloomHostBridge;
   onCommitComplete?: (replacements: IBloomCommitReplacement[]) => void;
   onCancelComplete?: () => void;
+  /** Passed through to the editor, and used for this wrapper's own strings. */
+  getLocalizations?: (strings: Record<string, string>) => Promise<Record<string, string>>;
 }
 
-export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
+const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   bridge,
   onCommitComplete,
   onCancelComplete,
+  getLocalizations,
 }) => {
+  const l10n = useL10n();
   const [initPayload, setInitPayload] = React.useState<IBloomHostInitPayload | null>(null);
   const [replacementMap, setReplacementMap] = React.useState<Record<string, ImageRecord | null>>(
     {},
   );
-  const [status, setStatus] = React.useState<string>("Waiting for host init...");
+  const [status, setStatus] = React.useState<string>(() =>
+    l10n("AiImageEditor.Host.WaitingForInit", "Waiting for host init..."),
+  );
   const lastInitSignatureRef = React.useRef<string | null>(null);
   // Prevent bridge.ready() from firing more than once across React StrictMode
   // double-invocations of the effect, which would cause Bloom to send multiple
@@ -194,9 +201,13 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
         }
         await bridge.commit([replacement]);
         onCommitComplete?.([replacement]);
-        setStatus("Committed 1 replacement.");
+        setStatus(l10n("AiImageEditor.Host.CommittedOne", "Committed 1 replacement."));
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Commit failed.");
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : l10n("AiImageEditor.Host.CommitFailed", "Commit failed."),
+        );
       }
     },
     [bridge, buildReplacement, onCommitComplete],
@@ -205,23 +216,34 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
   const handleCommitAll = React.useCallback(async () => {
     const count = collectAssignedEntries().length;
     if (!count) {
-      setStatus("No book image replacements are assigned yet.");
+      setStatus(
+        l10n(
+          "AiImageEditor.Host.NoReplacementsAssigned",
+          "No book image replacements are assigned yet.",
+        ),
+      );
       return;
     }
 
-    setStatus(`Committing ${count} replacement${count === 1 ? "" : "s"}...`);
+    setStatus(
+      l10n("AiImageEditor.Host.Committing", "Committing {0} replacements...", String(count)),
+    );
     try {
       await handleCommit();
-      setStatus(`Committed ${count} replacement${count === 1 ? "" : "s"}.`);
+      setStatus(l10n("AiImageEditor.Host.Committed", "Committed {0} replacements.", String(count)));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Commit failed.");
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : l10n("AiImageEditor.Host.CommitFailed", "Commit failed."),
+      );
     }
   }, [collectAssignedEntries, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
     bridge.cancel();
     onCancelComplete?.();
-    setStatus("Cancelled.");
+    setStatus(l10n("AiImageEditor.Host.Cancelled", "Cancelled."));
   }, [bridge, onCancelComplete]);
 
   if (!initPayload || !persistence) {
@@ -285,20 +307,24 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
           sessionToken: initPayload.sessionToken,
           openExternalUrl: (url) => bridge.openExternalUrl(url),
         }}
+        getLocalizations={getLocalizations}
         onReplacementsChange={setReplacementMap}
         onCommitCurrentResult={(item) => void handleCommitCurrentResult(item)}
-        currentResultActionLabel="Use this Image"
+        currentResultActionLabel={l10n("AiImageEditor.Result.UseThisImage", "Use this Image")}
         currentResultActionTestId="bloom-host-commit-current-result"
         onCancel={handleCancel}
-        cancelActionLabel="Cancel"
+        cancelActionLabel={l10n("Common.Cancel", "Cancel")}
         cancelActionTestId="bloom-host-cancel"
         onCommitBookImages={() => void handleCommitAll()}
-        bookImagesActionLabel="Replace"
-        bookImagesActionTip="Replace images in your book with these images"
+        bookImagesActionLabel={l10n("Common.Replace", "Replace")}
+        bookImagesActionTip={l10n(
+          "AiImageEditor.BookImages.ReplaceTip",
+          "Replace images in your book with these images",
+        )}
         bookImagesActionTestId="bloom-host-commit-book-images"
         thumbnailStripConfigOverrides={{
           bookImages: {
-            label: "Book Images",
+            label: l10n("AiImageEditor.Strip.bookImages.Label", "Book Images"),
             allowDrop: false,
             allowRemove: false,
             allowReorder: false,
@@ -308,3 +334,9 @@ export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = ({
     </Box>
   );
 };
+
+export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = (props) => (
+  <LocalizationProvider getLocalizations={props.getLocalizations}>
+    <BloomHostedImageEditorInner {...props} />
+  </LocalizationProvider>
+);

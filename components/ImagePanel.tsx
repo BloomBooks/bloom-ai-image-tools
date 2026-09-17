@@ -6,6 +6,7 @@ import imagePlaceholder from "../assets/image_placeholder.svg";
 import { GenerationProgressState, ImageRecord } from "../types";
 import { theme } from "../themes";
 import { ImageSlot, ImageSlotControls, ImageSlotProps } from "./ImageSlot";
+import { useL10n } from "../lib/localization";
 import { ImageSlotHeader } from "./ImageSlotHeader";
 
 // "Marching ants": four dashed edges built from repeating gradients whose
@@ -85,6 +86,7 @@ const isGridPanel = (props: ImagePanelProps): props is GridImagePanelProps => {
 };
 
 export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
+  const l10n = useL10n();
   if (isGridPanel(props)) {
     const {
       label,
@@ -194,12 +196,14 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                       controls={slotControls}
                       variant="tile"
                       rolePill={slot.rolePill}
-                      dropLabel={slot.dropLabel ?? "Drop to add"}
+                      dropLabel={
+                        slot.dropLabel ?? l10n("AiImageEditor.Slot.DropToAdd", "Drop to add")
+                      }
                       dataTestId={slot.dataTestId}
                       uploadInputTestId={slot.uploadInputTestId}
                       actionLabels={
                         slot.actionLabels ?? {
-                          remove: "Remove reference",
+                          remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
                         }
                       }
                       // dnd-kit handles internal drags; keep native drag only when explicit.
@@ -303,7 +307,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           <Box
             component="img"
             src={imagePlaceholder}
-            alt="Placeholder"
+            alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
             sx={{
               maxHeight: "60%",
               maxWidth: "220px",
@@ -329,7 +333,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                 pointerEvents: "none",
               }}
             >
-              Drop or paste an image to edit
+              {l10n("AiImageEditor.Slot.DropOrPasteToEdit", "Drop or paste an image to edit")}
             </Box>
           )}
         </Box>
@@ -342,14 +346,14 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           <Box
             component="img"
             src={imagePlaceholder}
-            alt="Placeholder"
+            alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
             sx={{ width: 48, height: 48, mb: 1.5, mx: "auto", opacity: 0.3 }}
           />
           <Box component="p" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>
-            Panel Disabled
+            {l10n("AiImageEditor.Slot.PanelDisabled", "Panel Disabled")}
           </Box>
           <Box component="p" sx={{ fontSize: "0.75rem", opacity: 0.7, mt: 0.5 }}>
-            Creating new image from scratch
+            {l10n("AiImageEditor.Slot.CreatingFromScratch", "Creating new image from scratch")}
           </Box>
         </Box>
       );
@@ -358,7 +362,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
     return (
       <Box sx={{ textAlign: "center", p: 3 }}>
         <Box component="p" sx={{ fontSize: "0.85rem", opacity: 0.6, fontWeight: 600 }}>
-          Empty
+          {l10n("AiImageEditor.Slot.Empty", "Empty")}
         </Box>
       </Box>
     );
@@ -386,7 +390,9 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         isLoading={isLoading}
         loadingProgress={loadingProgress}
         uploadInputTestId={uploadInputTestId}
-        dropLabel={isDropZone ? "Drop to set as Source" : ""}
+        dropLabel={
+          isDropZone ? l10n("AiImageEditor.Slot.DropToSetAsSource", "Drop to set as Source") : ""
+        }
         controls={{
           upload: showUploadControls,
           paste: showUploadControls,
@@ -398,7 +404,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         actionLabels={
           onClear
             ? {
-                remove: "Clear Image",
+                remove: l10n("AiImageEditor.Slot.ClearImage", "Clear Image"),
               }
             : undefined
         }

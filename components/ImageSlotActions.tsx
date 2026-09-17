@@ -5,6 +5,7 @@ import { ImageRecord, ImageSlotActionKey } from "../types";
 import { theme } from "../themes";
 import { Icon, Icons, MoreDotsIcon, PasteIcon } from "./Icons";
 import { ImageInfoPanel } from "./ImageInfoPanel";
+import { useL10n } from "../lib/localization";
 
 type SlotControls = {
   upload: boolean;
@@ -101,6 +102,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
       onToggleMagnifier,
     } = props;
 
+    const l10n = useL10n();
     const moreButtonRef = React.useRef<HTMLButtonElement | null>(null);
     const closeTimeoutRef = React.useRef<number | null>(null);
     const moreDelayTimeoutRef = React.useRef<number | null>(null);
@@ -180,11 +182,11 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
     }, [clearMoreDelayTimeout, clearCloseTimeout]);
 
     const defaultActionLabels: Record<keyof SlotControls, string> = {
-      upload: "Upload",
-      paste: "Paste from Clipboard",
-      copy: "Copy to Clipboard",
-      download: "Download",
-      remove: "Remove image",
+      upload: l10n("AiImageEditor.SlotAction.Upload", "Upload"),
+      paste: l10n("AiImageEditor.SlotAction.PasteFromClipboard", "Paste from Clipboard"),
+      copy: l10n("AiImageEditor.SlotAction.CopyToClipboard", "Copy to Clipboard"),
+      download: l10n("AiImageEditor.SlotAction.Download", "Download"),
+      remove: l10n("AiImageEditor.SlotAction.RemoveImage", "Remove image"),
     };
 
     const coreActionsRaw = [
@@ -234,7 +236,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
         ? {
             key: "info",
             icon: Icons.Info,
-            title: "Image info",
+            title: l10n("AiImageEditor.InfoDialog.Title", "Image info"),
             onClick: onOpenInfo,
             testId: "image-info-button",
           }
@@ -252,7 +254,9 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
       ? insertBeforeRemove(orderedActions, {
           key: "magnifier",
           icon: Icons.Magnifier,
-          title: isMagnifierPinned ? "Disable magnifier" : "Enable magnifier",
+          title: isMagnifierPinned
+            ? l10n("AiImageEditor.SlotAction.DisableMagnifier", "Disable magnifier")
+            : l10n("AiImageEditor.SlotAction.EnableMagnifier", "Enable magnifier"),
           onClick: onToggleMagnifier,
           ariaPressed: isMagnifierPinned,
           isActive: isMagnifierPinned,
@@ -528,8 +532,8 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
                     }}
                     type="button"
                     tabIndex={showMoreTrigger ? 0 : -1}
-                    aria-label="More actions"
-                    title="More actions"
+                    aria-label={l10n("AiImageEditor.SlotAction.MoreActions", "More actions")}
+                    title={l10n("AiImageEditor.SlotAction.MoreActions", "More actions")}
                     onClick={(event) => {
                       event.stopPropagation();
                       clearCloseTimeout();

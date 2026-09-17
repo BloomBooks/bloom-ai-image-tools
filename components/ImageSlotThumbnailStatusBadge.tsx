@@ -1,5 +1,6 @@
 import React from "react";
 import { theme } from "../themes";
+import { useL10n } from "../lib/localization";
 
 export type ThumbnailStatus =
   | "idle"
@@ -17,6 +18,7 @@ export interface ImageSlotThumbnailStatusBadgeProps {
 export const ImageSlotThumbnailStatusBadge: React.FC<ImageSlotThumbnailStatusBadgeProps> = ({
   status,
 }) => {
+  const l10n = useL10n();
   if (status === "idle") return null;
 
   return (
@@ -40,12 +42,12 @@ export const ImageSlotThumbnailStatusBadge: React.FC<ImageSlotThumbnailStatusBad
         color: "white",
       }}
     >
-      {status === "saving" && "Saving..."}
-      {status === "copying" && "Copying..."}
-      {status === "success" && "Thumbnail saved!"}
-      {status === "error" && "Failed to save"}
-      {status === "copied" && "Copied!"}
-      {status === "copyError" && "Copy failed"}
+      {status === "saving" && l10n("AiImageEditor.Status.Saving", "Saving...")}
+      {status === "copying" && l10n("AiImageEditor.Status.Copying", "Copying...")}
+      {status === "success" && l10n("AiImageEditor.Status.ThumbnailSaved", "Thumbnail saved!")}
+      {status === "error" && l10n("AiImageEditor.Status.FailedToSave", "Failed to save")}
+      {status === "copied" && l10n("AiImageEditor.Status.Copied", "Copied!")}
+      {status === "copyError" && l10n("AiImageEditor.Status.CopyFailed", "Copy failed")}
     </div>
   );
 };

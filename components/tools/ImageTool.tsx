@@ -78,6 +78,15 @@ import { ToolModelPicker } from "./ToolModelPicker";
 import { formatCost } from "../../lib/formatters";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
 import { kWarningColor } from "../materialUITheme";
+import { useL10n } from "../../lib/localization";
+import {
+  toolActionButtonLabel,
+  toolDescription,
+  toolOptionLabel,
+  toolParameterLabel,
+  toolParameterPlaceholder,
+  toolTitle,
+} from "./toolStrings";
 
 // Must match the catalog id in data/models-registry.json5 (the stable,
 // non-preview key now that OpenRouter has retired the "-preview" key). Keep in
@@ -489,6 +498,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   batchTargets,
   batchRun = null,
 }) => {
+  const l10n = useL10n();
   const muiTheme = useTheme();
   const referenceImageCount = referenceImageResolutions.length;
   const selectionTimingRef = useRef<string | null>(null);
@@ -708,7 +718,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
         return (
           <Stack key={param.name} spacing={1} sx={{ width: "100%" }}>
-            <ControlHeading>{param.label}</ControlHeading>
+            <ControlHeading>{toolParameterLabel(l10n, tool, param)}</ControlHeading>
             <LazyArtStylePicker
               styles={stylesForPicker}
               value={pickerValue}
@@ -730,8 +740,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           <ParamTextInput
             key={param.name}
             name={param.name}
-            label={param.label}
-            placeholder={param.placeholder}
+            label={toolParameterLabel(l10n, tool, param)}
+            placeholder={toolParameterPlaceholder(l10n, tool, param)}
             value={value}
             disabled={isProcessing}
             multiline
@@ -773,7 +783,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 }
               />
             }
-            label={param.label}
+            label={toolParameterLabel(l10n, tool, param)}
             sx={{ color: muiTheme.palette.text.primary, ml: 0 }}
           />
         );
@@ -823,9 +833,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         if (imageUsable) {
           shapeOptions.push({
             value: MATCH_IMAGE_ASPECT_RATIO,
-            label: "Match Image",
+            label: l10n("AiImageEditor.Shape.MatchImage", "Match Image"),
             tooltip: targetImageResolution
-              ? `This image is ${targetImageResolution.width} x ${targetImageResolution.height}`
+              ? l10n(
+                  "AiImageEditor.Shape.MatchImageTooltip",
+                  "This image is {0} x {1}",
+                  String(targetImageResolution.width),
+                  String(targetImageResolution.height),
+                )
               : undefined,
             ...planShape(MATCH_IMAGE_ASPECT_RATIO),
           });
@@ -834,15 +849,23 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           const planned = planShape(MATCH_CONTAINER_ASPECT_RATIO);
           shapeOptions.push({
             value: MATCH_CONTAINER_ASPECT_RATIO,
-            label: "Match Container",
+            label: l10n("AiImageEditor.Shape.MatchContainer", "Match Container"),
             // Reshaping an existing picture to its container changes the
             // composition, so the row says so.
-            caption: [planned.caption, imageUsable ? "will reframe" : null]
+            caption: [
+              planned.caption,
+              imageUsable ? l10n("AiImageEditor.Shape.WillReframe", "will reframe") : null,
+            ]
               .filter(Boolean)
               .join(", "),
             swatchRatio: planned.swatchRatio,
             tooltip: [
-              `Image container on the page is ${container!.width} x ${container!.height}`,
+              l10n(
+                "AiImageEditor.Shape.MatchContainerTooltip",
+                "Image container on the page is {0} x {1}",
+                String(container!.width),
+                String(container!.height),
+              ),
               container!.memo?.trim(),
             ]
               .filter(Boolean)
@@ -871,7 +894,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         return (
           <OptionSelect
             key={param.name}
-            label={param.label}
+            label={toolParameterLabel(l10n, tool, param)}
             value={shapeValue}
             onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
             disabled={isProcessing}
@@ -937,7 +960,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             ? [
                 {
                   token: CONTAINER_SIZE_TOKEN,
-                  label: "Match Container",
+                  label: l10n("AiImageEditor.Shape.MatchContainer", "Match Container"),
                   pixels: containerPixels ? formatPixelSize(containerPixels) : undefined,
                 },
               ]
@@ -960,7 +983,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         return (
           <OptionSelect
             key={param.name}
-            label={param.label}
+            label={toolParameterLabel(l10n, tool, param)}
             value={sizeValue}
             onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
             disabled={isProcessing}
@@ -995,7 +1018,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         return (
           <OptionSelect
             key={param.name}
-            label={param.label}
+            label={toolParameterLabel(l10n, tool, param)}
             value={selectedToken}
             onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
             // With nothing to upscale the labels carry no dimensions, so there
@@ -1017,7 +1040,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           <TextField
             key={param.name}
             select
-            label={param.label}
+            label={toolParameterLabel(l10n, tool, param)}
             value={value}
             onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
             name={param.name}
@@ -1032,7 +1055,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           >
             {param.options?.map((option) => (
               <MenuItem key={option} value={option}>
-                {option}
+                {toolOptionLabel(l10n, tool, param, option)}
               </MenuItem>
             ))}
           </TextField>
@@ -1043,8 +1066,8 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         <ParamTextInput
           key={param.name}
           name={param.name}
-          label={param.label}
-          placeholder={param.placeholder}
+          label={toolParameterLabel(l10n, tool, param)}
+          placeholder={toolParameterPlaceholder(l10n, tool, param)}
           value={value}
           disabled={isProcessing}
           inputTestId={inputTestId}
@@ -1053,6 +1076,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       );
     },
     [
+      l10n,
       artStyleOptionsByParam,
       isProcessing,
       muiTheme.palette.text.secondary,
@@ -1139,15 +1163,18 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       tool.id === "game_theme_generator" &&
       !(paramsByTool[tool.id]?.description?.trim() || referenceImageCount > 0);
     const submitDisabledReason = blockedByPlaygroundMode
-      ? "Not available in look-around mode"
+      ? l10n("AiImageEditor.Run.NotAvailableInLookAround", "Not available in look-around mode")
       : needsTarget
-        ? "Add an image to edit"
+        ? l10n("AiImageEditor.Run.AddAnImageToEdit", "Add an image to edit")
         : needsReference
-          ? "Add reference image"
+          ? l10n("AiImageEditor.Run.AddReferenceImage", "Add reference image")
           : requiresDescriptionOrReference
-            ? "Add a description or reference image"
+            ? l10n(
+                "AiImageEditor.Run.AddDescriptionOrReference",
+                "Add a description or reference image",
+              )
             : missingRequired
-              ? "Fill in required fields"
+              ? l10n("AiImageEditor.Run.FillInRequiredFields", "Fill in required fields")
               : undefined;
     const isSubmitDisabled =
       isProcessing ||
@@ -1160,9 +1187,19 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
     // "Make Coloring Page for 7 Images" when the tool has its own verb, else
     // the generic "Apply Changes to N Images" (see Agreed UX / WP3 notes).
-    const batchButtonLabel = tool.actionButtonLabel
-      ? `${tool.actionButtonLabel} for ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`
-      : `Apply Changes to ${batchTickedCount} Image${batchTickedCount === 1 ? "" : "s"}`;
+    const batchActionLabel = toolActionButtonLabel(l10n, tool);
+    const batchButtonLabel = batchActionLabel
+      ? l10n(
+          "AiImageEditor.Run.BatchToolButton",
+          "{0} for {1} Images",
+          batchActionLabel,
+          String(batchTickedCount),
+        )
+      : l10n(
+          "AiImageEditor.Run.BatchApplyChanges",
+          "Apply Changes to {0} Images",
+          String(batchTickedCount),
+        );
     // Batch: each ticked image priced at its own size, then summed. A tick with
     // no target details yet (the array is shorter than the count) is priced as
     // an image of unknown size. Single run: the one image to edit, if any.
@@ -1304,11 +1341,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: labelColor,
               }}
             >
-              {tool.title}
+              {toolTitle(l10n, tool)}
             </Typography>
             {isSelected && tool.description && (
               <Typography variant="body2" sx={{ mt: 0.5, color: theme.colors.textSecondary }}>
-                {tool.description}
+                {toolDescription(l10n, tool)}
               </Typography>
             )}
           </Box>
@@ -1368,7 +1405,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                       data-testid="batch-progress-label"
                       sx={{ textAlign: "center", color: kWarningColor }}
                     >
-                      Processed {batchRun.completed} of {batchRun.total}
+                      {l10n(
+                        "AiImageEditor.Run.BatchProgress",
+                        "Processed {0} of {1}",
+                        String(batchRun.completed),
+                        String(batchRun.total),
+                      )}
                     </Typography>
                     <LinearProgress
                       variant="determinate"
@@ -1400,7 +1442,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         },
                       }}
                     >
-                      Cancel
+                      {l10n("Common.Cancel", "Cancel")}
                     </Button>
                   </Stack>
                 ) : (
@@ -1412,7 +1454,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         data-testid="batch-cost-estimate"
                         sx={{ textAlign: "center", fontSize: "0.85rem" }}
                       >
-                        Estimated cost: {formatCost(estimatedBatchCost)}
+                        {l10n(
+                          "AiImageEditor.Run.EstimatedCost",
+                          "Estimated cost: {0}",
+                          formatCost(estimatedBatchCost),
+                        )}
                       </FormHelperText>
                     )}
                     {!isBatchModeForTool && !isProcessing && singleRunCostUsd != null && (
@@ -1420,7 +1466,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         data-testid="run-cost-estimate"
                         sx={{ textAlign: "center", fontSize: "0.85rem" }}
                       >
-                        Estimate {formatCost(singleRunCostUsd)}
+                        {l10n(
+                          "AiImageEditor.Run.Estimate",
+                          "Estimate {0}",
+                          formatCost(singleRunCostUsd),
+                        )}
                       </FormHelperText>
                     )}
                     <Button
@@ -1481,15 +1531,17 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                       {isProcessing ? (
                         <>
                           <CircularProgress size={18} color="inherit" />
-                          Click to Cancel
+                          {l10n("AiImageEditor.Run.ClickToCancel", "Click to Cancel")}
                         </>
                       ) : isBatchModeForTool ? (
                         <span>{batchButtonLabel}</span>
                       ) : (
                         <>
                           <span>
-                            {tool.actionButtonLabel ||
-                              (tool.id === "generate_image" ? "Generate Image" : "Apply Changes")}
+                            {toolActionButtonLabel(l10n, tool) ||
+                              (tool.id === "generate_image"
+                                ? l10n("AiImageEditor.Run.GenerateImage", "Generate Image")
+                                : l10n("AiImageEditor.Run.ApplyChanges", "Apply Changes"))}
                           </span>
                           <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                         </>
@@ -1558,7 +1610,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Enhance")}
+              {renderSectionHeader(l10n("AiImageEditor.Section.Enhance", "Enhance"))}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",
@@ -1585,7 +1637,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Localize")}
+              {renderSectionHeader(l10n("AiImageEditor.Section.Localize", "Localize"))}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",
@@ -1612,7 +1664,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Text")}
+              {renderSectionHeader(l10n("AiImageEditor.Section.Text", "Text"))}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",
@@ -1639,7 +1691,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("Games")}
+              {renderSectionHeader(l10n("AiImageEditor.Section.Games", "Games"))}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",
@@ -1666,7 +1718,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: alpha(muiTheme.palette.text.secondary, 0.9),
               }}
             >
-              {renderSectionHeader("More")}
+              {renderSectionHeader(l10n("AiImageEditor.Section.More", "More"))}
               <ExpandMoreIcon
                 sx={{
                   transition: "transform 0.2s ease",

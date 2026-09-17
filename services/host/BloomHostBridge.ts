@@ -200,6 +200,11 @@ export interface IBloomHostControl {
    *  lifted out of their book: a prompt can contain arbitrary content. Counts, enum choices,
    *  durations, costs and model ids only. */
   trackEvent: (event: string, properties?: Record<string, string | number | boolean>) => void;
+  /** Translate the editor's whole string table in one round-trip: takes every localization
+   *  ID with its English default and returns what the host has for the current UI language.
+   *  An ID the host does not know is left out and the editor shows the English, so a host
+   *  with no translations can return the table it was given. */
+  getLocalizations: (strings: Record<string, string>) => Promise<Record<string, string>>;
 }
 
 /** File store for the book's .ai-image-editor/ folder (HTTP-backed in the iframe
@@ -490,6 +495,30 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
         payload: { event, properties },
       });
     },
+    async getLocalizations(strings) {
+      // Bloom's own i18n endpoint, the one Bloom's React code already uses. httpBase is
+      // Bloom's API root plus this feature's segment, so i18n is its sibling. It takes
+      // form-encoded id=english pairs and answers with a JSON id->translation map.
+      // Anything short of an answer leaves the editor in English, which is a working
+      // editor, so nothing here is worth failing over.
+      if (!httpBase) {
+        return strings;
+      }
+      try {
+        const body = new URLSearchParams();
+        for (const [id, english] of Object.entries(strings)) {
+          body.append(id, english);
+        }
+        const url = new URL("../i18n/loadStrings", `${httpBase}/`).toString();
+        const response = await fetch(url, { method: "POST", body });
+        if (!response.ok) {
+          return strings;
+        }
+        return (await response.json()) as Record<string, string>;
+      } catch {
+        return strings;
+      }
+    },
     getFileUrl(name) {
       if (!httpBase || !sessionToken) {
         return null;
@@ -617,6 +646,10 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
       // No analytics service in standalone/harness mode; log it so a developer can see
       // exactly what a real host would have been sent.
       console.info(`[BloomHarness] analytics: ${event}`, properties);
+    },
+    async getLocalizations(strings) {
+      // No Bloom to ask in standalone/harness mode: the English defaults stand.
+      return strings;
     },
     getFileUrl(name) {
       const existing = objectUrlByName.get(name);

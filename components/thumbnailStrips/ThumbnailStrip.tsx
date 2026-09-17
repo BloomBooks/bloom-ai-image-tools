@@ -6,6 +6,7 @@ import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
 import { theme } from "../../themes";
+import { L10nFunc, useL10n } from "../../lib/localization";
 import { kWarningColor } from "../materialUITheme";
 import { STRIP_ACTIVE_BORDER_COLOR, STRIP_BORDER, STRIP_BORDER_COLOR } from "./stripStyleConstants";
 import { ImageRecord, ThumbnailStripId } from "../../types";
@@ -216,6 +217,7 @@ const CompatibilityBadgeGlyph: React.FC<{
 };
 
 const getReplacementCompatibilityIndicators = (
+  l10n: L10nFunc,
   current: ImageRecord,
   replacement: ImageRecord | null,
 ): CompatibilityIndicator[] => {
@@ -236,7 +238,11 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "aspect",
       level: "warning",
-      message: `Aspect ratio changed from ${formatRatioComparison(current.resolution, replacement.resolution)}.`,
+      message: l10n(
+        "AiImageEditor.Replacement.AspectRatioChanged",
+        "Aspect ratio changed from {0}.",
+        formatRatioComparison(current.resolution, replacement.resolution),
+      ),
     });
   }
 
@@ -244,7 +250,12 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "resolution",
       level: "warning",
-      message: `Resolution decreased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)}.`,
+      message: l10n(
+        "AiImageEditor.Replacement.ResolutionDecreased",
+        "Resolution decreased from {0} to {1}.",
+        formatResolution(current.resolution),
+        formatResolution(replacement.resolution),
+      ),
     });
   }
 
@@ -252,7 +263,12 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "resolution",
       level: "info",
-      message: `Resolution increased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)} while keeping the same aspect ratio (${formatAspectRatio(current.resolution)}).`,
+      message: l10n(
+        "AiImageEditor.Replacement.ResolutionIncreased",
+        "Resolution increased from {0} while keeping the same aspect ratio ({1}).",
+        `${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)}`,
+        formatAspectRatio(current.resolution),
+      ),
     });
   }
 
@@ -269,52 +285,59 @@ const BatchTickToggle: React.FC<{
   checked: boolean;
   disabled: boolean;
   onToggle: (incomingId: string) => void;
-}> = ({ incomingId, checked, disabled, onToggle }) => (
-  <Checkbox
-    checked={checked}
-    disabled={disabled}
-    onClick={(event) => event.stopPropagation()}
-    // The thumb underneath is a dnd-kit draggable whose pointer listeners
-    // would otherwise swallow the press (killing MUI's ripple/active states
-    // and sometimes starting a drag instead of a tick).
-    onPointerDown={(event) => event.stopPropagation()}
-    onMouseDown={(event) => event.stopPropagation()}
-    onChange={() => onToggle(incomingId)}
-    icon={<RadioButtonUncheckedIcon sx={{ fontSize: 20 }} />}
-    checkedIcon={<CheckCircleIcon sx={{ fontSize: 20 }} />}
-    title={disabled ? "This image can't be added to the batch" : "Add to batch"}
-    inputProps={
-      {
-        "data-testid": `batch-tick-${incomingId}`,
-      } as React.InputHTMLAttributes<HTMLInputElement>
-    }
-    sx={{
-      position: "absolute",
-      top: 2,
-      left: 2,
-      zIndex: 3,
-      padding: "3px",
-      color: theme.colors.textMuted,
-      filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
-      // Quiet until pointed at: half-transparent at rest, full strength on
-      // hover; a checked tick stays at full strength since it carries state.
-      opacity: disabled ? 0.15 : 0.5,
-      transition: "color 120ms, background-color 120ms, opacity 120ms",
-      "&:hover": {
-        color: theme.colors.textPrimary,
-        backgroundColor: "rgba(255, 255, 255, 0.08)",
-        opacity: 1,
-      },
-      "&.Mui-checked": {
-        color: theme.colors.accent,
-        opacity: 1,
-      },
-      "&.Mui-disabled": {
+}> = ({ incomingId, checked, disabled, onToggle }) => {
+  const l10n = useL10n();
+  return (
+    <Checkbox
+      checked={checked}
+      disabled={disabled}
+      onClick={(event) => event.stopPropagation()}
+      // The thumb underneath is a dnd-kit draggable whose pointer listeners
+      // would otherwise swallow the press (killing MUI's ripple/active states
+      // and sometimes starting a drag instead of a tick).
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onChange={() => onToggle(incomingId)}
+      icon={<RadioButtonUncheckedIcon sx={{ fontSize: 20 }} />}
+      checkedIcon={<CheckCircleIcon sx={{ fontSize: 20 }} />}
+      title={
+        disabled
+          ? l10n("AiImageEditor.Batch.CannotAdd", "This image can't be added to the batch")
+          : l10n("AiImageEditor.Batch.AddToBatch", "Add to batch")
+      }
+      inputProps={
+        {
+          "data-testid": `batch-tick-${incomingId}`,
+        } as React.InputHTMLAttributes<HTMLInputElement>
+      }
+      sx={{
+        position: "absolute",
+        top: 2,
+        left: 2,
+        zIndex: 3,
+        padding: "3px",
         color: theme.colors.textMuted,
-      },
-    }}
-  />
-);
+        filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
+        // Quiet until pointed at: half-transparent at rest, full strength on
+        // hover; a checked tick stays at full strength since it carries state.
+        opacity: disabled ? 0.15 : 0.5,
+        transition: "color 120ms, background-color 120ms, opacity 120ms",
+        "&:hover": {
+          color: theme.colors.textPrimary,
+          backgroundColor: "rgba(255, 255, 255, 0.08)",
+          opacity: 1,
+        },
+        "&.Mui-checked": {
+          color: theme.colors.accent,
+          opacity: 1,
+        },
+        "&.Mui-disabled": {
+          color: theme.colors.textMuted,
+        },
+      }}
+    />
+  );
+};
 
 // The select-all affordance: the same circle the individual ticks use, drawn
 // three deep so it reads as "all of these". The two circles behind are cut
@@ -378,13 +401,14 @@ const StackedTickIcon: React.FC<{ checked: boolean }> = ({ checked }) => {
 const BatchSelectAllToggle: React.FC<{
   batchSelection: BookImageBatchSelection;
 }> = ({ batchSelection }) => {
+  const l10n = useL10n();
   const { eligibleIds, tickedIds, onToggleAll } = batchSelection;
   const disabled = !onToggleAll || eligibleIds.size === 0;
   const allTicked = eligibleIds.size > 0 && [...eligibleIds].every((id) => tickedIds.has(id));
 
   return (
     <Tooltip
-      title="Select all pages for batch processing"
+      title={l10n("AiImageEditor.Batch.SelectAllPages", "Select all pages for batch processing")}
       placement="right"
       // The tip opens over the first page's own tick circle, so it must not
       // take the pointer: left interactive it swallows the next click.
@@ -462,67 +486,80 @@ const BatchActiveSpinnerOverlay: React.FC = () => (
 
 // Shown over the "Current" slot of a book image whose batch run failed, for
 // the duration of the run (the end-of-run summary message covers it after).
-const BatchFailedBadge: React.FC = () => (
-  <div
-    data-testid="batch-failed-badge"
-    title="This image failed to process; it stays ticked so you can retry"
-    style={{
-      position: "absolute",
-      top: 2,
-      right: 2,
-      zIndex: 4,
-      display: "flex",
-      color: theme.colors.danger,
-      filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
-    }}
-  >
-    <Icon path={Icons.AlertTriangle} width={18} height={18} />
-  </div>
-);
+const BatchFailedBadge: React.FC = () => {
+  const l10n = useL10n();
+  return (
+    <div
+      data-testid="batch-failed-badge"
+      title={l10n(
+        "AiImageEditor.Batch.FailedBadge",
+        "This image failed to process; it stays ticked so you can retry",
+      )}
+      style={{
+        position: "absolute",
+        top: 2,
+        right: 2,
+        zIndex: 4,
+        display: "flex",
+        color: theme.colors.danger,
+        filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.7))",
+      }}
+    >
+      <Icon path={Icons.AlertTriangle} width={18} height={18} />
+    </div>
+  );
+};
 
 const BookImageStripLabels: React.FC<{
   batchSelection?: BookImageBatchSelection;
-}> = ({ batchSelection }) => (
-  <div
-    style={{
-      position: "sticky",
-      left: 0,
-      zIndex: 1,
-      width: BOOK_IMAGE_LABEL_COLUMN_WIDTH,
-      flexShrink: 0,
-      display: "grid",
-      gridTemplateRows: "1fr 1fr",
-      gap: 8,
-      alignSelf: "stretch",
-      paddingTop: 10,
-      paddingBottom: 10,
-      // Solid (not a fade-to-transparent gradient): pairs scroll left and pass
-      // *behind* this sticky column, so it must fully mask them — a translucent
-      // edge would let thumbnails bleed through to the left of the labels.
-      background: theme.colors.surface,
-    }}
-  >
-    {batchSelection && <BatchSelectAllToggle batchSelection={batchSelection} />}
-    {(["Current", "Replacement"] as const).map((label) => (
-      <div
-        key={label}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          color: theme.colors.textMuted,
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          textAlign: "left",
-        }}
-      >
-        {label}
-      </div>
-    ))}
-  </div>
-);
+}> = ({ batchSelection }) => {
+  const l10n = useL10n();
+  const labels = [
+    l10n("AiImageEditor.BookImages.Current", "Current"),
+    l10n("AiImageEditor.BookImages.Replacement", "Replacement"),
+  ];
+  return (
+    <div
+      style={{
+        position: "sticky",
+        left: 0,
+        zIndex: 1,
+        width: BOOK_IMAGE_LABEL_COLUMN_WIDTH,
+        flexShrink: 0,
+        display: "grid",
+        gridTemplateRows: "1fr 1fr",
+        gap: 8,
+        alignSelf: "stretch",
+        paddingTop: 10,
+        paddingBottom: 10,
+        // Solid (not a fade-to-transparent gradient): pairs scroll left and pass
+        // *behind* this sticky column, so it must fully mask them — a translucent
+        // edge would let thumbnails bleed through to the left of the labels.
+        background: theme.colors.surface,
+      }}
+    >
+      {batchSelection && <BatchSelectAllToggle batchSelection={batchSelection} />}
+      {labels.map((label) => (
+        <div
+          key={label}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            color: theme.colors.textMuted,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            textAlign: "left",
+          }}
+        >
+          {label}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const EditableBookImageEmptyPair: React.FC<{
   isAnyDndDragging?: boolean;
@@ -659,6 +696,7 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
   onRename,
   onRemove,
 }) => {
+  const l10n = useL10n();
   if (typeof window !== "undefined") {
     const w = window as Window & { __thumbRenders?: number };
     w.__thumbRenders = (w.__thumbRenders ?? 0) + 1;
@@ -716,7 +754,11 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
         }}
         onRemove={allowRemove ? onRemove : undefined}
         removeIcon={isHistoryStrip ? Icons.Trash : undefined}
-        actionLabels={isHistoryStrip ? { remove: "Delete from history" } : undefined}
+        actionLabels={
+          isHistoryStrip
+            ? { remove: l10n("AiImageEditor.History.DeleteFromHistory", "Delete from history") }
+            : undefined
+        }
         actionDisabledReasons={removeDisabledReason ? { remove: removeDisabledReason } : undefined}
         starState={{
           isStarred: Boolean(item.isStarred) || stripId === "starred",
@@ -729,8 +771,8 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
           data-testid="character-name-input"
           type="text"
           value={draftName}
-          placeholder="Name"
-          aria-label="Character name"
+          placeholder={l10n("AiImageEditor.Characters.NamePlaceholder", "Name")}
+          aria-label={l10n("AiImageEditor.Characters.NameLabel", "Character name")}
           onChange={(event) => setDraftName(event.target.value)}
           onBlur={commitName}
           onPointerDown={(event) => {
@@ -967,6 +1009,7 @@ const BookImagePairThumb: React.FC<{
   onClearReplacement,
   batchSelection,
 }) => {
+  const l10n = useL10n();
   const currentDroppable = useDroppable({
     id: buildBookImageCurrentSlotId(item.id),
     data: {
@@ -1146,7 +1189,7 @@ const BookImagePairThumb: React.FC<{
           }}
         >
           {(() => {
-            const indicators = getReplacementCompatibilityIndicators(item, replacement);
+            const indicators = getReplacementCompatibilityIndicators(l10n, item, replacement);
             if (!indicators.length) {
               return null;
             }
@@ -1241,6 +1284,7 @@ const CharacterStackThumb: React.FC<{
   frontImage: ImageRecord | null;
   onSelect: () => void;
 }> = ({ stripId, imageIds, frontImage, onSelect }) => {
+  const l10n = useL10n();
   const draggable = useDraggable({
     id: buildStripStackId(stripId),
     data: {
@@ -1282,7 +1326,7 @@ const CharacterStackThumb: React.FC<{
     >
       <img
         src={previewSrc}
-        alt="Character stack"
+        alt={l10n("AiImageEditor.Characters.StackAlt", "Character stack")}
         draggable={false}
         style={{
           width: "100%",
@@ -1302,6 +1346,7 @@ const CharacterStackThumb: React.FC<{
 const CharacterPastePlaceholder: React.FC<{
   onAddImage: (file: File) => void;
 }> = ({ onAddImage }) => {
+  const l10n = useL10n();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -1332,7 +1377,7 @@ const CharacterPastePlaceholder: React.FC<{
       data-testid="character-paste-placeholder"
       role="button"
       tabIndex={0}
-      title="Paste an image to add a character"
+      title={l10n("AiImageEditor.Characters.PasteToAdd", "Paste an image to add a character")}
       onClick={() => void handlePasteClick()}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1375,7 +1420,7 @@ const CharacterPastePlaceholder: React.FC<{
         }}
       >
         <PasteIcon width={14} height={14} />
-        Paste
+        {l10n("EditTab.PasteButton", "Paste")}
       </span>
       <input
         type="file"
@@ -1452,6 +1497,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
   batchSelection,
   launchedBookImageId = null,
 }) => {
+  const l10n = useL10n();
   const stripContentRef = React.useRef<HTMLDivElement | null>(null);
   const lastPublishedVisibleIdsRef = React.useRef<string[] | null>(null);
   const droppable = useDroppable({
@@ -1671,13 +1717,18 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               transition: "opacity 150ms ease",
             }}
           >
-            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>More history available</span>
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+              {l10n("AiImageEditor.History.MoreHistoryAvailable", "More history available")}
+            </span>
             <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-              Connect to a folder on your computer for more history.
+              {l10n(
+                "AiImageEditor.History.ConnectFolderForMore",
+                "Connect to a folder on your computer for more history.",
+              )}
             </span>
             <span style={{ color: theme.colors.accent }}>
               <Icon path={Icons.Refresh} width={14} height={14} />
-              Reconnect folder
+              {l10n("AiImageEditor.History.ReconnectFolder", "Reconnect folder")}
             </span>
           </ButtonBase>
         )}
@@ -1796,7 +1847,10 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
       data-active={isActive ? "true" : "false"}
       data-pinned={pinned ? "true" : "false"}
     >
-      <Tooltip title="Show in full-screen gallery" arrow>
+      <Tooltip
+        title={l10n("AiImageEditor.Strip.ShowInGallery", "Show in full-screen gallery")}
+        arrow
+      >
         <span
           style={{
             position: "absolute",
@@ -1808,7 +1862,11 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         >
           <IconButton
             data-testid={`thumbnail-strip-expand-${stripId}`}
-            aria-label={`Expand ${stripId} strip preview`}
+            aria-label={l10n(
+              "AiImageEditor.Strip.ExpandPreview",
+              "Expand {0} strip preview",
+              stripId,
+            )}
             disabled={!canOpenPreview}
             onClick={() => {
               if (!canOpenPreview) {

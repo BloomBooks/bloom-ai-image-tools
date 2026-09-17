@@ -36,6 +36,7 @@ import {
   pollOAuthCodeFromBloomHost,
 } from "../lib/openRouterOAuth";
 import { canUseLocalDummyModelWithoutApiKey } from "../lib/localModels";
+import { interpolateJsx, L10nFunc, LocalizationProvider, useL10n } from "../lib/localization";
 import {
   buildMeasuredStatKey,
   DEFAULT_MODEL,
@@ -181,9 +182,21 @@ const linkifyMessageWithUrl = (message: string, url: string): React.ReactNode =>
   ));
 };
 
-const buildInsufficientCreditsError = (message: string, url: string): React.ReactNode => {
-  const safeMessage = message?.trim() || "This request requires more credits.";
-  return <>OpenRouter said "{linkifyMessageWithUrl(safeMessage, url)}"</>;
+const buildInsufficientCreditsError = (
+  l10n: L10nFunc,
+  message: string,
+  url: string,
+): React.ReactNode => {
+  const safeMessage =
+    message?.trim() ||
+    l10n("AiImageEditor.Error.NeedsMoreCredits", "This request requires more credits.");
+  return (
+    <>
+      {interpolateJsx(l10n("AiImageEditor.Error.OpenRouterSaid", 'OpenRouter said "{0}"'), [
+        linkifyMessageWithUrl(safeMessage, url),
+      ])}
+    </>
+  );
 };
 
 const HISTORY_HYDRATION_BATCH_SIZE = 8;
@@ -417,9 +430,17 @@ export interface ImageToolsWorkspaceProps {
    *  on to Segment). Optional: with no host to tell, nothing is recorded and nothing breaks.
    *  Never pass prompt text or anything else the user typed -- see IBloomHostControl. */
   onTrackEvent?: (event: string, properties?: Record<string, string | number | boolean>) => void;
+  /** Called once at mount with all editor string IDs and their English defaults.
+   *  Should return a dictionary of translated strings for the current UI language.
+   *  Missing keys fall back to the English defaults. */
+  getLocalizations?: (strings: Record<string, string>) => Promise<Record<string, string>>;
 }
 
-export function ImageToolsWorkspace({
+/**
+ * The editor itself. It reads its strings from the LocalizationContext that
+ * ImageToolsWorkspace puts above it.
+ */
+function ImageToolsWorkspaceInner({
   persistence,
   envApiKey: envApiKeyProp = "",
   initialApiKey: initialApiKeyProp = "",
@@ -448,6 +469,7 @@ export function ImageToolsWorkspace({
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
   // Tuner) so primary-colored UI and brand-tinted text re-skin from one color.
   const muiTheme = useBrandedDarkTheme();
+  const l10n = useL10n();
 
   const [state, setState] = useState<AppState>({
     targetImageId: null,
@@ -769,7 +791,11 @@ export function ImageToolsWorkspace({
   );
   const batchSelectionMessage =
     batchTickedIds.size > 0
-      ? `Will edit the ${batchTickedIds.size} selected image${batchTickedIds.size === 1 ? "" : "s"}`
+      ? l10n(
+          "AiImageEditor.Batch.WillEditSelected",
+          "Will edit the {0} selected images",
+          String(batchTickedIds.size),
+        )
       : null;
 
   const resolveIncomingSlotId = useCallback(
@@ -820,22 +846,31 @@ export function ImageToolsWorkspace({
   );
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
-      ? "OpenRouter key supplied by environment"
+      ? l10n("AiImageEditor.Status.KeyFromEnvironment", "OpenRouter key supplied by environment")
       : authMethod === "oauth"
-        ? "OpenRouter connected via OAuth"
-        : "OpenRouter API key linked"
-    : "OpenRouter not connected";
+        ? l10n("AiImageEditor.Status.ConnectedViaOAuth", "OpenRouter connected via OAuth")
+        : l10n("AiImageEditor.Status.ApiKeyLinked", "OpenRouter API key linked")
+    : l10n("AiImageEditor.Status.NotConnected", "OpenRouter not connected");
   const historyStatusLabel = isFolderPersistenceActive
-    ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
-    : "History stored in browser only";
+    ? l10n(
+        "AiImageEditor.Status.HistorySyncingTo",
+        "History syncing to {0}",
+        fsBinding?.directoryName || l10n("AiImageEditor.Status.LinkedFolder", "linked folder"),
+      )
+    : l10n("AiImageEditor.Status.HistoryInBrowserOnly", "History stored in browser only");
   // When the host (Bloom) manages history, the editor's folder-linking status is
   // meaningless, so it's left out of the settings button's tooltip/label.
   const settingsButtonTitle = hostManagesHistory
     ? `${openRouterStatusLabel}.`
     : `${openRouterStatusLabel}. ${historyStatusLabel}.`;
   const settingsButtonLabel = hostManagesHistory
-    ? `Settings • ${openRouterStatusLabel}`
-    : `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
+    ? l10n("AiImageEditor.Settings.ButtonLabel", "Settings • {0}", openRouterStatusLabel)
+    : l10n(
+        "AiImageEditor.Settings.ButtonLabelWithHistory",
+        "Settings • {0}; {1}",
+        openRouterStatusLabel,
+        historyStatusLabel,
+      );
 
   const persistHistoryImage = useCallback(
     async (
@@ -877,7 +912,9 @@ export function ImageToolsWorkspace({
           debugInfo,
           error: errorDetails,
         });
-        setFsError("Could not save image to folder.");
+        setFsError(
+          l10n("AiImageEditor.Error.CouldNotSaveImageToFolder", "Could not save image to folder."),
+        );
         return item;
       }
     },
@@ -1294,7 +1331,7 @@ export function ImageToolsWorkspace({
         return;
       }
       console.error("Failed to fetch OpenRouter key status", error);
-      setCreditsError("Key status unavailable");
+      setCreditsError(l10n("AiImageEditor.Credits.StatusUnavailable", "Key status unavailable"));
     } finally {
       if (creditsRequestAbortControllerRef.current === controller) {
         creditsRequestAbortControllerRef.current = null;
@@ -2018,7 +2055,12 @@ export function ImageToolsWorkspace({
             await writeFolderAppState(currentBinding, buildFolderAppState());
           } catch (error) {
             console.error("Failed to persist history metadata", error);
-            setFsError("Could not save history metadata to folder.");
+            setFsError(
+              l10n(
+                "AiImageEditor.Error.CouldNotSaveMetadata",
+                "Could not save history metadata to folder.",
+              ),
+            );
           }
         }
       } finally {
@@ -2105,7 +2147,12 @@ export function ImageToolsWorkspace({
       setFsBinding(binding);
     } catch (error) {
       console.error("Failed to reconnect history folder", error);
-      setFsError("Could not reconnect to the history folder.");
+      setFsError(
+        l10n(
+          "AiImageEditor.Error.CouldNotReconnectFolder",
+          "Could not reconnect to the history folder.",
+        ),
+      );
     } finally {
       setFsLoading(false);
     }
@@ -2161,7 +2208,9 @@ export function ImageToolsWorkspace({
       setThumbnailStrips(nextThumbnailStrips);
     } catch (error) {
       console.error("Failed to enable folder storage", error);
-      setFsError("Could not enable folder storage.");
+      setFsError(
+        l10n("AiImageEditor.Error.CouldNotEnableFolder", "Could not enable folder storage."),
+      );
     } finally {
       setFsLoading(false);
     }
@@ -2195,7 +2244,9 @@ export function ImageToolsWorkspace({
       }));
     } catch (error) {
       console.error("Failed to disable folder storage", error);
-      setFsError("Could not disable folder storage.");
+      setFsError(
+        l10n("AiImageEditor.Error.CouldNotDisableFolder", "Could not disable folder storage."),
+      );
     } finally {
       setFsLoading(false);
     }
@@ -2270,7 +2321,9 @@ export function ImageToolsWorkspace({
       });
 
       if (!pages.length) {
-        throw new Error("That PDF has no pages to render.");
+        throw new Error(
+          l10n("AiImageEditor.Error.PdfHasNoPages", "That PDF has no pages to render."),
+        );
       }
 
       const baseName = file.name.replace(/\.pdf$/i, "") || "page";
@@ -2338,7 +2391,10 @@ export function ImageToolsWorkspace({
         setState((prev) => ({
           ...prev,
           isProcessing: false,
-          error: error instanceof Error ? error.message : "Could not read that PDF.",
+          error:
+            error instanceof Error
+              ? error.message
+              : l10n("AiImageEditor.Error.CouldNotReadPdf", "Could not read that PDF."),
         }));
       }
     } finally {
@@ -2525,7 +2581,10 @@ export function ImageToolsWorkspace({
     if (requiresEditImage && !targetImage) {
       setState((prev) => ({
         ...prev,
-        error: "Select an image to edit before applying this tool.",
+        error: l10n(
+          "AiImageEditor.Error.SelectImageFirst",
+          "Select an image to edit before applying this tool.",
+        ),
       }));
       return;
     }
@@ -2539,7 +2598,10 @@ export function ImageToolsWorkspace({
     if (referenceItems.length < min) {
       setState((prev) => ({
         ...prev,
-        error: "Please add a reference image for this tool (drag from history or upload).",
+        error: l10n(
+          "AiImageEditor.Error.AddReferenceImage",
+          "Please add a reference image for this tool (drag from history or upload).",
+        ),
       }));
       return;
     }
@@ -2593,9 +2655,16 @@ export function ImageToolsWorkspace({
         tool.derivedResultMode === "split-images" &&
         (tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true");
       const phaseLabels: string[] = isBreakComic
-        ? ["Editing to remove background", "Transcribing captions", "Splitting into images"]
+        ? [
+            l10n("AiImageEditor.Phase.RemovingBackground", "Editing to remove background"),
+            l10n("AiImageEditor.Phase.TranscribingCaptions", "Transcribing captions"),
+            l10n("AiImageEditor.Phase.SplittingIntoImages", "Splitting into images"),
+          ]
         : willSplitDerived
-          ? ["Generating sheet", "Splitting into images"]
+          ? [
+              l10n("AiImageEditor.Phase.GeneratingSheet", "Generating sheet"),
+              l10n("AiImageEditor.Phase.SplittingIntoImages", "Splitting into images"),
+            ]
           : [];
       const setPhase = (index: number) => {
         if (phaseLabels.length <= 1 || index < 0 || index >= phaseLabels.length) return;
@@ -3125,9 +3194,12 @@ export function ImageToolsWorkspace({
           error.detailMessage
         ) {
           const infoUrl = error.infoUrl || OPENROUTER_KEYS_URL;
-          errorContent = buildInsufficientCreditsError(error.detailMessage, infoUrl);
+          errorContent = buildInsufficientCreditsError(l10n, error.detailMessage, infoUrl);
         } else {
-          errorContent = error instanceof Error ? error.message : "Failed to process image.";
+          errorContent =
+            error instanceof Error
+              ? error.message
+              : l10n("AiImageEditor.Error.FailedToProcess", "Failed to process image.");
         }
         setState((prev) => ({
           ...prev,
@@ -3169,7 +3241,10 @@ export function ImageToolsWorkspace({
     if (referenceItems.length < min) {
       setState((prev) => ({
         ...prev,
-        error: "Please add a reference image for this tool (drag from history or upload).",
+        error: l10n(
+          "AiImageEditor.Error.AddReferenceImage",
+          "Please add a reference image for this tool (drag from history or upload).",
+        ),
       }));
       return;
     }
@@ -3500,7 +3575,10 @@ export function ImageToolsWorkspace({
         console.error("Failed to load image", error);
         setState((prev) => ({
           ...prev,
-          error: "Could not load image. Please try again.",
+          error: l10n(
+            "AiImageEditor.Error.CouldNotLoadImage",
+            "Could not load image. Please try again.",
+          ),
         }));
       }
     },
@@ -3556,7 +3634,10 @@ export function ImageToolsWorkspace({
         console.error("Failed to add character image", error);
         setState((prev) => ({
           ...prev,
-          error: "Could not load image. Please try again.",
+          error: l10n(
+            "AiImageEditor.Error.CouldNotLoadImage",
+            "Could not load image. Please try again.",
+          ),
         }));
       }
     },
@@ -3644,7 +3725,10 @@ export function ImageToolsWorkspace({
         console.error("Failed to load reference image", error);
         setState((prev) => ({
           ...prev,
-          error: "Could not load reference image. Please try again.",
+          error: l10n(
+            "AiImageEditor.Error.CouldNotLoadReferenceImage",
+            "Could not load reference image. Please try again.",
+          ),
         }));
       }
     },
@@ -3767,7 +3851,10 @@ export function ImageToolsWorkspace({
         error:
           err instanceof Error
             ? err.message
-            : "Could not start OpenRouter authentication. Please try again.",
+            : l10n(
+                "AiImageEditor.Error.CouldNotStartAuthentication",
+                "Could not start OpenRouter authentication. Please try again.",
+              ),
       }));
       oauthPollAbortControllerRef.current = null;
     }
@@ -4259,20 +4346,28 @@ export function ImageToolsWorkspace({
 
   const creditsPrimaryLabel = (() => {
     if (!effectiveApiKey) {
-      return "Connect to view";
+      return l10n("AiImageEditor.Credits.ConnectToView", "Connect to view");
     }
     if (creditsLoading) {
-      return "Updating...";
+      return l10n("AiImageEditor.Credits.Updating", "Updating...");
     }
     if (creditsError) {
       return creditsError;
     }
     if (credits) {
       if (creditsGauge) {
-        return `${formatCreditsValue(creditsGauge.remaining)} left`;
+        return l10n(
+          "AiImageEditor.Credits.AmountLeft",
+          "{0} left",
+          formatCreditsValue(creditsGauge.remaining),
+        );
       }
 
-      return `${formatCreditsValue(credits.usage)} used`;
+      return l10n(
+        "AiImageEditor.Credits.AmountUsed",
+        "{0} used",
+        formatCreditsValue(credits.usage),
+      );
     }
     return "--";
   })();
@@ -4283,15 +4378,30 @@ export function ImageToolsWorkspace({
         ? (() => {
             const periodUsage = Math.max(0, creditsGauge.total - creditsGauge.remaining);
             const periodSuffix = credits.limitReset ? ` ${credits.limitReset}` : "";
-            return `${formatCreditsValue(periodUsage)} of ${formatCreditsValue(
-              creditsGauge.total,
-            )} used${periodSuffix}`;
+            return l10n(
+              "AiImageEditor.Credits.UsedOfLimit",
+              "{0} used{1}",
+              l10n(
+                "AiImageEditor.Credits.AmountOfAmount",
+                "{0} of {1}",
+                formatCreditsValue(periodUsage),
+                formatCreditsValue(creditsGauge.total),
+              ),
+              periodSuffix,
+            );
           })()
         : creditsGauge?.source === "account"
-          ? `${formatCreditsValue(
-              creditsGauge.total - creditsGauge.remaining,
-            )} of ${formatCreditsValue(creditsGauge.total)} account credits used`
-          : `${formatCreditsValue(credits.usage)} used (no limit set)`
+          ? l10n(
+              "AiImageEditor.Credits.AccountCreditsUsed",
+              "{0} of {1} account credits used",
+              formatCreditsValue(creditsGauge.total - creditsGauge.remaining),
+              formatCreditsValue(creditsGauge.total),
+            )
+          : l10n(
+              "AiImageEditor.Credits.UsedNoLimit",
+              "{0} used (no limit set)",
+              formatCreditsValue(credits.usage),
+            )
       : null;
 
   const creditsTotalLabel =
@@ -4300,7 +4410,7 @@ export function ImageToolsWorkspace({
     !creditsLoading &&
     !creditsError &&
     creditsGauge?.source === "limit"
-      ? `${formatCreditsValue(credits.usage)} total`
+      ? l10n("AiImageEditor.Credits.AmountTotal", "{0} total", formatCreditsValue(credits.usage))
       : null;
 
   const creditsTooltipLines = [
@@ -4405,7 +4515,7 @@ export function ImageToolsWorkspace({
             <Box component="img" src={bloomLogo} alt="Bloom" sx={{ width: 28, height: 28 }} />
             <Stack spacing={0}>
               <Typography variant="h6" component="h1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-                Bloom AI Image Tools
+                {l10n("AiImageEditor.AppTitle", "Bloom AI Image Tools")}
               </Typography>
               <Typography
                 variant="caption"
@@ -4451,12 +4561,14 @@ export function ImageToolsWorkspace({
                 }}
               >
                 {pendingFsReconnect
-                  ? `Reconnect history folder${
+                  ? l10n(
+                      "AiImageEditor.History.ReconnectHistoryFolder",
+                      "Reconnect history folder{0}",
                       pendingFsReconnect.directoryName
                         ? ` (${pendingFsReconnect.directoryName})`
-                        : ""
-                    }`
-                  : "Connect history folder"}
+                        : "",
+                    )
+                  : l10n("AiImageEditor.History.ConnectHistoryFolder", "Connect history folder")}
               </Button>
             )}
           </Stack>
@@ -4561,8 +4673,13 @@ export function ImageToolsWorkspace({
             bookImagesAction={
               onCommitBookImages
                 ? {
-                    label: bookImagesActionLabel ?? "Replace",
-                    tip: bookImagesActionTip ?? "Replace images in your book with these images",
+                    label: bookImagesActionLabel ?? l10n("Common.Replace", "Replace"),
+                    tip:
+                      bookImagesActionTip ??
+                      l10n(
+                        "AiImageEditor.BookImages.ReplaceTip",
+                        "Replace images in your book with these images",
+                      ),
                     testId: bookImagesActionTestId,
                     disabled: !hasBookImageReplacement,
                     onClick: onCommitBookImages,
@@ -4688,6 +4805,14 @@ export function ImageToolsWorkspace({
       </Box>
       <TextFieldContextMenu />
     </ThemeProvider>
+  );
+}
+
+export function ImageToolsWorkspace(props: ImageToolsWorkspaceProps) {
+  return (
+    <LocalizationProvider getLocalizations={props.getLocalizations}>
+      <ImageToolsWorkspaceInner {...props} />
+    </LocalizationProvider>
   );
 }
 

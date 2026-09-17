@@ -34,6 +34,7 @@ import {
 } from "../../lib/modelsCatalog";
 import { formatCost } from "../../lib/formatters";
 import { theme } from "../../themes";
+import { L10nFunc, useL10n } from "../../lib/localization";
 
 interface ToolModelPickerProps {
   tool: ToolDefinition;
@@ -62,22 +63,22 @@ interface ToolModelPickerProps {
   disabled?: boolean;
 }
 
-const REASONING_LABELS: Record<ModelReasoningLevel, string> = {
-  default: "Default",
-  none: "None",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
+const reasoningLabels = (l10n: L10nFunc): Record<ModelReasoningLevel, string> => ({
+  default: l10n("Common.Default", "Default"),
+  none: l10n("AiImageEditor.Reasoning.None", "None"),
+  low: l10n("AiImageEditor.Reasoning.Low", "Low"),
+  medium: l10n("AiImageEditor.Reasoning.Medium", "Medium"),
+  high: l10n("AiImageEditor.Reasoning.High", "High"),
+});
 
-const QUALITY_LABELS: Record<ModelImageQuality, string> = {
-  auto: "Auto",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-};
+const qualityLabels = (l10n: L10nFunc): Record<ModelImageQuality, string> => ({
+  auto: l10n("AiImageEditor.Quality.Auto", "Auto"),
+  low: l10n("AiImageEditor.Quality.Low", "Low"),
+  medium: l10n("AiImageEditor.Quality.Medium", "Medium"),
+  high: l10n("AiImageEditor.Quality.High", "High"),
+  xhigh: l10n("AiImageEditor.Quality.ExtraHigh", "Extra high"),
+  max: l10n("AiImageEditor.Quality.Max", "Max"),
+});
 
 const formatDuration = (durationMs: number): string => {
   const seconds = durationMs / 1000;
@@ -105,15 +106,22 @@ const formatStats = (stats: MeasuredStats): string => {
  * its fixed price line.
  */
 const describePrice = (
+  l10n: L10nFunc,
   estimateUsd: number | null,
   stats: MeasuredStats | null,
   pricing: string | undefined,
 ): string => {
   if (estimateUsd != null) {
     const duration = stats && stats.durationMs > 0 ? `, ~${formatDuration(stats.durationMs)}` : "";
-    return `Estimate ${formatCost(estimateUsd)}${duration}`;
+    return l10n(
+      "AiImageEditor.Model.Estimate",
+      "Estimate {0}{1}",
+      formatCost(estimateUsd),
+      duration,
+    );
   }
-  if (stats != null) return `Last measured: ${formatStats(stats)}`;
+  if (stats != null)
+    return l10n("AiImageEditor.Model.LastMeasured", "Last measured: {0}", formatStats(stats));
   return pricing ?? "";
 };
 
@@ -133,6 +141,9 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
 }) => {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
+  const l10n = useL10n();
+  const REASONING_LABELS = reasoningLabels(l10n);
+  const QUALITY_LABELS = qualityLabels(l10n);
   const options = getToolModelOptions(tool);
   const recommendedIds = getRecommendedModelIds(tool);
   const recommendedSet = new Set(recommendedIds);
@@ -140,7 +151,8 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
 
   const selectedId = resolveToolModelId(tool, modelByTool);
   const selectedModel = getModelInfoById(selectedId);
-  const selectedName = selectedModel?.name || selectedId || "No model";
+  const selectedName =
+    selectedModel?.name || selectedId || l10n("AiImageEditor.Model.NoModel", "No model");
   const showNotRecommended = hasRecommendation && !recommendedSet.has(selectedId);
 
   const reasoningLevel = resolveToolReasoningLevel(tool, selectedModel, reasoningByTool);
@@ -149,7 +161,10 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
   const quality = resolveToolQuality(tool, selectedModel, qualityByTool);
   // The button says what the menu is for. What each engine is like belongs on
   // the menu items themselves, where the choice is actually made.
-  const tooltipTitle = "Choose which AI image engine to use";
+  const tooltipTitle = l10n(
+    "AiImageEditor.Model.PickerTooltip",
+    "Choose which AI image engine to use",
+  );
 
   return (
     <>
@@ -158,7 +173,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
           <IconButton
             size="small"
             disabled={disabled}
-            aria-label={`Model: ${selectedName}`}
+            aria-label={l10n("AiImageEditor.Model.PickerLabel", "Model: {0}", selectedName)}
             aria-haspopup="true"
             data-testid={`tool-model-picker-${tool.id}`}
             onClick={(event) => setAnchorEl(event.currentTarget)}
@@ -249,7 +264,10 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                       )}
                       {modelRecommended && (
                         <Chip
-                          label="recommended for this tool"
+                          label={l10n(
+                            "AiImageEditor.Model.RecommendedChip",
+                            "recommended for this tool",
+                          )}
                           size="small"
                           color="primary"
                           variant="outlined"
@@ -259,6 +277,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                     </Stack>
                   }
                   secondary={describePrice(
+                    l10n,
                     estimateRunCostUsd?.(model.id) ?? null,
                     stats,
                     model.pricing,
@@ -276,10 +295,12 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
             <Divider />
             <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
               <FormControl fullWidth size="small">
-                <InputLabel id={`reasoning-label-${tool.id}`}>Reasoning</InputLabel>
+                <InputLabel id={`reasoning-label-${tool.id}`}>
+                  {l10n("AiImageEditor.Info.Reasoning", "Reasoning")}
+                </InputLabel>
                 <Select
                   labelId={`reasoning-label-${tool.id}`}
-                  label="Reasoning"
+                  label={l10n("AiImageEditor.Info.Reasoning", "Reasoning")}
                   value={reasoningLevel}
                   data-testid={`tool-reasoning-${tool.id}`}
                   onChange={(event) => onReasoningChange(event.target.value as ModelReasoningLevel)}
@@ -302,10 +323,12 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
             <Divider />
             <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
               <FormControl fullWidth size="small">
-                <InputLabel id={`quality-label-${tool.id}`}>Quality</InputLabel>
+                <InputLabel id={`quality-label-${tool.id}`}>
+                  {l10n("AiImageEditor.Quality.Label", "Quality")}
+                </InputLabel>
                 <Select
                   labelId={`quality-label-${tool.id}`}
-                  label="Quality"
+                  label={l10n("AiImageEditor.Quality.Label", "Quality")}
                   value={quality}
                   data-testid={`tool-quality-${tool.id}`}
                   onChange={(event) => onQualityChange(event.target.value as ModelImageQuality)}

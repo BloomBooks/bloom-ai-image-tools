@@ -4,5 +4,7 @@
  * otherwise be offered (OpenRouterConnect). One constant so both say it identically
  * and it translates once.
  */
+export const LOOK_AROUND_MODE_MESSAGE_ID = "AiImageEditor.LookAroundMode.Message";
+
 export const LOOK_AROUND_MODE_MESSAGE =
   'This tool is in "look-around" mode. To actually edit or create images, you will need a subscription and a book that is not based on the "Playground" template.';

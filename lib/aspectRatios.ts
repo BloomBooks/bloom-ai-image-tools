@@ -10,6 +10,24 @@ export interface ImageResolutionLike {
   height: number;
 }
 
+/**
+ * The shape control's two rules, stored in a tool's params beside the fixed
+ * ratios. Bloom hands the editor two facts about a book image: the pixel size
+ * of the image container on the page, and the existing image when the slot is
+ * not empty. Each rule names which of the two the output's shape follows.
+ * lib/imageRequestPlan.ts turns a rule into the request; nothing else has to.
+ */
+export const MATCH_IMAGE_ASPECT_RATIO = "match-image";
+export const MATCH_CONTAINER_ASPECT_RATIO = "match-container";
+
+export const isMatchAspectRatio = (value: string | null | undefined): boolean =>
+  value === MATCH_IMAGE_ASPECT_RATIO || value === MATCH_CONTAINER_ASPECT_RATIO;
+
+/**
+ * The request-side value for "the model follows its source image". It is
+ * never stored or shown: the planner resolves a rule to a concrete shape, and
+ * only an edit whose source size is unknown still reaches the request as this.
+ */
 export const AUTO_ASPECT_RATIO = "auto";
 export const DEFAULT_CREATE_ASPECT_RATIO = "1:1";
 

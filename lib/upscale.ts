@@ -12,7 +12,10 @@ import type { ImageDimensions } from "./imageUtils";
  */
 
 /** Stable values persisted as the `targetResolution` parameter. */
-export type UpscaleTargetToken = "auto" | "hd" | "2k" | "4k";
+export type UpscaleTargetToken = "container" | "hd" | "2k" | "4k";
+
+/** The Target Resolution value that means "enough pixels to fill the image container". */
+export const CONTAINER_UPSCALE_TOKEN: UpscaleTargetToken = "container";
 
 /** The resolution Bloom computed for the page slot this image sits in. */
 export interface UpscaleHostTarget {
@@ -24,7 +27,10 @@ export interface UpscaleHostTarget {
 
 export interface UpscaleOption {
   token: UpscaleTargetToken;
+  /** "Match Container", "HD", "2K", "4K": the row's name, with no pixels in it. */
   label: string;
+  /** The pixels this row asks for, shown as a second line under the label. */
+  caption?: string;
   /** Null when the source image's dimensions aren't known yet. */
   dimensions: ImageDimensions | null;
 }
@@ -136,8 +142,8 @@ const coverBox = (
 const SHAPE_MATCH_TOLERANCE = 0.02;
 
 /**
- * What Auto asks for: enough pixels to fill the book slot, in the SOURCE's
- * shape rather than the slot's.
+ * What Match Container asks for: enough pixels to fill the image container,
+ * in the SOURCE's shape rather than the container's.
  *
  * Upscaling must not reframe the picture, and asking a model for the slot's
  * own dimensions does exactly that whenever the two shapes differ. A 1024 x
@@ -176,38 +182,25 @@ export const resolveAutoTarget = (
 export const formatUpscaleDimensions = (dimensions: ImageDimensions): string =>
   `${dimensions.width} x ${dimensions.height}`;
 
+const captionFor = (dimensions: ImageDimensions | null): string | undefined =>
+  dimensions ? formatUpscaleDimensions(dimensions) : undefined;
+
 /**
- * The extra sentence shown under the host's memo when Auto is asking for
- * something other than the size the memo names, so that two numbers on the
- * same screen never silently disagree. Pass the Auto option's dimensions (the
- * snapped ones the user is reading). Null when they match, the ordinary case
- * of an image already the shape of its slot.
+ * What the Match Container row asks for: enough pixels in the image's shape
+ * to cover the container. Null without a host target.
  */
-export const describeAutoShapeChange = (
-  autoDimensions: ImageDimensions | null | undefined,
-  hostTarget: UpscaleHostTarget | null | undefined,
-): string | null => {
-  const slot = normalizeHostTarget(hostTarget);
-  if (!slot || !isUsableDimensions(autoDimensions)) return null;
-  if (autoDimensions.width === slot.width && autoDimensions.height === slot.height) return null;
-  return (
-    `Asking for ${formatUpscaleDimensions(autoDimensions)} instead, which is that much ` +
-    `detail in this image's own shape. Upscaling never re-crops or stretches the picture, ` +
-    `so Bloom fits the result to the container as it does now.`
-  );
-};
-
-const withDimensions = (baseLabel: string, dimensions: ImageDimensions | null): string =>
-  dimensions ? `${baseLabel} (${formatUpscaleDimensions(dimensions)})` : baseLabel;
+const containerTarget = resolveAutoTarget;
 
 /**
- * The selector's options, in display order. "Auto" exists only when the host
- * sent a target for this slot, so a source without one simply starts at HD.
+ * The selector's options, in display order. Each row carries, under its name,
+ * the pixels it will ask for, in the image's own shape. "Match Container" exists
+ * only when the host sent a target for this slot, so a source without one
+ * simply starts at HD.
  *
  * `snap` is how the selected model would change the pixels before sending them
  * (see snapPixelsForModel): GPT Image 2.5 caps an edge at 3840 and the total
  * at 8,294,400 pixels, so its "4K" option reads the size it will be sent (for
- * a 3:2 source, 3520 x 2352) rather than 4096. Without it the labels carry the
+ * a 3:2 source, 3520 x 2352) rather than 4096. Without it the captions carry the
  * tier's own numbers, which the Gemini keys take as is.
  */
 export const buildUpscaleOptions = (
@@ -215,25 +208,27 @@ export const buildUpscaleOptions = (
   hostTarget?: UpscaleHostTarget | null,
   snap: (dimensions: ImageDimensions | null) => ImageDimensions | null = (d) => d,
 ): UpscaleOption[] => {
-  const hostDimensions = snap(resolveAutoTarget(source, hostTarget));
+  const container = snap(containerTarget(source, hostTarget));
   const options: UpscaleOption[] = [];
 
-  if (hostDimensions) {
+  if (container) {
     options.push({
-      token: "auto",
-      label: withDimensions("Auto", hostDimensions),
-      dimensions: hostDimensions,
+      token: CONTAINER_UPSCALE_TOKEN,
+      label: "Match Container",
+      caption: captionFor(container),
+      dimensions: container,
     });
   }
 
   const hd = snap(fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE));
-  options.push({ token: "hd", label: withDimensions("HD", hd), dimensions: hd });
+  options.push({ token: "hd", label: "HD", caption: captionFor(hd), dimensions: hd });
 
   (["2k", "4k"] as const).forEach((token) => {
     const dimensions = snap(fitToLongEdge(source, TIER_LONG_EDGES[token]));
     options.push({
       token,
-      label: withDimensions(token.toUpperCase(), dimensions),
+      label: token.toUpperCase(),
+      caption: captionFor(dimensions),
       dimensions,
     });
   });
@@ -242,9 +237,9 @@ export const buildUpscaleOptions = (
 };
 
 /**
- * The pixel target for a stored token. "auto" without a host target — and any
- * token this build doesn't know (a value persisted by an older one) — falls
- * back to HD.
+ * The pixel target for a stored token, in the image's own shape. A token this
+ * build does not know (a value persisted by an older one, or an empty one)
+ * means the default: the container when the host sent one, else HD.
  */
 export const resolveUpscaleTarget = (
   paramValue: string | null | undefined,
@@ -252,15 +247,16 @@ export const resolveUpscaleTarget = (
   hostTarget?: UpscaleHostTarget | null,
 ): ImageDimensions | null => {
   const token = (paramValue || "").trim().toLowerCase();
-  const autoDimensions = resolveAutoTarget(source, hostTarget);
 
-  if (token === "auto" && autoDimensions) {
-    return autoDimensions;
-  }
   if (token === "2k" || token === "4k") {
     return fitToLongEdge(source, TIER_LONG_EDGES[token]);
   }
-  return fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE);
+  if (token === "hd") {
+    return fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE);
+  }
+  return (
+    containerTarget(source, hostTarget) ?? fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE)
+  );
 };
 
 /** The tool's resolution parameter, or undefined for every other tool. */

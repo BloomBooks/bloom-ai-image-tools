@@ -38,6 +38,7 @@ import { emitDragDebugLog, isDragDebugEnabled } from "./dragConstants";
 import { Icon, Icons } from "./Icons";
 import type { ThumbnailStripConfig } from "../lib/thumbnailStrips";
 import type { RunCostTarget } from "../lib/toolRunCostEstimate";
+import type { UpscaleHostTarget } from "../lib/upscale";
 
 const DRAG_PREVIEW_SIZE = 112;
 
@@ -457,6 +458,10 @@ interface ImageToolsPanelBar {
   onToolReasoningChange: (toolId: string, level: ModelReasoningLevel) => void;
   onToolQualityChange: (toolId: string, quality: ModelImageQuality) => void;
   targetImage: ImageRecord | null;
+  /** The size Bloom says the book slot a run draws for wants: the target
+   *  image's slot, or the empty slot the host launched us on when there is
+   *  nothing to edit (IBloomHostBookImage.suggestedTarget). */
+  slotSuggestedTarget?: UpscaleHostTarget | null;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
   resultImages?: ImageRecord[];
@@ -566,6 +571,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onToolReasoningChange,
   onToolQualityChange,
   targetImage,
+  slotSuggestedTarget = null,
   referenceImages,
   rightImage,
   resultImages = [],
@@ -860,7 +866,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             targetImageResolution={targetImage?.resolution ?? null}
             targetImageId={targetImage?.id ?? null}
             targetImageMime={targetImage?.sourceMime}
-            targetImageSuggestedTarget={targetImage?.suggestedTarget ?? null}
+            targetImageSuggestedTarget={slotSuggestedTarget ?? targetImage?.suggestedTarget ?? null}
             isAuthenticated={appState.isAuthenticated}
             playgroundMode={playgroundMode}
             modelByTool={modelByTool}

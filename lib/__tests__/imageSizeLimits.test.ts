@@ -23,10 +23,10 @@ import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 const GEMINI_3_PRO = "google/gemini-3-pro-image";
 const GEMINI_FLASH = "google/gemini-3.1-flash-image";
 
-const TOOL_SIZE_OPTIONS = ["512k", "1k", "2k", "4k"];
+const TOOL_SIZE_OPTIONS = ["1k", "2k", "4k"];
 
 describe("size tokens map to request tiers", () => {
-  it("treats the 512k preset as the smallest tier", () => {
+  it("treats a token it does not know as the smallest tier", () => {
     expect(sizeTokenToImageSizeTier("512k")).toBe("1K");
   });
 
@@ -98,11 +98,7 @@ describe("getSizeTokenOptionsForModel", () => {
   it("drops 4k for the stable Gemini keys", () => {
     // Sanity check: 4k is on offer before the model narrows the list.
     expect(TOOL_SIZE_OPTIONS).toContain("4k");
-    expect(getSizeTokenOptionsForModel(TOOL_SIZE_OPTIONS, GEMINI_FLASH)).toEqual([
-      "512k",
-      "1k",
-      "2k",
-    ]);
+    expect(getSizeTokenOptionsForModel(TOOL_SIZE_OPTIONS, GEMINI_FLASH)).toEqual(["1k", "2k"]);
   });
 
   it("keeps every option for a model with no recorded ceiling", () => {

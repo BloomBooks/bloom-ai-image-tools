@@ -1,6 +1,11 @@
 import { ToolDefinition, ToolParams } from "../types";
 import { TOOLS } from "../components/tools/tools-registry";
-import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "./aspectRatios";
+import {
+  DEFAULT_CREATE_ASPECT_RATIO,
+  getAspectRatioOption,
+  isMatchAspectRatio,
+  MATCH_IMAGE_ASPECT_RATIO,
+} from "./aspectRatios";
 import { LOCAL_DUMMY_MODEL_ID } from "./localModels";
 
 export type ReferenceMode = ToolDefinition["referenceImages"];
@@ -41,6 +46,11 @@ export const toolRequiresEditImage = (tool: ToolDefinition | null): boolean => {
   return tool.editImage !== false;
 };
 
+/**
+ * The shape a run of `tool` asks for, before the planner resolves it against
+ * the container and the image: MATCH_IMAGE_ASPECT_RATIO,
+ * MATCH_CONTAINER_ASPECT_RATIO, or a fixed ratio from the shape menu.
+ */
 export const getRequestedAspectRatioValue = (
   tool: ToolDefinition | null,
   params: ToolParams | null | undefined,
@@ -53,13 +63,17 @@ export const getRequestedAspectRatioValue = (
     return hiddenDefault;
   }
 
+  // A stored value is honored only when it is something the menu offers; a
+  // value from an older build (such as "auto") is treated as unset.
   const configuredValue = params?.aspectRatio?.trim();
-  if (configuredValue) {
+  if (
+    configuredValue &&
+    (isMatchAspectRatio(configuredValue) || getAspectRatioOption(configuredValue))
+  ) {
     return configuredValue;
   }
 
-  // A tool with a shape picker carries its own default in `parameters` — that
-  // is where Create an Image's Auto (the book slot's shape) comes from — and
+  // A tool with a shape picker carries its own default in `parameters`, and
   // params normally holds it already. This matters for a caller that passes
   // params without one: reading the tool's default keeps its shape from
   // silently becoming a square.
@@ -70,9 +84,9 @@ export const getRequestedAspectRatioValue = (
     return declaredDefault;
   }
 
-  // Nothing to take a shape from: a tool that makes a picture from scratch
-  // makes a square, an edit follows its source.
-  return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO;
+  // No picker and no declared default: a tool that makes a picture from
+  // scratch makes a square, an edit keeps its image's shape.
+  return tool?.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : MATCH_IMAGE_ASPECT_RATIO;
 };
 
 export const getRequestedImageSizeValue = (

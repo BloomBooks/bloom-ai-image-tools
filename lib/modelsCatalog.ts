@@ -186,8 +186,8 @@ export interface SizeOption {
  * model, so the picker reads the same way whichever model is selected. A
  * pixel-size model also carries the pixels each token will be sent in the given
  * shape, since on GPT Image 2.5 "4k" is 2880x2880 for a square, and two tokens
- * that land on the same pixels ("512k" and "1k" both become 1024 on the long
- * edge) collapse into one, so the list never offers the same request twice.
+ * that land on the same pixels collapse into one, so the list never offers the
+ * same request twice.
  */
 export const getSizeOptionsForModel = (
   options: string[] | null | undefined,

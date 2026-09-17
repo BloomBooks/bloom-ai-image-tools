@@ -2508,15 +2508,20 @@ export function ImageToolsWorkspace({
     const toolModel = getModelInfoById(resolveToolModelId(tool, modelByTool)) ?? DEFAULT_MODEL;
 
     const requiresEditImage = tool.editImage !== false;
-    // The selected book image, which is where the slot Bloom described comes
-    // from. A tool that makes a picture from nothing has nothing to edit, so it
-    // gets no targetImage — but it is still drawing for that slot, and the tool
-    // panel is already showing the slot's size and shape, so the slot goes to
-    // the run either way (see lib/slotTarget.ts).
-    const slotImage = state.targetImageId
-      ? state.history.find((h) => h.id === state.targetImageId) || null
-      : null;
-    const targetImage = requiresEditImage ? slotImage : null;
+    // The book image whose slot the run draws for, which is where the size and
+    // shape Bloom described come from (see lib/slotTarget.ts). Normally that is
+    // the image being edited. An empty book slot is never the target image (the
+    // host launch clears it, and handleSetTargetImage refuses it), so a tool
+    // that makes a picture from nothing draws for the empty slot the host
+    // launched us on, the same slot resolveIncomingSlotId puts its result in.
+    const slotImage =
+      (state.targetImageId
+        ? state.history.find((h) => h.id === state.targetImageId) || null
+        : null) ??
+      (launchedEmptyBookSlotId
+        ? state.history.find((h) => h.id === launchedEmptyBookSlotId) || null
+        : null);
+    const targetImage = requiresEditImage && !slotImage?.isEmptyBookSlot ? slotImage : null;
     if (requiresEditImage && !targetImage) {
       setState((prev) => ({
         ...prev,
@@ -4153,6 +4158,15 @@ export function ImageToolsWorkspace({
   const targetImage = state.targetImageId
     ? accessibleHistoryItems.find((h) => h.id === state.targetImageId) || null
     : null;
+  // The size Bloom says the book slot wants, for the slot a run would draw for:
+  // the target image's, or, with nothing to edit, the empty slot the host
+  // launched us on (see slotImage in handleApplyTool). The tool panel shows a
+  // Create run's shape and size from this, so it has to agree with the run.
+  const slotSuggestedTarget =
+    targetImage?.suggestedTarget ??
+    (launchedEmptyBookSlotId
+      ? (historyItemsById[launchedEmptyBookSlotId]?.suggestedTarget ?? null)
+      : null);
 
   const referenceItems = state.referenceImageIds
     .map((id) => accessibleHistoryItems.find((h) => h.id === id) || null)
@@ -4530,6 +4544,7 @@ export function ImageToolsWorkspace({
             onToolReasoningChange={handleToolReasoningChange}
             onToolQualityChange={handleToolQualityChange}
             targetImage={batchTickedIds.size > 0 ? null : targetImage}
+            slotSuggestedTarget={batchTickedIds.size > 0 ? null : slotSuggestedTarget}
             batchSelectionMessage={batchSelectionMessage}
             batchSelection={batchSelection}
             launchedBookImageId={selectedBookImageId ?? null}

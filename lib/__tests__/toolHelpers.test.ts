@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { TOOLS } from "../../components/tools/tools-registry";
+import { MATCH_CONTAINER_ASPECT_RATIO, MATCH_IMAGE_ASPECT_RATIO } from "../aspectRatios";
 import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 import {
   getRequestedAspectRatioValue,
@@ -8,10 +9,28 @@ import {
 } from "../toolHelpers";
 
 describe("tool aspect ratio defaults", () => {
-  it("inherits the target image shape for edit tools without a shape picker", () => {
+  it("keeps the image's shape for edit tools without a shape picker", () => {
     const localizedCharactersTool = TOOLS.find((tool) => tool.id === "apply_localized_characters");
 
-    expect(getRequestedAspectRatioValue(localizedCharactersTool ?? null, {})).toBe("auto");
+    expect(getRequestedAspectRatioValue(localizedCharactersTool ?? null, {})).toBe(
+      MATCH_IMAGE_ASPECT_RATIO,
+    );
+  });
+
+  it("gives Create an Image the container's shape, and treats an older build's value as unset", () => {
+    const generateImageTool = TOOLS.find((tool) => tool.id === "generate_image");
+
+    expect(getRequestedAspectRatioValue(generateImageTool ?? null, {})).toBe(
+      MATCH_CONTAINER_ASPECT_RATIO,
+    );
+    expect(getRequestedAspectRatioValue(generateImageTool ?? null, { aspectRatio: "auto" })).toBe(
+      MATCH_CONTAINER_ASPECT_RATIO,
+    );
+    expect(
+      getRequestedAspectRatioValue(generateImageTool ?? null, {
+        aspectRatio: MATCH_IMAGE_ASPECT_RATIO,
+      }),
+    ).toBe(MATCH_IMAGE_ASPECT_RATIO);
   });
 
   it("defaults scratch generation tools without a shape picker to square", () => {

@@ -165,18 +165,13 @@ export const pixelsForTier = (tier: ImageSizeTier, aspectRatio?: string | null):
   return { width: Math.round(ratio.width * scale), height: Math.round(ratio.height * scale) };
 };
 
-/**
- * The tier a UI size token asks for. The token set the tools offer ("512k",
- * "1k", "2k", "4k") is coarser than it looks: "512k" is a request for the
- * smallest tier, which is 1K.
- */
+/** The tier a UI size token ("1k", "2k", "4k") asks for; anything else is the smallest. */
 export const sizeTokenToImageSizeTier = (token: string | null | undefined): ImageSizeTier => {
   switch (token?.toLowerCase()) {
     case "2k":
       return "2K";
     case "4k":
       return "4K";
-    case "512k":
     case "1k":
     default:
       return "1K";

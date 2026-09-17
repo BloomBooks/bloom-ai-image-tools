@@ -59,8 +59,8 @@ export interface RunToolOnImageArgs {
    */
   targetSlotPageLabel?: string | null;
   /**
-   * The resolution the host says the target image's book slot wants, which is
-   * the Upscale tool's "Auto" option (see IBloomHostBookImage.suggestedTarget).
+   * The resolution the host says the target image's container wants, which is
+   * the Upscale tool's Match Container row (see IBloomHostBookImage.suggestedTarget).
    * Per-image, so the batch runner must pass each image's own.
    */
   hostSuggestedTarget?: UpscaleHostTarget | null;
@@ -190,7 +190,7 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
   } = plan;
 
   // The template reads params.size for its size sentence, so it gets the tier
-  // Auto settled to rather than the word "auto".
+  // the container's size settled to rather than the word "container".
   const paramsForPrompt =
     findSizeParam(tool.parameters) && settledSizeToken && settledSizeToken !== params.size
       ? { ...params, size: settledSizeToken }

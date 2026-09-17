@@ -9,7 +9,6 @@ import {
   FormControlLabel,
   FormHelperText,
   LinearProgress,
-  ListItemText,
   MenuItem,
   Paper,
   Skeleton,
@@ -22,7 +21,6 @@ import type {
   BatchRunState,
   MeasuredStats,
   ModelImageQuality,
-  ModelInfo,
   ModelReasoningLevel,
   ToolDefinition,
   ToolParameter,
@@ -32,11 +30,16 @@ import { TOOLS } from "./tools-registry";
 import { Icon, Icons } from "../Icons";
 import { ART_STYLES, getArtStylesByCategories } from "../../lib/artStyles";
 import { ArtStylePicker } from "../artStyle/ArtStylePicker";
-import { AspectRatioPicker } from "./AspectRatioPicker";
-import { AUTO_ASPECT_RATIO, resolveAspectRatioValue } from "../../lib/aspectRatios";
+import { ControlHeading, OptionSelect, type SelectOption } from "./OptionSelect";
+import {
+  DEFAULT_CREATE_ASPECT_RATIO,
+  getSupportedAspectRatioValues,
+  MATCH_CONTAINER_ASPECT_RATIO,
+  MATCH_IMAGE_ASPECT_RATIO,
+  resolveAspectRatioValue,
+} from "../../lib/aspectRatios";
 import {
   getReferenceConstraints,
-  getRequestedAspectRatioValue,
   toolRequiresEditImage,
   toolRunCallsOpenRouter,
 } from "../../lib/toolHelpers";
@@ -49,22 +52,25 @@ import {
   snapPixelsForModel,
 } from "../../lib/modelsCatalog";
 import { formatPixelSize, type PixelSize } from "../../lib/imageSizes";
-import { planImageRequest } from "../../lib/imageRequestPlan";
+import {
+  describeShapeRequest,
+  planImageRequest,
+  requestedShapeRule,
+} from "../../lib/imageRequestPlan";
 import {
   estimateToolRunCostUsd,
   type RunCostTarget,
   type ToolRunCostEstimate,
 } from "../../lib/toolRunCostEstimate";
 import {
-  AUTO_SIZE_TOKEN,
-  findSizeParam,
-  isAutoSizeValue,
-  resolveSlotTarget,
+  CONTAINER_SIZE_TOKEN,
+  DEFAULT_STANDALONE_SIZE_TOKEN,
+  pickedSizeTier,
   toolCanFollowSlot,
 } from "../../lib/slotTarget";
 import {
   buildUpscaleOptions,
-  describeAutoShapeChange,
+  CONTAINER_UPSCALE_TOKEN,
   findTargetResolutionParam,
   type UpscaleHostTarget,
 } from "../../lib/upscale";
@@ -111,7 +117,6 @@ const getOrderedSizeOptions = (
   }
 
   const sizePriority = new Map([
-    ["512k", 0],
     ["1k", 1],
     ["2k", 2],
     ["4k", 3],
@@ -144,8 +149,11 @@ interface ToolPanelProps {
   targetImageId?: string | null;
   /** MIME type the target image arrived as, when known. */
   targetImageMime?: string | null;
-  /** The resolution the host says the target image's book slot wants, which is
-   *  the Upscale selector's "Auto" option. */
+  /** The resolution the host says the image container wants: the target
+   *  image's container, or the empty one the editor was launched on when there
+   *  is no image to edit. It is the Match Container row of the Size and Target
+   *  Resolution menus and the size a container-following run asks for
+   *  (lib/slotTarget.ts). */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   isAuthenticated: boolean;
   /** Look-around mode: the tools are all on show, but none of them can be run. */
@@ -681,22 +689,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     onApplyTool(tool.id, payload);
   };
 
-  // What a run of this tool would ask for if it followed the book slot Bloom
-  // described for the target image, or null when it would not (no slot, a tool
-  // that makes something other than the slot's picture, or a hand-picked size).
-  // The size and shape controls and the cost lookup all read the same answer.
-  const resolveSlotForTool = useCallback(
-    (tool: ToolDefinition, toolModel: ModelInfo | null) =>
-      resolveSlotTarget({
-        tool,
-        params: paramsByTool[tool.id],
-        hostTarget: targetImageSuggestedTarget,
-        requestedAspectRatio: getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
-        supportedAspectRatios: toolModel?.supportedAspectRatios,
-      }),
-    [paramsByTool, targetImageSuggestedTarget],
-  );
-
   const renderParameterField = useCallback(
     (tool: ToolDefinition, param: ToolParameter, value: string) => {
       const inputTestId = `input-${param.name}`;
@@ -716,17 +708,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
 
         return (
           <Stack key={param.name} spacing={1} sx={{ width: "100%" }}>
-            <Typography
-              variant="caption"
-              sx={{
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: muiTheme.palette.text.secondary,
-              }}
-            >
-              {param.label}
-            </Typography>
+            <ControlHeading>{param.label}</ControlHeading>
             <LazyArtStylePicker
               styles={stylesForPicker}
               value={pickerValue}
@@ -798,60 +780,138 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "aspect-ratio") {
+        // The shape menu offers the two rules and the fixed ratios as rows of
+        // one kind. A rule is offered only when the fact it follows exists:
+        // Match Image needs an image to edit, Match Container needs Bloom's
+        // container and a tool whose result belongs in it. No pixels appear
+        // here (they belong to the Size row); a row's caption only says which
+        // named ratio a ratio-only model will get, planned the same way the
+        // run is. A tool may limit the fixed ratios
+        // it offers through the parameter's options; an empty list means the
+        // two rules only (Upscale).
         const supportedAspectRatios = toolModel?.supportedAspectRatios;
-        const rawAspectRatioValue = value || param.defaultValue || AUTO_ASPECT_RATIO;
-        const aspectRatioValue =
-          rawAspectRatioValue === AUTO_ASPECT_RATIO
-            ? AUTO_ASPECT_RATIO
-            : resolveAspectRatioValue(rawAspectRatioValue, undefined, supportedAspectRatios);
-        const sizeParam = findSizeParam(tool.parameters);
-        const slot = sizeParam ? resolveSlotForTool(tool, toolModel) : null;
-        // While a tool with a size picker is on Auto inside Bloom, the whole
-        // request follows the book slot, shape included, so the shape control
-        // shows the slot's shape and takes no input. Picking a size releases
-        // the control but not the slot: Auto shape still means the slot's
-        // shape, now at the chosen size (see lib/slotTarget.ts).
-        const sizeIsAuto = !sizeParam || isAutoSizeValue(paramsByTool[tool.id]?.[sizeParam.name]);
-        const followsSlot = !!slot && sizeIsAuto;
+        const toolParams = paramsByTool[tool.id] ?? {};
+        const requiresEditImage = toolRequiresEditImage(tool);
+        const container = targetImageSuggestedTarget;
+        const containerUsable =
+          !!container && container.width > 0 && container.height > 0 && toolCanFollowSlot(tool);
+        // An edit always has an image at run time, so Match Image is offered
+        // for every edit tool; its caption waits until the image's size is
+        // known.
+        const imageUsable = requiresEditImage;
+        const planShape = (aspectRatio: string) => {
+          const input = {
+            tool,
+            params: { ...toolParams, aspectRatio },
+            toolModel,
+            requiresEditImage,
+            targetImageResolution,
+            hostTarget: targetImageSuggestedTarget,
+            autoSizeResolution: tool.autoSizeFromInput ? targetImageResolution : null,
+          };
+          const plan = planImageRequest(input);
+          return {
+            caption: describeShapeRequest(plan, input) ?? undefined,
+            swatchRatio: resolveAspectRatioValue(
+              plan.requestedAspectRatio,
+              targetImageResolution,
+              supportedAspectRatios,
+            ),
+          };
+        };
+        const shapeOptions: SelectOption[] = [];
+        if (imageUsable) {
+          shapeOptions.push({
+            value: MATCH_IMAGE_ASPECT_RATIO,
+            label: "Match Image",
+            tooltip: targetImageResolution
+              ? `This image is ${targetImageResolution.width} x ${targetImageResolution.height}`
+              : undefined,
+            ...planShape(MATCH_IMAGE_ASPECT_RATIO),
+          });
+        }
+        if (containerUsable) {
+          const planned = planShape(MATCH_CONTAINER_ASPECT_RATIO);
+          shapeOptions.push({
+            value: MATCH_CONTAINER_ASPECT_RATIO,
+            label: "Match Container",
+            // Reshaping an existing picture to its container changes the
+            // composition, so the row says so.
+            caption: [planned.caption, imageUsable ? "will reframe" : null]
+              .filter(Boolean)
+              .join(", "),
+            swatchRatio: planned.swatchRatio,
+            tooltip: [
+              `Image container on the page is ${container!.width} x ${container!.height}`,
+              container!.memo?.trim(),
+            ]
+              .filter(Boolean)
+              .join(". "),
+          });
+        }
+        const fixedRatios = getSupportedAspectRatioValues(supportedAspectRatios).filter(
+          (ratio) => !param.options || param.options.includes(ratio),
+        );
+        fixedRatios.forEach((ratio) => shapeOptions.push({ value: ratio, label: ratio }));
+        // The stored choice when the menu offers it; else the rule the tool
+        // would default to, if available; else a square.
+        const requested = requestedShapeRule(tool, toolParams, toolModel);
+        const fallback = imageUsable
+          ? MATCH_IMAGE_ASPECT_RATIO
+          : containerUsable
+            ? MATCH_CONTAINER_ASPECT_RATIO
+            : resolveAspectRatioValue(
+                DEFAULT_CREATE_ASPECT_RATIO,
+                undefined,
+                supportedAspectRatios,
+              );
+        const shapeValue = shapeOptions.some((option) => option.value === requested)
+          ? requested
+          : fallback;
         return (
-          <Stack key={param.name} spacing={0.5}>
-            <AspectRatioPicker
-              value={followsSlot ? slot!.aspectRatio : aspectRatioValue}
-              onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
-              disabled={isProcessing || followsSlot}
-              label={param.label}
-              allowAuto
-              autoResolvedValue={
-                slot?.aspectRatio ??
-                resolveAspectRatioValue(
-                  AUTO_ASPECT_RATIO,
-                  targetImageResolution,
-                  supportedAspectRatios,
-                )
-              }
-              autoDescription={slot ? "The book slot" : undefined}
-              options={supportedAspectRatios}
-            />
-          </Stack>
+          <OptionSelect
+            key={param.name}
+            label={param.label}
+            value={shapeValue}
+            onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
+            disabled={isProcessing}
+            options={shapeOptions}
+            inputTestId={inputTestId}
+            optionTestIdPrefix="aspect-ratio-option"
+          />
         );
       }
 
       if (param.type === "size") {
-        // Every option is the tier's name, so the picker reads the same on
-        // every model. A pixel-size model (GPT Image 2.5) also shows the pixels
-        // each tier will be sent in the shape this tool would request, since
-        // its "4k" is 2880x2880 for a square; tiers that land on the same
-        // pixels are offered once. Inside Bloom, an Auto entry at the top is
-        // the book slot's size and the default (see lib/slotTarget.ts).
-        const slot = resolveSlotForTool(tool, toolModel);
-        const slotAvailable = !!targetImageSuggestedTarget && toolCanFollowSlot(tool);
-        const shapeForPixels =
-          slot?.aspectRatio ??
-          resolveAspectRatioValue(
-            getRequestedAspectRatioValue(tool, paramsByTool[tool.id]),
-            targetImageResolution,
-            toolModel?.supportedAspectRatios,
-          );
+        // The size menu says how many pixels, never what shape. Inside Bloom
+        // its first entry is the image container's own size, and the default;
+        // the tiers follow. A pixel-size model (GPT Image 2.5) also shows the
+        // pixels each entry will be sent in the shape this tool would request,
+        // since its "4k" is 2880x2880 for a square; tiers that land on the same
+        // pixels are offered once. Everything here is planned the same way the
+        // run is (lib/imageRequestPlan.ts).
+        const planInput = {
+          tool,
+          params: paramsByTool[tool.id],
+          toolModel,
+          requiresEditImage: toolRequiresEditImage(tool),
+          targetImageResolution,
+          hostTarget: targetImageSuggestedTarget,
+          autoSizeResolution: tool.autoSizeFromInput ? targetImageResolution : null,
+        };
+        const plan = planImageRequest(planInput);
+        const containerUsable =
+          !!targetImageSuggestedTarget &&
+          targetImageSuggestedTarget.width > 0 &&
+          targetImageSuggestedTarget.height > 0 &&
+          toolCanFollowSlot(tool);
+        const shapeForPixels = plan.slotTarget
+          ? `${plan.slotTarget.targetDimensions.width}:${plan.slotTarget.targetDimensions.height}`
+          : resolveAspectRatioValue(
+              plan.requestedAspectRatio,
+              targetImageResolution,
+              toolModel?.supportedAspectRatios,
+            );
         const optionByToken = new Map<string, SizeOption>(
           getSizeOptionsForModel(param.options, toolModel?.id, shapeForPixels).map((option) => [
             option.token,
@@ -861,84 +921,65 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         const tierTokens = getOrderedSizeOptions(param.options, toolModel?.id).filter((token) =>
           optionByToken.has(token),
         );
-        const slotPixels = slotAvailable
-          ? snapPixelsForModel(toolModel?.id, targetImageSuggestedTarget ?? null)
+        // The Container row shows the container's size in the shape chosen
+        // above, whatever tier is picked right now.
+        const containerPixels = containerUsable
+          ? snapPixelsForModel(
+              toolModel?.id,
+              planImageRequest({
+                ...planInput,
+                params: { ...paramsByTool[tool.id], [param.name]: CONTAINER_SIZE_TOKEN },
+              }).slotTarget?.targetDimensions ?? null,
+            )
           : null;
         const sizeOptions: SizeOption[] = [
-          ...(slotAvailable
+          ...(containerUsable
             ? [
                 {
-                  token: AUTO_SIZE_TOKEN,
-                  label: "Auto",
-                  pixels: slotPixels ? formatPixelSize(slotPixels) : undefined,
+                  token: CONTAINER_SIZE_TOKEN,
+                  label: "Match Container",
+                  pixels: containerPixels ? formatPixelSize(containerPixels) : undefined,
                 },
               ]
             : []),
           ...tierTokens.map((token) => optionByToken.get(token)!),
         ];
-        // Auto with no slot to follow shows the smallest tier, which is what it
-        // sends. A remembered tier can be above the current model's ceiling
-        // (the user picked 4k under one model, then switched); fall back to
-        // Auto or the first offered tier rather than a value the model rejects.
-        const firstTier = tierTokens[0] ?? "";
-        const sizeValue = isAutoSizeValue(value)
-          ? slotAvailable
-            ? AUTO_SIZE_TOKEN
-            : firstTier
-          : tierTokens.includes(value)
-            ? value
-            : slotAvailable
-              ? AUTO_SIZE_TOKEN
-              : firstTier;
+        // A stored tier the current model offers stands; anything else (the
+        // container token, a tier above this model's ceiling, a value from an
+        // older build) shows the default: the container inside Bloom, 1k
+        // standalone.
+        const storedTier = pickedSizeTier(value);
+        const sizeValue =
+          storedTier && tierTokens.includes(storedTier)
+            ? storedTier
+            : containerUsable
+              ? CONTAINER_SIZE_TOKEN
+              : tierTokens.includes(DEFAULT_STANDALONE_SIZE_TOKEN)
+                ? DEFAULT_STANDALONE_SIZE_TOKEN
+                : (tierTokens[0] ?? "");
         return (
-          <Stack key={param.name} spacing={1}>
-            <Typography
-              variant="caption"
-              sx={{
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: muiTheme.palette.text.secondary,
-              }}
-            >
-              {param.label}
-            </Typography>
-            <TextField
-              select
-              value={sizeValue}
-              onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
-              name={param.name}
-              size="small"
-              disabled={isProcessing}
-              inputProps={{ "data-testid": inputTestId }}
-              SelectProps={{
-                MenuProps: { disablePortal: false },
-                displayEmpty: false,
-                // The closed picker shows only the tier's name; the pixels are
-                // detail for the open list, where there is room for them.
-                renderValue: (selected) =>
-                  sizeOptions.find((option) => option.token === selected)?.label ??
-                  String(selected),
-              }}
-            >
-              {sizeOptions.map((option) => (
-                <MenuItem key={option.token} value={option.token}>
-                  <ListItemText
-                    primary={option.label}
-                    secondary={option.pixels}
-                    sx={{ my: 0, "& .MuiListItemText-secondary": { fontSize: "0.75rem" } }}
-                  />
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
+          <OptionSelect
+            key={param.name}
+            label={param.label}
+            value={sizeValue}
+            onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
+            disabled={isProcessing}
+            options={sizeOptions.map((option) => ({
+              value: option.token,
+              label: option.label,
+              caption: option.pixels,
+            }))}
+            inputTestId={inputTestId}
+          />
         );
       }
 
       if (param.type === "target-resolution") {
-        // Labeled with what the selected model will be sent: a pixel-size
-        // model has an edge cap and a pixel budget, so its "4K" reads the
-        // size inside them, not 4096.
+        // Each row is labeled with the pixels the selected model will be sent
+        // for it, in the image's own shape: a pixel-size model has an edge cap
+        // and a pixel budget, so its "4K" reads the size inside them, not
+        // 4096. Nothing is printed under the control; the host's memo about
+        // the container rides on the Container row as a tooltip.
         const options = buildUpscaleOptions(
           targetImageResolution,
           targetImageSuggestedTarget,
@@ -951,63 +992,26 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           ? value
           : options[0]?.token || "hd";
         const memo = targetImageSuggestedTarget?.memo?.trim();
-        // The memo is the host's own words about the slot, so it quotes the
-        // slot's size. Auto asks for the same detail in the image's shape,
-        // which is a different pair of numbers whenever the two shapes differ.
-        const shapeNote = describeAutoShapeChange(
-          options.find((option) => option.token === "auto")?.dimensions,
-          targetImageSuggestedTarget,
-        );
         return (
-          <Stack key={param.name} spacing={0.75}>
-            <Typography
-              variant="caption"
-              sx={{
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: muiTheme.palette.text.secondary,
-              }}
-            >
-              {param.label}
-            </Typography>
-            <TextField
-              select
-              value={selectedToken}
-              onChange={(event) => handleParamChange(tool.id, param.name, event.target.value)}
-              name={param.name}
-              fullWidth
-              size="small"
-              // With nothing to upscale the labels carry no dimensions, so
-              // there is nothing to choose between yet. Batch ticks stand in
-              // for a target image, same as the run button's own gate.
-              disabled={isProcessing || (!hasTargetImage && batchTickedCount === 0)}
-              inputProps={{ "data-testid": inputTestId }}
-              SelectProps={{
-                MenuProps: { disablePortal: false },
-                displayEmpty: false,
-              }}
-            >
-              {options.map((option) => (
-                <MenuItem key={option.token} value={option.token}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            {memo && (
-              <FormHelperText data-testid="upscale-target-memo" sx={{ m: 0 }}>
-                {memo}
-              </FormHelperText>
-            )}
-            {shapeNote && (
-              <FormHelperText data-testid="upscale-shape-note" sx={{ m: 0 }}>
-                {shapeNote}
-              </FormHelperText>
-            )}
-          </Stack>
+          <OptionSelect
+            key={param.name}
+            label={param.label}
+            value={selectedToken}
+            onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
+            // With nothing to upscale the labels carry no dimensions, so there
+            // is nothing to choose between yet. Batch ticks stand in for a
+            // target image, same as the run button's own gate.
+            disabled={isProcessing || (!hasTargetImage && batchTickedCount === 0)}
+            options={options.map((option) => ({
+              value: option.token,
+              label: option.label,
+              caption: option.caption,
+              tooltip: option.token === CONTAINER_UPSCALE_TOKEN && memo ? memo : undefined,
+            }))}
+            inputTestId={inputTestId}
+          />
         );
       }
-
       if (param.type === "select") {
         return (
           <TextField
@@ -1060,7 +1064,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       // the tool's other params (its shape, its size), so they must re-render
       // when any param changes.
       paramsByTool,
-      resolveSlotForTool,
       targetImageResolution,
       targetImageSuggestedTarget,
       hasTargetImage,
@@ -1186,7 +1189,10 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         ? estimateForTool(
             tool,
             toolModelId,
-            hasTargetImage
+            // A Create run has no image to edit but still draws for the
+            // container, whose size decides what the output costs. An edit
+            // with no image cannot run, so it has no estimate.
+            hasTargetImage || (targetImageSuggestedTarget && !toolRequiresEditImage(tool))
               ? {
                   resolution: targetImageResolution ?? null,
                   suggestedTarget: targetImageSuggestedTarget ?? null,
@@ -1242,7 +1248,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                       (_, index) => batchTargets?.[index] ?? null,
                     )
                   : [
-                      hasTargetImage
+                      hasTargetImage || (targetImageSuggestedTarget && !toolRequiresEditImage(tool))
                         ? {
                             resolution: targetImageResolution ?? null,
                             suggestedTarget: targetImageSuggestedTarget ?? null,
@@ -1320,38 +1326,14 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
           >
             <Stack spacing={2} mt={2}>
               {(() => {
-                const params = tool.parameters;
+                // Every parameter gets the full width, one under the other, in
+                // the tool's declared order (Shape above Size). The Shape and
+                // Size rows carry a caption each, which a half-width column
+                // would truncate.
                 const toolParams = paramsByTool[tool.id] || {};
-                const elements: React.ReactNode[] = [];
-                let i = 0;
-                while (i < params.length) {
-                  const param = params[i];
-                  const nextParam = params[i + 1];
-                  const paramValue = toolParams[param.name] ?? "";
-                  if (param.name === "aspectRatio" && nextParam?.name === "size") {
-                    const nextParamValue = toolParams[nextParam.name] ?? "";
-                    elements.push(
-                      <Box
-                        key="aspect-ratio-size-row"
-                        sx={{
-                          display: "flex",
-                          gap: 2,
-                          alignItems: "flex-start",
-                        }}
-                      >
-                        <Box sx={{ flex: 1 }}>{renderParameterField(tool, param, paramValue)}</Box>
-                        <Box sx={{ width: 80, flexShrink: 0 }}>
-                          {renderParameterField(tool, nextParam, nextParamValue)}
-                        </Box>
-                      </Box>,
-                    );
-                    i += 2;
-                  } else {
-                    elements.push(renderParameterField(tool, param, paramValue));
-                    i += 1;
-                  }
-                }
-                return elements;
+                return tool.parameters.map((param) =>
+                  renderParameterField(tool, param, toolParams[param.name] ?? ""),
+                );
               })()}
 
               <Stack spacing={1.5}>
@@ -1423,6 +1405,24 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   </Stack>
                 ) : (
                   <>
+                    {/* The estimate sits above the button so it is read before
+                        the run is started. */}
+                    {isBatchModeForTool && estimatedBatchCost != null && (
+                      <FormHelperText
+                        data-testid="batch-cost-estimate"
+                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Estimated cost: {formatCost(estimatedBatchCost)}
+                      </FormHelperText>
+                    )}
+                    {!isBatchModeForTool && !isProcessing && singleRunCostUsd != null && (
+                      <FormHelperText
+                        data-testid="run-cost-estimate"
+                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
+                      >
+                        Estimate {formatCost(singleRunCostUsd)}
+                      </FormHelperText>
+                    )}
                     <Button
                       // Always a plain button — never a native submit. If this were
                       // type="submit", clicking it to cancel would flip isProcessing
@@ -1495,22 +1495,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         </>
                       )}
                     </Button>
-                    {isBatchModeForTool && estimatedBatchCost != null && (
-                      <FormHelperText
-                        data-testid="batch-cost-estimate"
-                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
-                      >
-                        Estimated cost: {formatCost(estimatedBatchCost)}
-                      </FormHelperText>
-                    )}
-                    {!isBatchModeForTool && !isProcessing && singleRunCostUsd != null && (
-                      <FormHelperText
-                        data-testid="run-cost-estimate"
-                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
-                      >
-                        Estimate {formatCost(singleRunCostUsd)}
-                      </FormHelperText>
-                    )}
                     {submitDisabledReason && !isProcessing && (
                       <FormHelperText
                         sx={{

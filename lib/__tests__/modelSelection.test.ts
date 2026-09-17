@@ -201,16 +201,14 @@ describe("reasoning levels per model", () => {
   });
 
   it("carries the pixels a pixel-size model will be sent beside each size token", () => {
-    // GPT Image 2.5 caps the pixel budget, so "4k" square is 2880x2880, and
-    // "512k" and "1k" both land on 1024x1024 and collapse into one option.
-    expect(getSizeOptionsForModel(["512k", "1k", "2k", "4k"], SUNBURST, "1:1")).toEqual([
-      { token: "512k", label: "512k", pixels: "1024x1024" },
+    // GPT Image 2.5 caps the pixel budget, so "4k" square is 2880x2880.
+    expect(getSizeOptionsForModel(["1k", "2k", "4k"], SUNBURST, "1:1")).toEqual([
+      { token: "1k", label: "1k", pixels: "1024x1024" },
       { token: "2k", label: "2k", pixels: "2048x2048" },
       { token: "4k", label: "4k", pixels: "2880x2880" },
     ]);
-    // A tier-token model shows the tokens as they are.
-    expect(getSizeOptionsForModel(["512k", "1k", "2k", "4k"], GEMINI_FLASH, "1:1")).toEqual([
-      { token: "512k", label: "512k" },
+    // A tier-token model shows the tokens as they are, up to its ceiling.
+    expect(getSizeOptionsForModel(["1k", "2k", "4k"], GEMINI_FLASH, "1:1")).toEqual([
       { token: "1k", label: "1k" },
       { token: "2k", label: "2k" },
     ]);

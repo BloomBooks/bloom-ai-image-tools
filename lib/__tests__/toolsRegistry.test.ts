@@ -143,14 +143,14 @@ describe("ethnicity tool prompt", () => {
     expect(upscaleTool?.group).toBe("enhance");
     expect(upscaleTool?.editImage).not.toBe(false);
     expect(upscaleTool?.referenceImages).toBe("0");
-    // The output shape always follows the source, so no Shape picker.
+    // Upscaling keeps the picture's own shape, so there is no Shape menu.
     expect(upscaleTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.type).toBe(
       "target-resolution",
     );
     expect(
       upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.defaultValue,
-    ).toBe("auto");
+    ).toBe("container");
     expect(upscaleTool?.parameters.find((param) => param.name === "removeFuzziness")?.type).toBe(
       "checkbox",
     );

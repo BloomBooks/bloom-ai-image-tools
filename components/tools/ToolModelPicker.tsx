@@ -44,7 +44,7 @@ interface ToolModelPickerProps {
   /** The output size token this tool would request now (drives the cost lookup). */
   sizeToken: string;
   /**
-   * The pixels the host says the book slot wants for this image
+   * The pixels the host says the image container wants for this image
    * (IBloomHostBookImage.suggestedTarget), or null outside Bloom. Shown at the
    * foot of the menu so a user can see what every tool here is aiming at.
    */
@@ -330,7 +330,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                 data-testid={`tool-host-target-${tool.id}`}
                 sx={{ display: "block", color: theme.colors.textSecondary }}
               >
-                {`Book slot wants ${hostTarget.width} x ${hostTarget.height}`}
+                {`Image container on the page wants ${hostTarget.width} x ${hostTarget.height}`}
               </Typography>
               {hostTarget.memo?.trim() && (
                 <Typography

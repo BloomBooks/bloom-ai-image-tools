@@ -1,5 +1,10 @@
 import type { ToolDefinition, ToolParameter, ToolParams } from "../types";
-import { AUTO_ASPECT_RATIO, resolveAspectRatioValue } from "./aspectRatios";
+import {
+  AUTO_ASPECT_RATIO,
+  MATCH_CONTAINER_ASPECT_RATIO,
+  MATCH_IMAGE_ASPECT_RATIO,
+  resolveAspectRatioValue,
+} from "./aspectRatios";
 import {
   parseAspectRatio,
   pickSizeTokenForLongEdge,
@@ -7,50 +12,75 @@ import {
   sizeTokenToImageSizeTier,
   type PixelSize,
 } from "./imageSizes";
-import { findTargetResolutionParam } from "./upscale";
+import { findTargetResolutionParam, resolveAutoTarget } from "./upscale";
 
 /**
- * When the app runs inside Bloom, the host says how many pixels the book slot
- * an image sits in actually wants (IBloomHostBookImage.suggestedTarget). That
- * is the size a tool's result should come back at, whatever the tool: a bigger
- * picture is downscaled by Bloom and a smaller one is blurry on the page. This
- * module decides, for one run, whether the request follows the slot and what
- * it asks for when it does. The run path and the tool UI both go through it so
- * the picker shows the request that will be made.
+ * When the app runs inside Bloom, the host says how many pixels the image
+ * container an image sits in wants (IBloomHostBookImage.suggestedTarget). Bloom
+ * always sends this for a book image. That is the size a tool's result should
+ * come back at, whatever the tool: a bigger picture is downscaled by Bloom and
+ * a smaller one is blurry on the page. This module decides, for one run,
+ * whether the request follows the container and what it asks for when it does.
+ * The run path and the tool UI both go through it so the picker shows the
+ * request that will be made.
+ *
+ * Two facts arrive from Bloom for a slot, and the shape control lets the user
+ * say which the output's shape follows: the container (MATCH_CONTAINER) or the
+ * existing image (MATCH_IMAGE). The size control says how many pixels: the
+ * container's, or a tier.
  */
 
+/** The size-picker value that means "the image container's size". It is the picker's default inside Bloom. */
+export const CONTAINER_SIZE_TOKEN = "container";
+
 /**
- * The size-picker value that means "the book slot's size". It is the picker's
- * default; without a host target it stands for the tool's smallest size, so a
- * standalone user sees the same picker as before.
+ * The size a run has with nothing to size against: standalone, with the size
+ * picker on its default. Sent as 1024 pixels on the long edge.
  */
-export const AUTO_SIZE_TOKEN = "auto";
+export const DEFAULT_STANDALONE_SIZE_TOKEN = "1k";
+
+/** The tiers the size menus offer. Anything else stored is treated as unset. */
+export const SIZE_TIER_TOKENS = ["1k", "2k", "4k"] as const;
+
+/** Where the shape of a request came from. */
+export type ShapeSource = "image" | "container" | "fixed";
 
 export interface SlotTarget {
-  /** The tier token to request: the user's, or the smallest that covers the slot. */
+  /** The tier token to request: the user's, or the smallest that covers the container. */
   sizeToken: string;
-  /** The shape to request: the slot's own unless the user picked one. */
-  aspectRatio: string;
+  /** Whether the pixel count is the container's own or a tier the user picked. */
+  sizeSource: "container" | "tier";
   /**
-   * The exact pixels to ask a pixel-size model for: the slot itself, or the
-   * slot's long edge in the shape the user picked.
+   * The named ratio nearest the shape, which is what a model that takes only
+   * named ratios is sent. A pixel model is sent targetDimensions instead.
    */
+  aspectRatio: string;
+  /** Which fact the shape follows. */
+  shapeSource: ShapeSource;
+  /** The exact pixels to ask a pixel-size model for. */
   targetDimensions: PixelSize;
 }
 
 export const findSizeParam = (parameters: ToolParameter[] | undefined): ToolParameter | undefined =>
   parameters?.find((parameter) => parameter.type === "size");
 
-/** A size-picker value that means "follow the slot" rather than a tier. */
-export const isAutoSizeValue = (value: string | null | undefined): boolean => {
+/** A size-picker value naming one of the tiers the menus offer. */
+export const isSizeTierToken = (value: string | null | undefined): boolean =>
+  SIZE_TIER_TOKENS.includes(
+    (value ?? "").trim().toLowerCase() as (typeof SIZE_TIER_TOKENS)[number],
+  );
+
+/** The tier a stored size value names, or null for the container token and anything unknown. */
+export const pickedSizeTier = (value: string | null | undefined): string | null => {
   const trimmed = (value ?? "").trim().toLowerCase();
-  return trimmed === "" || trimmed === AUTO_SIZE_TOKEN;
+  return isSizeTierToken(trimmed) ? trimmed : null;
 };
 
 /**
- * Whether a tool's result is the kind of picture that belongs in the slot.
- * The exceptions each make something else: Upscale has its own Auto option
- * built on the same host target; break-comic matches the page it is cutting
+ * Whether a tool's result is the kind of picture that belongs in the container.
+ * The exceptions each make something else: Upscale's Target Resolution has
+ * its own Match Container row built on the same host target; break-comic
+ * matches the page it is cutting
  * up; the sheet tools (cast, game pieces, GIF frames) make a sheet that is
  * split afterwards; a tool with a fixed shape (the palette strip) has said what
  * shape it needs.
@@ -74,7 +104,7 @@ const usableDimensions = (
     ? { width: target.width, height: target.height }
     : null;
 
-/** The slot's long edge in a chosen shape, so a user's shape still gets the slot's size. */
+/** A shape scaled to a long edge, so a chosen shape still gets the container's or a tier's size. */
 const fitShapeToLongEdge = (shape: PixelSize, longEdge: number): PixelSize => {
   const scale = longEdge / Math.max(shape.width, shape.height);
   return {
@@ -84,71 +114,106 @@ const fitShapeToLongEdge = (shape: PixelSize, longEdge: number): PixelSize => {
 };
 
 /**
- * What a run of `tool` asks for when it follows the book slot, or null when it
- * does not: no host target, or a tool that makes something other than the
- * slot's picture.
+ * What a run of `tool` asks for when it follows the image container, or null
+ * when it does not: no host target (standalone), or a tool that makes
+ * something other than the container's picture.
  *
- * The size picker says how many pixels, never what shape. A picture drawn for
- * the slot has to fit the slot whatever size it is asked for, so a hand-picked
- * tier comes back in the slot's shape at that tier's long edge: 512k in a
- * 1472x1104 slot is 1024x768, which is what the size menu says it will be. The
- * shape changes only when the user picks one, which the shape control lets
- * them do once they have picked a tier; while the size is Auto the whole
- * request follows the slot and that control is disabled.
+ * Shape: MATCH_CONTAINER is the container's own pixels. MATCH_IMAGE is the
+ * existing image's shape, covering the container so nothing is lost when Bloom
+ * fits it. For a picture made from nothing (a tool with no image to edit) it
+ * is the container's. For an edit whose image size is not known yet there is
+ * no shape to keep, so the run does not follow the container at all (null)
+ * rather than reframe the picture to it; the caller falls back to the image's
+ * own shape. A fixed ratio is that ratio. The size picker says how many
+ * pixels, never what shape: a picked tier gives the same shape at that tier's
+ * long edge.
  */
 export const resolveSlotTarget = (args: {
   tool: ToolDefinition;
   params: ToolParams | null | undefined;
   hostTarget: { width: number; height: number } | null | undefined;
-  /** The shape the tool would request on its own (getRequestedAspectRatioValue). */
+  /** The existing image's pixels, when there is one and its size is known. */
+  imageResolution?: { width: number; height: number } | null;
+  /** The shape rule or fixed ratio the tool would request (getRequestedAspectRatioValue). */
   requestedAspectRatio: string;
   supportedAspectRatios?: readonly string[] | null;
 }): SlotTarget | null => {
   const { tool, params, requestedAspectRatio, supportedAspectRatios } = args;
-  const slot = usableDimensions(args.hostTarget);
-  if (!slot || !toolCanFollowSlot(tool)) return null;
+  const container = usableDimensions(args.hostTarget);
+  if (!container || !toolCanFollowSlot(tool)) return null;
+  const image = usableDimensions(args.imageResolution);
 
   const sizeParam = findSizeParam(tool.parameters);
-  const sizeValue = sizeParam ? params?.[sizeParam.name]?.trim() : undefined;
-  const pickedTier = sizeValue && !isAutoSizeValue(sizeValue) ? sizeValue : null;
+  const pickedTier = sizeParam ? pickedSizeTier(params?.[sizeParam.name]) : null;
 
-  const slotShape = resolveAspectRatioValue(AUTO_ASPECT_RATIO, slot, supportedAspectRatios);
-  const longEdge = Math.max(slot.width, slot.height);
-  const sizeToken = pickedTier ?? pickSizeTokenForLongEdge(longEdge);
-
-  // A tool with a size picker follows the slot's shape while its size is Auto;
-  // the picker disables the shape control and shows that. A tool without one,
-  // and a tool whose user has picked a tier, keeps a shape the user set.
-  const shapeIsTheUsers = !sizeParam || !!pickedTier;
-  const chosenShape =
-    shapeIsTheUsers && requestedAspectRatio !== AUTO_ASPECT_RATIO
+  const fixedShape =
+    requestedAspectRatio !== MATCH_IMAGE_ASPECT_RATIO &&
+    requestedAspectRatio !== MATCH_CONTAINER_ASPECT_RATIO
       ? parseAspectRatio(requestedAspectRatio)
       : null;
-  const aspectRatio = chosenShape ? requestedAspectRatio : slotShape;
+  if (!fixedShape && requestedAspectRatio === MATCH_IMAGE_ASPECT_RATIO && !image) {
+    if (tool.editImage !== false) return null;
+  }
+  const shapeSource: ShapeSource = fixedShape
+    ? "fixed"
+    : requestedAspectRatio === MATCH_IMAGE_ASPECT_RATIO && image
+      ? "image"
+      : "container";
+  const shape = fixedShape ?? (shapeSource === "image" ? image! : container);
+  const aspectRatio = fixedShape
+    ? requestedAspectRatio
+    : resolveAspectRatioValue(AUTO_ASPECT_RATIO, shape, supportedAspectRatios);
 
-  // The tier sets the long edge; without one the slot's own pixels are exact,
-  // so pass them through rather than reconstructing them from the ratio.
+  const containerLongEdge = Math.max(container.width, container.height);
   if (pickedTier) {
+    const tierLongEdge = pixelsForTier(sizeTokenToImageSizeTier(pickedTier), "1:1").width;
     return {
-      sizeToken,
+      sizeToken: pickedTier,
+      sizeSource: "tier",
       aspectRatio,
-      targetDimensions: pixelsForTier(sizeTokenToImageSizeTier(pickedTier), aspectRatio),
+      shapeSource,
+      targetDimensions: fitShapeToLongEdge(shape, tierLongEdge),
     };
   }
-  if (chosenShape) {
+  const sizeToken = pickSizeTokenForLongEdge(containerLongEdge);
+  if (shapeSource === "container") {
+    // The container's own pixels are exact; pass them through rather than
+    // reconstructing them from a ratio.
     return {
       sizeToken,
+      sizeSource: "container",
       aspectRatio,
-      targetDimensions: fitShapeToLongEdge(chosenShape, longEdge),
+      shapeSource,
+      targetDimensions: container,
     };
   }
-  return { sizeToken, aspectRatio, targetDimensions: slot };
+  if (shapeSource === "image") {
+    // The image's shape scaled to cover the container can have a longer edge
+    // than the container's own, so the tier is picked from those pixels.
+    const targetDimensions = resolveAutoTarget(image, container) ?? container;
+    return {
+      sizeToken: pickSizeTokenForLongEdge(
+        Math.max(targetDimensions.width, targetDimensions.height),
+      ),
+      sizeSource: "container",
+      aspectRatio,
+      shapeSource,
+      targetDimensions,
+    };
+  }
+  return {
+    sizeToken,
+    sizeSource: "container",
+    aspectRatio,
+    shapeSource,
+    targetDimensions: fitShapeToLongEdge(shape, containerLongEdge),
+  };
 };
 
 /**
- * The tier token a size picker's value stands for once Auto is settled: the
- * slot's tier when the run follows the slot, else the tool's smallest size for
- * an Auto with nothing to follow, else the value itself.
+ * The tier token a size picker's value stands for once settled: a picked tier
+ * as it is, else the container's tier when the run follows the container, else
+ * the standalone default.
  */
 export const resolveSizeTokenValue = (
   sizeParam: ToolParameter | undefined,
@@ -156,7 +221,8 @@ export const resolveSizeTokenValue = (
   slot: SlotTarget | null,
 ): string | undefined => {
   if (!sizeParam) return value?.trim() || undefined;
-  if (!isAutoSizeValue(value)) return value!.trim();
+  const tier = pickedSizeTier(value);
+  if (tier) return tier;
   if (slot) return slot.sizeToken;
-  return sizeParam.options?.[0] ?? sizeParam.defaultValue;
+  return DEFAULT_STANDALONE_SIZE_TOKEN;
 };

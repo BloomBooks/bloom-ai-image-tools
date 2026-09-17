@@ -16,10 +16,14 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { ColoringBookIcon } from "../Icons";
 import { ToolDefinition, ToolParameter } from "../../types";
 import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
-import { AUTO_ASPECT_RATIO, DEFAULT_CREATE_ASPECT_RATIO } from "../../lib/aspectRatios";
+import {
+  DEFAULT_CREATE_ASPECT_RATIO,
+  MATCH_CONTAINER_ASPECT_RATIO,
+  MATCH_IMAGE_ASPECT_RATIO,
+} from "../../lib/aspectRatios";
 import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
 import { BREAK_COMIC_EDIT_PROMPT } from "../../lib/breakComic";
-import { RESOLVED_TARGET_PIXELS_PARAM } from "../../lib/upscale";
+import { CONTAINER_UPSCALE_TOKEN, RESOLVED_TARGET_PIXELS_PARAM } from "../../lib/upscale";
 import {
   buildGifAnimationSheetPrompt,
   DEFAULT_GIF_ENDING_OPTION,
@@ -29,17 +33,20 @@ import {
   parseGifEnding,
   parseGifFrameCount,
 } from "../../lib/gifAnimationPrompt";
-import { AUTO_SIZE_TOKEN } from "../../lib/slotTarget";
+import {
+  CONTAINER_SIZE_TOKEN,
+  DEFAULT_STANDALONE_SIZE_TOKEN,
+  SIZE_TIER_TOKENS,
+} from "../../lib/slotTarget";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
-const SIZE_OPTIONS = ["512k", "1k", "2k", "4k"] as const;
-// The size whose prompt hint stands in when the run has settled Auto to no
-// particular tier. The run path resolves Auto before the template runs, so
-// this is only a last resort.
-const DEFAULT_SIZE = SIZE_OPTIONS[0];
+const SIZE_OPTIONS = SIZE_TIER_TOKENS;
+// The size whose prompt hint stands in when the run has settled the size to no
+// particular tier. The run path settles it before the template runs, so this
+// is only a last resort.
+const DEFAULT_SIZE = DEFAULT_STANDALONE_SIZE_TOKEN;
 const SIZE_HINTS: Record<string, string> = {
-  "512k": "512k image preset (uses the provider's lowest supported Gemini image-size tier).",
   "1k": "1k image (1024px on the long edge.)",
   "2k": "2k image (2048px on the long edge.)",
   "4k": "4k image (4096px on the long edge.)",
@@ -86,8 +93,6 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "improve_drawing",
   "remove_object",
   "stylized_title",
-  // Upscale reproduces the same picture bigger, so the output shape always
-  // follows the source; offering a shape picker would invite a crop.
   "upscale",
 ]);
 
@@ -140,18 +145,19 @@ export const TOOLS: ToolDefinition[] = (
           optional: true,
         },
         {
-          // Auto is the book slot's shape when Bloom supplies one, and a
-          // square otherwise (see lib/slotTarget.ts and resolveAspectRatioValue).
-          ...createAspectRatioParameter(AUTO_ASPECT_RATIO),
+          // A picture made from nothing takes the image container's shape
+          // inside Bloom; standalone, with no container, it is a square (see
+          // lib/imageRequestPlan.ts).
+          ...createAspectRatioParameter(MATCH_CONTAINER_ASPECT_RATIO),
         },
         {
           name: "size",
           label: "Size",
           type: "size",
           options: [...SIZE_OPTIONS],
-          // Auto is the book slot's size when Bloom supplies one, and the
-          // smallest option otherwise (see lib/slotTarget.ts).
-          defaultValue: AUTO_SIZE_TOKEN,
+          // The image container's size inside Bloom; standalone, 1k (see
+          // lib/slotTarget.ts).
+          defaultValue: CONTAINER_SIZE_TOKEN,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
@@ -481,9 +487,9 @@ export const TOOLS: ToolDefinition[] = (
           label: "Size",
           type: "size",
           options: [...SIZE_OPTIONS],
-          // Auto is the book slot's size when Bloom supplies one, and the
-          // smallest option otherwise (see lib/slotTarget.ts).
-          defaultValue: AUTO_SIZE_TOKEN,
+          // The image container's size inside Bloom; standalone, 1k (see
+          // lib/slotTarget.ts).
+          defaultValue: CONTAINER_SIZE_TOKEN,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
@@ -695,15 +701,16 @@ export const TOOLS: ToolDefinition[] = (
       description: "Create a higher-resolution version of this image.",
       group: "enhance",
       icon: PhotoSizeSelectLargeOutlinedIcon,
+      // Upscaling keeps the picture's own shape, so there is no Shape menu.
       parameters: [
         {
           name: "targetResolution",
           label: "Target Resolution",
           type: "target-resolution",
-          // "auto" is the host's computed target for the book slot. When there
-          // is none, the selector has no Auto option and resolveUpscaleTarget
-          // reads this stale token as HD.
-          defaultValue: "auto",
+          // Enough pixels to fill the image container. Standalone there is no
+          // container, the selector has no Container option, and
+          // resolveUpscaleTarget reads this token as HD.
+          defaultValue: CONTAINER_UPSCALE_TOKEN,
         },
         {
           name: "removeFuzziness",
@@ -807,8 +814,10 @@ export const TOOLS: ToolDefinition[] = (
       ...tool,
       parameters: [
         ...tool.parameters,
+        // An edit keeps its image's shape unless the user says otherwise; a
+        // picture made from nothing with no declared default is a square.
         createAspectRatioParameter(
-          tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : AUTO_ASPECT_RATIO,
+          tool.editImage === false ? DEFAULT_CREATE_ASPECT_RATIO : MATCH_IMAGE_ASPECT_RATIO,
         ),
       ],
     };

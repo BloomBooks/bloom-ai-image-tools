@@ -34,8 +34,12 @@ const PNG_IMAGE_PATH = path.resolve(currentDir, "..", "assets", "art-styles", "c
 const upscaleCard = (page: import("@playwright/test").Page) =>
   page.locator('[data-tool-id="upscale"]');
 
+// The card's one select, found through the hidden input that carries its
+// test id.
 const targetResolutionSelect = (page: import("@playwright/test").Page) =>
-  upscaleCard(page).getByRole("combobox");
+  upscaleCard(page)
+    .locator('div:has(> input[data-testid="input-targetResolution"])')
+    .getByRole("combobox");
 
 const selectUpscaleToolWithDummyModel = async (page: import("@playwright/test").Page) => {
   await page.getByRole("button", { name: /Enhance/i }).click();
@@ -70,7 +74,7 @@ test.describe("upscale tool", () => {
     await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
   });
 
-  test("a slot with a host target offers Auto, shows its memo, and the dummy honors it exactly", async ({
+  test("a slot with a host target offers Container, and the dummy honors it exactly", async ({
     page,
   }) => {
     test.setTimeout(30_000);
@@ -79,17 +83,14 @@ test.describe("upscale tool", () => {
     });
     await selectUpscaleToolWithDummyModel(page);
 
-    // Enough detail to fill the launched slot, in the picture's own shape.
-    await expect(targetResolutionSelect(page)).toHaveText(`Auto (${LAUNCH_AUTO_TARGET})`);
-    await expect(page.getByTestId("upscale-target-memo")).toContainText("300 dpi");
-    // The memo is the host's own words, so it still quotes the slot itself.
-    await expect(page.getByTestId("upscale-target-memo")).toContainText(LAUNCH_SLOT_TARGET);
-    // The memo is the host's, so it quotes the slot; the note says what Auto
-    // asks for instead, rather than leaving two numbers to disagree on screen.
-    await expect(page.getByTestId("upscale-shape-note")).toContainText(LAUNCH_AUTO_TARGET);
-
-    // Upscale has no Shape picker: the output always follows the source.
-    await expect(upscaleCard(page).getByText("Shape", { exact: true })).toHaveCount(0);
+    // Upscaling keeps the picture's own shape, so there is no Shape menu, and
+    // Container means enough detail to fill the launched slot in that shape.
+    await expect(upscaleCard(page).getByTestId("input-aspectRatio")).toHaveCount(0);
+    await expect(targetResolutionSelect(page)).toHaveText(`Match Container${LAUNCH_AUTO_TARGET}`);
+    // Nothing is printed under the selector; the host's memo is a tooltip
+    // on the Container row.
+    await expect(upscaleCard(page).getByText(LAUNCH_SLOT_TARGET)).toHaveCount(0);
+    await expect(upscaleCard(page).getByText(/300 dpi/i)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
     await expect(resultPanelImage(page)).toBeVisible({ timeout: 15_000 });
@@ -112,24 +113,23 @@ test.describe("upscale tool", () => {
     await closeInfoDialog(page);
   });
 
-  test("a slot with no host target has no Auto option and starts at HD", async ({ page }) => {
+  test("a slot with no host target has no Container option and starts at HD", async ({ page }) => {
     await selectUpscaleToolWithDummyModel(page);
 
     // book-image-2 carries no suggestedTarget.
     await page.getByTestId("book-image-current-slot-book-image-2").click();
-    await expect(page.getByTestId("upscale-target-memo")).toHaveCount(0);
 
-    // HD is the oriented 1920x1080 fit of the source, so the label carries real
-    // dimensions rather than a bare tier name.
-    await expect(targetResolutionSelect(page)).toHaveText(/^HD \(\d+ x \d+\)$/);
+    // HD is the oriented 1920x1080 fit of the source, so the row carries real
+    // dimensions under the tier name rather than the name alone.
+    await expect(targetResolutionSelect(page)).toHaveText(/^HD\d+ x \d+$/);
 
     await targetResolutionSelect(page).click();
     await expect(page.getByRole("option")).toHaveCount(3);
     const optionLabels = await page.getByRole("option").allTextContents();
-    expect(optionLabels.some((label) => label.startsWith("Auto"))).toBe(false);
-    expect(optionLabels[0]).toMatch(/^HD \(/);
-    expect(optionLabels[1]).toMatch(/^2K \(/);
-    expect(optionLabels[2]).toMatch(/^4K \(/);
+    expect(optionLabels.some((label) => label.startsWith("Match Container"))).toBe(false);
+    expect(optionLabels[0]).toMatch(/^HD\d+ x \d+$/);
+    expect(optionLabels[1]).toMatch(/^2K\d+ x \d+$/);
+    expect(optionLabels[2]).toMatch(/^4K\d+ x \d+$/);
     await page.keyboard.press("Escape");
   });
 

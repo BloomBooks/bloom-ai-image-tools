@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/classic-ink-wash-Busnwxb7.png`;export{e as default};

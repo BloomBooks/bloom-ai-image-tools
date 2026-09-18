@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/flat-instructional-DwdKJCD2.png`;export{e as default};

@@ -1,11 +1,14 @@
 import * as pdfjsLib from "pdfjs-dist";
-// Vite rewrites this `?url` import to the emitted worker asset. This module is
-// imported lazily (see ImageToolsWorkspace) so the ~1MB worker is only pulled
-// in when the PDF tool actually runs. pdfjs-dist is marked external in
-// tsup.config.ts so this Vite-specific import never reaches the library bundle.
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// `?worker&inline` bundles PDF.js's worker into this chunk as a blob, so
+// rendering a PDF fetches no second file. The worker must not be a separate
+// asset: Bloom serves this app from /bloom/aiImageEditor/ and does not serve
+// the emitted `.mjs` worker, so the old `?url` import failed at run time with
+// `Setting up fake worker failed: "Failed to fetch dynamically imported
+// module: .../assets/pdf.worker.min-<hash>.mjs"`. This module is imported
+// lazily (see ImageToolsWorkspace), so the ~1MB of worker only loads when the
+// PDF tool actually runs. pdfjs-dist is marked external in tsup.config.ts so
+// this Vite-specific import never reaches the library bundle.
+import PdfJsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker&inline";
 
 export interface PdfPageImage {
   /** PNG data URL for the rendered page. */
@@ -60,7 +63,13 @@ export const renderPdfToImages = async (
         ? new Uint8Array(file)
         : file;
 
-  const loadingTask = pdfjsLib.getDocument({ data });
+  // One worker per document rather than a shared GlobalWorkerOptions port, so
+  // tearing this run down can't leave a later one without a worker. PDF.js
+  // never terminates a port it was handed (only one it created itself), so
+  // `workerPort.terminate()` below is ours to call.
+  const workerPort = new PdfJsWorker();
+  const worker = pdfjsLib.PDFWorker.create({ port: workerPort });
+  const loadingTask = pdfjsLib.getDocument({ data, worker });
   // Abort the load if the caller cancels before it resolves.
   const onAbort = () => {
     void loadingTask.destroy();
@@ -70,6 +79,10 @@ export const renderPdfToImages = async (
   let pdf: pdfjsLib.PDFDocumentProxy;
   try {
     pdf = await loadingTask.promise;
+  } catch (error) {
+    worker.destroy();
+    workerPort.terminate();
+    throw error;
   } finally {
     signal?.removeEventListener("abort", onAbort);
   }
@@ -122,5 +135,7 @@ export const renderPdfToImages = async (
     return images;
   } finally {
     await loadingTask.destroy();
+    worker.destroy();
+    workerPort.terminate();
   }
 };

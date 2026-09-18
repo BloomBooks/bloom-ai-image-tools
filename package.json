@@ -34,6 +34,11 @@
     "preview": "vp preview",
     "//note that e2e tests require that you run build to pick up new code in the app (but not in the e2e tests themselves)": "",
     "e2e": "npx playwright test",
+    "// screenshots:* -> Crowdin screenshots for translators; see README 'Screenshots for translators'": "",
+    "screenshots:capture": "npx playwright test --config playwright.screenshots.config.ts && node dev/screenshotsCoverage.mjs && node dev/screenshotsContactSheet.mjs",
+    "screenshots:upload": "node dev/uploadCrowdinScreenshots.mjs",
+    "screenshots:upload:dry": "node dev/uploadCrowdinScreenshots.mjs --dry-run",
+    "screenshots:spike": "node dev/uploadCrowdinScreenshots.mjs --spike",
     "e2e:verbose": "cross-env E2E_VERBOSE=1 npx playwright test",
     "// This brings up the inspector and record button oh my...": "",
     "e2edebug": "echo To debug, right click on the e2e test and choose 'Debug Test'",
@@ -60,6 +65,7 @@
     "rembg-webgpu": "^0.2.1"
   },
   "devDependencies": {
+    "@crowdin/crowdin-api-client": "1.57.0",
     "@playwright/test": "^1.57.0",
     "@types/json5": "^2.2.0",
     "@types/node": "^25.0.3",

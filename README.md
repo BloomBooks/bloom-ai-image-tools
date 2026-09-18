@@ -74,6 +74,29 @@ Two things stay English on purpose: a select option's stored **value** (it is wh
 prompt sends to the model, so only the menu text is translated) and the messages thrown by the
 service layer (`services/*`), which have no React context to read a translation from.
 
+#### Screenshots for translators
+
+Crowdin can show a translator a screenshot with the string they are translating outlined on
+it. Three commands keep those screenshots current; nothing they produce is committed
+(`screenshots-out/` is ignored).
+
+- `pnpm screenshots:capture` drives the fake-Bloom harness headlessly through the scenes in
+  `tests/screenshots/scenes.ts`, saves a PNG per scene, and works out where each string id
+  is by matching the visible text against `ALL_IMAGE_EDITOR_STRINGS`. It ends with
+  `screenshots-out/coverage.md`, which lists the strings no screenshot shows yet.
+- `pnpm screenshots:upload:dry` says what an upload would do without touching Crowdin.
+- `pnpm screenshots:upload` needs `BLOOM_CROWDIN_TOKEN` (a sil-bloom manager token). It
+  uploads each PNG as `AiImageEditor/<scene>.png`, lets Crowdin's OCR tag what it can, then
+  adds our positioned tags for the rest. Strings not yet in Crowdin (they arrive when
+  BloomDesktop's `DistFiles/localization/en/*.xlf` changes reach master and sync) are
+  skipped and listed in `screenshots-out/upload-report.json`; run again with `--refresh-ids`
+  once they have landed. Unchanged screenshots are skipped on later runs; `--force` redoes
+  them and `--scene <name>` limits a run to one.
+
+A string on a screen that is already a scene needs nothing. A string that only shows in a
+new state needs a new entry in `scenes.ts`. `SCREENSHOT_SCENES=name1,name2` captures only
+those scenes while you work on one.
+
 ## How Bloom hosts this editor
 
 Bloom embeds the editor as an **iframe overlay inside its existing edit-tab WebView2** —

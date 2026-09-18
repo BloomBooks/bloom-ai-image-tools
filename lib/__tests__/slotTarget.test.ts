@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
 import type { ToolDefinition } from "../../types";
 import { MATCH_CONTAINER_ASPECT_RATIO, MATCH_IMAGE_ASPECT_RATIO } from "../aspectRatios";
 import { getRequestedAspectRatioValue } from "../toolHelpers";
@@ -15,7 +15,9 @@ import {
 } from "../slotTarget";
 
 const getTool = (id: string): ToolDefinition => {
-  const tool = TOOLS.find((t) => t.id === id);
+  // ALL_TOOLS, not TOOLS: a test may name a tool that is switched off (see
+  // `disabled` on ToolDefinition), and its definition is still worth covering.
+  const tool = ALL_TOOLS.find((t) => t.id === id);
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };

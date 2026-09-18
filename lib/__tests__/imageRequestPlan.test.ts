@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
 import type { ToolDefinition } from "../../types";
 import {
   AUTO_ASPECT_RATIO,
@@ -23,7 +23,9 @@ const SUNBURST = getModelInfoById("openai/gpt-image-2.5-sunburst");
 const GEMINI_FLASH = getModelInfoById("google/gemini-3.1-flash-image");
 
 const getTool = (id: string): ToolDefinition => {
-  const tool = TOOLS.find((t) => t.id === id);
+  // ALL_TOOLS, not TOOLS: a test may name a tool that is switched off (see
+  // `disabled` on ToolDefinition), and its definition is still worth covering.
+  const tool = ALL_TOOLS.find((t) => t.id === id);
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };

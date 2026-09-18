@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
 import { toolSupportsBatch } from "../toolHelpers";
 
 describe("ethnicity tool prompt", () => {
@@ -88,7 +88,11 @@ describe("ethnicity tool prompt", () => {
   });
 
   it("adds a break-comic tool that splits into pieces and keeps the grid sheet", () => {
-    const breakComicTool = TOOLS.find((tool) => tool.id === "break_comic_into_images");
+    const breakComicTool = ALL_TOOLS.find((tool) => tool.id === "break_comic_into_images");
+
+    // Switched off for now, so it is defined but not offered.
+    expect(breakComicTool?.disabled).toBe(true);
+    expect(TOOLS.some((tool) => tool.id === "break_comic_into_images")).toBe(false);
 
     expect(breakComicTool).toBeDefined();
     expect(breakComicTool?.group).toBe("more");
@@ -220,7 +224,7 @@ describe("ethnicity tool prompt", () => {
     ];
 
     for (const toolId of explicitlyExcludedIds) {
-      const tool = TOOLS.find((candidate) => candidate.id === toolId);
+      const tool = ALL_TOOLS.find((candidate) => candidate.id === toolId);
       expect(tool).toBeDefined();
       expect(toolSupportsBatch(tool)).toBe(false);
     }

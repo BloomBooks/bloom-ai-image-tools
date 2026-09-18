@@ -122,7 +122,12 @@ const appendOptionalInstructions = (
  */
 export const CREATE_IMAGE_TOOL_ID = "generate_image";
 
-export const TOOLS: ToolDefinition[] = (
+/**
+ * Every tool that is defined, including the ones marked `disabled`. Use `TOOLS`
+ * for anything the app offers; this list exists so a switched-off tool's
+ * definition can still be read (tests, tooling).
+ */
+export const ALL_TOOLS: ToolDefinition[] = (
   [
     {
       id: CREATE_IMAGE_TOOL_ID,
@@ -413,6 +418,9 @@ export const TOOLS: ToolDefinition[] = (
     },
     {
       id: "break_comic_into_images",
+      // Switched off: the splitter is not reliable enough to ship. Everything
+      // below is kept so it can be switched back on by removing this line.
+      disabled: true,
       title: "Break Comic into Images",
       description:
         "Aims to split a multi-frame comic into individual panels, with text extracted and stored as captions. If it works, you can then copy each extracted panel and then paste both into the image and the text box of a Bloom page.",
@@ -822,3 +830,6 @@ export const TOOLS: ToolDefinition[] = (
       ],
     };
   });
+
+/** The tools the app offers: every defined tool that is not switched off. */
+export const TOOLS: ToolDefinition[] = ALL_TOOLS.filter((tool) => !tool.disabled);

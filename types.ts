@@ -283,6 +283,13 @@ export interface ToolDefinition {
    * split/animation, no multi-file output). See `toolSupportsBatch`.
    */
   allowBatch?: boolean;
+  /**
+   * Keep the tool's definition here but take it out of the app: a disabled tool
+   * is filtered out of `TOOLS`, so it appears in no picker and can be run by
+   * nothing. Set it on a tool that is not working well enough to ship yet, so
+   * the prompt, model choice and settings survive until it is switched back on.
+   */
+  disabled?: boolean;
 }
 
 export interface EthnicityCategory {

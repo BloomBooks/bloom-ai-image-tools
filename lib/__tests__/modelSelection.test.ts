@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
 import {
   buildMeasuredStatKey,
   DEFAULT_MODEL,
@@ -27,7 +27,9 @@ const GEMINI_PRO = "google/gemini-3-pro-image";
 const SUNBURST = "openai/gpt-image-2.5-sunburst";
 
 const getTool = (id: string): ToolDefinition => {
-  const tool = TOOLS.find((t) => t.id === id);
+  // ALL_TOOLS, not TOOLS: a test may name a tool that is switched off (see
+  // `disabled` on ToolDefinition), and its definition is still worth covering.
+  const tool = ALL_TOOLS.find((t) => t.id === id);
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };

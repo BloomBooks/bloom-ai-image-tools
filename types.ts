@@ -188,6 +188,12 @@ export interface ToolDefinition {
   title: string;
   description: string;
   group?: "default" | "enhance" | "localize" | "text" | "games" | "more";
+  /**
+   * Position in a numbered sequence of tools that are run in order (the three localize
+   * tools). The UI draws it in front of the title ("2) Change Ethnicity"); it stays out of
+   * `title` so the number is not something a translator has to carry.
+   */
+  stepNumber?: number;
   icon: ElementType;
   parameters: ToolParameter[];
   promptTemplate: (params: Record<string, string>) => string;

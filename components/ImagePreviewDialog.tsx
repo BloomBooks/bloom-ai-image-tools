@@ -137,10 +137,7 @@ const PreviewImage: React.FC<{
         {image.imageData && !loadFailed ? (
           <img
             src={image.imageData}
-            alt={
-              image.imageFileName ||
-              l10n("AiImageEditor.Preview.ImageAlt", "Preview image {0}", String(index + 1))
-            }
+            alt={image.imageFileName || `Preview image ${index + 1}`}
             draggable={false}
             loading="lazy"
             decoding="async"
@@ -310,7 +307,7 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
           {l10n("AiImageEditor.Preview.ZoomHint", "Ctrl + mouse wheel to resize the images")}
         </Typography>
         <IconButton
-          aria-label={l10n("AiImageEditor.Preview.CloseLabel", "Close image preview")}
+          aria-label="Close image preview"
           onClick={onClose}
           data-testid="image-preview-dialog-close"
           sx={{

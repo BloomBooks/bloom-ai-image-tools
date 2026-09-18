@@ -125,10 +125,7 @@ export function OpenRouterCreditsHeader({
             href={OPENROUTER_ACCOUNT_URL}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={l10n(
-              "AiImageEditor.OpenRouter.SpendingLimitWarningLabel",
-              "OpenRouter spending-limit warning",
-            )}
+            aria-label="OpenRouter spending-limit warning"
             onClick={(e) => {
               if (!onOpenExternalUrl) return;
               e.preventDefault();

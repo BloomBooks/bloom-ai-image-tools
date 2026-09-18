@@ -139,7 +139,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
           </Stack>
           <IconButton
             onClick={onClose}
-            aria-label={l10n("AiImageEditor.Settings.CloseDialog", "Close settings dialog")}
+            aria-label="Close settings dialog"
             size="small"
             sx={{
               color: appTheme.colors.textSecondary,

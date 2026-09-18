@@ -182,9 +182,9 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
     }, [clearMoreDelayTimeout, clearCloseTimeout]);
 
     const defaultActionLabels: Record<keyof SlotControls, string> = {
-      upload: l10n("AiImageEditor.SlotAction.Upload", "Upload"),
+      upload: l10n("Common.Upload", "Upload"),
       paste: l10n("AiImageEditor.SlotAction.PasteFromClipboard", "Paste from Clipboard"),
-      copy: l10n("AiImageEditor.SlotAction.CopyToClipboard", "Copy to Clipboard"),
+      copy: l10n("PublishTab.Android.CopyToClipboard", "Copy to Clipboard"),
       download: l10n("AiImageEditor.SlotAction.Download", "Download"),
       remove: l10n("AiImageEditor.SlotAction.RemoveImage", "Remove image"),
     };

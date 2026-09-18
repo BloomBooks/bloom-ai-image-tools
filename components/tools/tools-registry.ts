@@ -211,7 +211,8 @@ export const ALL_TOOLS: ToolDefinition[] = (
     },
     {
       id: "extract_cast_of_characters",
-      title: "1) Extract Cast of Characters",
+      title: "Extract Cast of Characters",
+      stepNumber: 1,
       group: "localize",
       icon: Diversity3OutlinedIcon,
       parameters: [
@@ -252,7 +253,8 @@ export const ALL_TOOLS: ToolDefinition[] = (
       id: "apply_localized_characters",
       preserveInEdit:
         "the scene composition, the background, the camera angle, the poses, the expressions, the lighting, and the art style.",
-      title: "3) Apply Localized Characters",
+      title: "Apply Localized Characters",
+      stepNumber: 3,
       group: "localize",
       icon: Diversity3OutlinedIcon,
       parameters: [
@@ -282,7 +284,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
     },
     {
       id: "make_gif",
-      title: "Make Gif",
+      title: "Make GIF",
       description:
         "Turn one reference image into a short looping animation sheet and encode it as a GIF.",
       group: "games",
@@ -578,7 +580,8 @@ export const ALL_TOOLS: ToolDefinition[] = (
       id: "ethnicity",
       preserveInEdit:
         "the pose, the facial expression, the clothing, the background, the composition, the lighting, and the art style.",
-      title: "2) Change Ethnicity",
+      title: "Change Ethnicity",
+      stepNumber: 2,
       description: "",
       group: "localize",
       icon: Diversity3OutlinedIcon,
@@ -639,7 +642,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
       parameters: [
         {
           name: "instructions",
-          label: "Instructions",
+          label: "Further Instructions",
           type: "textarea",
           placeholder: "Add any extra instructions...",
           optional: true,
@@ -672,7 +675,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
       id: "improve_drawing",
       preserveInEdit:
         "the composition and framing, every character and their identity, faces, clothing and position, the colors and color tone, the art medium, and the level of detail.",
-      title: "Improve Drawing a Bit",
+      title: "Improve Drawing",
       description: "Correct anatomy and perspective while keeping everything else identical.",
       group: "enhance",
       icon: AutoFixHighOutlinedIcon,

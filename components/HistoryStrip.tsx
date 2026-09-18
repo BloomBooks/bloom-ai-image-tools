@@ -67,11 +67,7 @@ const HistoryCard: React.FC<{
             }}
           >
             <div className="w-full h-full rounded-[inherit] overflow-hidden">
-              <img
-                src={item.imageData}
-                alt={l10n("AiImageEditor.History.ItemAlt", "History item")}
-                className="w-full h-full object-cover"
-              />
+              <img src={item.imageData} alt="History item" className="w-full h-full object-cover" />
             </div>
           </div>
 

@@ -41,6 +41,8 @@ interface BloomHostedImageEditorProps {
   onCancelComplete?: () => void;
   /** Passed through to the editor, and used for this wrapper's own strings. */
   getLocalizations?: (strings: Record<string, string>) => Promise<Record<string, string>>;
+  /** Likewise: which language Bloom's UI is in, for text that is never translated. */
+  getUiLanguageId?: () => Promise<string>;
 }
 
 const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
@@ -48,6 +50,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   onCommitComplete,
   onCancelComplete,
   getLocalizations,
+  getUiLanguageId,
 }) => {
   const l10n = useL10n();
   const [initPayload, setInitPayload] = React.useState<IBloomHostInitPayload | null>(null);
@@ -308,6 +311,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
           openExternalUrl: (url) => bridge.openExternalUrl(url),
         }}
         getLocalizations={getLocalizations}
+        getUiLanguageId={getUiLanguageId}
         onReplacementsChange={setReplacementMap}
         onCommitCurrentResult={(item) => void handleCommitCurrentResult(item)}
         currentResultActionLabel={l10n("AiImageEditor.Result.UseThisImage", "Use this Image")}
@@ -336,7 +340,10 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
 };
 
 export const BloomHostedImageEditor: React.FC<BloomHostedImageEditorProps> = (props) => (
-  <LocalizationProvider getLocalizations={props.getLocalizations}>
+  <LocalizationProvider
+    getLocalizations={props.getLocalizations}
+    getUiLanguageId={props.getUiLanguageId}
+  >
     <BloomHostedImageEditorInner {...props} />
   </LocalizationProvider>
 );

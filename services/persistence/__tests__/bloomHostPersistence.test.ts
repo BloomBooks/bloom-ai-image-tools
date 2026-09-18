@@ -73,6 +73,9 @@ const createBridge = () => {
     async getLocalizations(strings: Record<string, string>) {
       return strings;
     },
+    async getUiLanguageId() {
+      return "en";
+    },
     async getFile(name) {
       return fileStore.get(name) ?? null;
     },

@@ -207,15 +207,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
               <Box
                 component="img"
                 src={displayPreview}
-                alt={
-                  selected
-                    ? l10n(
-                        "AiImageEditor.ArtStyle.PreviewOfAlt",
-                        "{0} preview",
-                        artStyleName(l10n, selected),
-                      )
-                    : l10n("AiImageEditor.ArtStyle.PreviewAlt", "Art style preview")
-                }
+                alt={selected ? `${artStyleName(l10n, selected)} preview` : "Art style preview"}
                 sx={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             )}
@@ -246,7 +238,7 @@ export const ArtStylePicker: React.FC<ArtStylePickerProps> = ({
             >
               {selected
                 ? artStyleName(l10n, selected)
-                : l10n("AiImageEditor.ArtStyle.ChoosePrompt", "Choose an art style")}
+                : l10n("AiImageEditor.ArtStyle.ChooseTitle", "Choose an Art Style")}
             </Typography>
           </Box>
           <ExpandMoreIcon

@@ -17,6 +17,31 @@ export function useL10n(): L10nFunc {
   return useContext(LocalizationContext);
 }
 
+/** What the host told us about itself, beside the strings it answered with. */
+type LocalizationState = {
+  /** The host's UI language, e.g. "en", "fr", "es-419". "en" when there is no host to ask. */
+  uiLanguageId: string;
+};
+
+const LocalizationStateContext = React.createContext<LocalizationState>({ uiLanguageId: "en" });
+
+const isEnglish = (languageId: string): boolean =>
+  languageId === "en" || languageId.toLowerCase().startsWith("en-");
+
+/**
+ * Whether the host's UI is in English.
+ *
+ * For English text that is deliberately never translated and is better absent than shown in
+ * the wrong language: the art style descriptions, which are long, numerous, and worth nobody's
+ * translation budget. Hide that text when this is false.
+ *
+ * Only for text that a blank is a sane state for. A label, a button or a menu row must never
+ * vanish; those are localized and use `useL10n`.
+ */
+export function useIsEnglishUi(): boolean {
+  return isEnglish(useContext(LocalizationStateContext).uiLanguageId);
+}
+
 /**
  * Fetches the translations once on mount and puts them in reach of every component
  * below. With no `getLocalizations` the English defaults stand, so the editor works the
@@ -24,22 +49,34 @@ export function useL10n(): L10nFunc {
  */
 export function LocalizationProvider({
   getLocalizations,
+  getUiLanguageId,
   children,
 }: {
   getLocalizations?: (strings: Record<string, string>) => Promise<Record<string, string>>;
+  getUiLanguageId?: () => Promise<string>;
   children: React.ReactNode;
 }): React.ReactElement {
   const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [uiLanguageId, setUiLanguageId] = useState("en");
   const l10n = useL10nFromTranslations(translations);
+  const state = React.useMemo(() => ({ uiLanguageId }), [uiLanguageId]);
 
   useEffect(() => {
-    if (!getLocalizations) return;
-    void getLocalizations(ALL_IMAGE_EDITOR_STRINGS).then(setTranslations);
+    if (getLocalizations) {
+      void getLocalizations(ALL_IMAGE_EDITOR_STRINGS).then(setTranslations);
+    }
+    if (getUiLanguageId) {
+      void getUiLanguageId().then(setUiLanguageId);
+    }
     // Run once on mount; a UI language change requires a host restart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <LocalizationContext.Provider value={l10n}>{children}</LocalizationContext.Provider>;
+  return (
+    <LocalizationStateContext.Provider value={state}>
+      <LocalizationContext.Provider value={l10n}>{children}</LocalizationContext.Provider>
+    </LocalizationStateContext.Provider>
+  );
 }
 
 /** Interpolate React elements into a localized template string containing {0}, {1}, … markers.

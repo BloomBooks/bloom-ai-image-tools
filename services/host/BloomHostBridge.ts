@@ -133,6 +133,10 @@ export interface IBloomHostInitPayload {
    *  the host at runtime and never hard-coded outside the dev harness. */
   httpBase: string;
   sessionToken: string;
+  /** Which language the host's UI is in ("en", "fr", "es-419"). The editor uses it for text
+   *  it never translates (the art style descriptions), which it hides rather than showing in
+   *  English inside a translated host. Absent means English. */
+  uiLanguageId?: string;
 }
 
 export interface IBloomCommitReplacement {
@@ -205,6 +209,10 @@ export interface IBloomHostControl {
    *  An ID the host does not know is left out and the editor shows the English, so a host
    *  with no translations can return the table it was given. */
   getLocalizations: (strings: Record<string, string>) => Promise<Record<string, string>>;
+  /** The host's UI language ("en", "fr", "es-419"), as the host told us in its init message.
+   *  "en" until init arrives and for a host that does not say, which keeps every string
+   *  visible rather than hiding text on a guess. */
+  getUiLanguageId: () => Promise<string>;
 }
 
 /** File store for the book's .ai-image-editor/ folder (HTTP-backed in the iframe
@@ -286,6 +294,9 @@ type IframeMessage =
 
 const uuid = () => Math.random().toString(36).slice(2, 10);
 const iframeChannel = "bloom-ai-image-tools" as const;
+
+/** How long getLocalizations waits for Bloom's init message before settling for English. */
+const kInitWaitMs = 10000;
 
 // Lightweight diagnostics: Bloom (StrictMode, re-launches) can send `init` more than
 // once, so we count them and log when the payload actually changed. Exposed on
@@ -375,6 +386,15 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
 
   let httpBase = "";
   let sessionToken = "";
+  let uiLanguageId = "";
+
+  // Bloom tells us where its API lives in the init message, which arrives after the
+  // editor has mounted. Anything that needs httpBase before a user action -- fetching
+  // the translations -- has to wait for this.
+  let markInitialized: () => void = () => {};
+  const initialized = new Promise<void>((resolve) => {
+    markInitialized = resolve;
+  });
 
   // Session token is passed as a query param (not a custom header) so the file
   // requests stay "simple" and avoid a CORS preflight against Bloom's server in dev.
@@ -411,6 +431,8 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
       recordInitMessage(message.payload);
       httpBase = message.payload.httpBase ?? "";
       sessionToken = message.payload.sessionToken ?? "";
+      uiLanguageId = message.payload.uiLanguageId ?? "";
+      markInitialized();
       initListeners.forEach((listener) => listener(message.payload));
       return;
     }
@@ -496,13 +518,35 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
       });
     },
     async getLocalizations(strings) {
-      // Bloom's own i18n endpoint, the one Bloom's React code already uses. httpBase is
-      // Bloom's API root plus this feature's segment, so i18n is its sibling. It takes
-      // form-encoded id=english pairs and answers with a JSON id->translation map.
-      // Anything short of an answer leaves the editor in English, which is a working
-      // editor, so nothing here is worth failing over.
+      // Two endpoints, newest first.
+      //
+      // `aiImageEditor/localizations` (Bloom 6.5+) answers the whole table with the
+      // translations it has and stays quiet about the rest. Bloom's general-purpose
+      // `i18n/loadStrings` reports every id it cannot find -- a toast and a line in the
+      // developer's local xlf, per string, on every launch -- which for a table this size is
+      // unusable, so it is only the fallback for a Bloom that predates the other.
+      //
+      // httpBase is Bloom's API root plus this feature's segment, so i18n is its sibling.
+      // Anything short of an answer leaves the editor in English, which is a working editor,
+      // so nothing here is worth failing over.
+      // The editor asks for these the moment it mounts, which is before Bloom has told
+      // us where to ask. Without this wait the whole table comes back in English and is
+      // cached that way for the session.
+      await Promise.race([initialized, new Promise((resolve) => setTimeout(resolve, kInitWaitMs))]);
       if (!httpBase) {
         return strings;
+      }
+      try {
+        const response = await fetch(`${httpBase}/localizations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(strings),
+        });
+        if (response.ok) {
+          return (await response.json()) as Record<string, string>;
+        }
+      } catch {
+        // Fall through to the older endpoint.
       }
       try {
         const body = new URLSearchParams();
@@ -518,6 +562,12 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
       } catch {
         return strings;
       }
+    },
+    async getUiLanguageId() {
+      // The host tells us this in its init message; we never ask it, so this bridge needs no
+      // knowledge of any host API to answer.
+      await Promise.race([initialized, new Promise((resolve) => setTimeout(resolve, kInitWaitMs))]);
+      return uiLanguageId || "en";
     },
     getFileUrl(name) {
       if (!httpBase || !sessionToken) {
@@ -650,6 +700,10 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
     async getLocalizations(strings) {
       // No Bloom to ask in standalone/harness mode: the English defaults stand.
       return strings;
+    },
+    async getUiLanguageId() {
+      // Standalone/harness mode is English.
+      return "en";
     },
     getFileUrl(name) {
       const existing = objectUrlByName.get(name);

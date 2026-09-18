@@ -35,6 +35,7 @@ import {
 import { formatCost } from "../../lib/formatters";
 import { theme } from "../../themes";
 import { L10nFunc, useL10n } from "../../lib/localization";
+import { modelBadge } from "../../lib/modelStrings";
 
 interface ToolModelPickerProps {
   tool: ToolDefinition;
@@ -63,21 +64,23 @@ interface ToolModelPickerProps {
   disabled?: boolean;
 }
 
+// Reasoning and quality offer the same words for their levels, so they share one string
+// each rather than sending "Low" for translation twice.
 const reasoningLabels = (l10n: L10nFunc): Record<ModelReasoningLevel, string> => ({
   default: l10n("Common.Default", "Default"),
-  none: l10n("AiImageEditor.Reasoning.None", "None"),
-  low: l10n("AiImageEditor.Reasoning.Low", "Low"),
-  medium: l10n("AiImageEditor.Reasoning.Medium", "Medium"),
-  high: l10n("AiImageEditor.Reasoning.High", "High"),
+  none: l10n("AiImageEditor.Level.None", "None"),
+  low: l10n("AiImageEditor.Level.Low", "Low"),
+  medium: l10n("AiImageEditor.Level.Medium", "Medium"),
+  high: l10n("AiImageEditor.Level.High", "High"),
 });
 
 const qualityLabels = (l10n: L10nFunc): Record<ModelImageQuality, string> => ({
-  auto: l10n("AiImageEditor.Quality.Auto", "Auto"),
-  low: l10n("AiImageEditor.Quality.Low", "Low"),
-  medium: l10n("AiImageEditor.Quality.Medium", "Medium"),
-  high: l10n("AiImageEditor.Quality.High", "High"),
-  xhigh: l10n("AiImageEditor.Quality.ExtraHigh", "Extra high"),
-  max: l10n("AiImageEditor.Quality.Max", "Max"),
+  auto: l10n("EditTab.Image.Transparency.Auto", "Auto"),
+  low: l10n("AiImageEditor.Level.Low", "Low"),
+  medium: l10n("AiImageEditor.Level.Medium", "Medium"),
+  high: l10n("AiImageEditor.Level.High", "High"),
+  xhigh: l10n("AiImageEditor.Level.ExtraHigh", "Extra high"),
+  max: l10n("AiImageEditor.Level.Max", "Max"),
 });
 
 const formatDuration = (durationMs: number): string => {
@@ -110,6 +113,7 @@ const describePrice = (
   estimateUsd: number | null,
   stats: MeasuredStats | null,
   pricing: string | undefined,
+  pricePerImageUsd: number | undefined,
 ): string => {
   if (estimateUsd != null) {
     const duration = stats && stats.durationMs > 0 ? `, ~${formatDuration(stats.durationMs)}` : "";
@@ -122,6 +126,14 @@ const describePrice = (
   }
   if (stats != null)
     return l10n("AiImageEditor.Model.LastMeasured", "Last measured: {0}", formatStats(stats));
+  if (pricePerImageUsd != null) {
+    // The amount is a parameter so that no translator carries a price that will change.
+    return l10n(
+      "AiImageEditor.Model.AboutPerImage",
+      "About {0} per image",
+      formatCost(pricePerImageUsd),
+    );
+  }
   return pricing ?? "";
 };
 
@@ -173,7 +185,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
           <IconButton
             size="small"
             disabled={disabled}
-            aria-label={l10n("AiImageEditor.Model.PickerLabel", "Model: {0}", selectedName)}
+            aria-label={`Model: ${selectedName}`}
             aria-haspopup="true"
             data-testid={`tool-model-picker-${tool.id}`}
             onClick={(event) => setAnchorEl(event.currentTarget)}
@@ -256,7 +268,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                       <span>{model.name}</span>
                       {model.badge && (
                         <Chip
-                          label={model.badge}
+                          label={modelBadge(l10n, model.badge)}
                           size="small"
                           variant="outlined"
                           sx={{ fontSize: "9pt", height: "auto", py: 0.25 }}
@@ -281,6 +293,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                     estimateRunCostUsd?.(model.id) ?? null,
                     stats,
                     model.pricing,
+                    model.pricePerImageUsd,
                   )}
                 />
               </Tooltip>

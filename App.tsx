@@ -120,6 +120,7 @@ export default function App() {
           bridge={bloomBridge}
           onCommitComplete={() => bloomBridge.cancel()}
           getLocalizations={(strings) => bloomBridge.getLocalizations(strings)}
+          getUiLanguageId={() => bloomBridge.getUiLanguageId()}
         />
       ) : (
         <StandaloneImageEditor envApiKey={envApiKey} bloomFeatures={standaloneBloomFeatures} />

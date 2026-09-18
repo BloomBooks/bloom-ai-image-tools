@@ -839,7 +839,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
           </Typography>
           <IconButton
             onClick={onDismissError}
-            aria-label={l10n("AiImageEditor.Error.DismissMessage", "Dismiss message")}
+            aria-label="Dismiss message"
             size="small"
             sx={{ color: theme.colors.accent }}
           >

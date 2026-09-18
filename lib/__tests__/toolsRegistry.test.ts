@@ -17,9 +17,11 @@ describe("ethnicity tool prompt", () => {
     expect(prompt).not.toContain("the main character");
   });
 
-  it("keeps the localize tools grouped together", () => {
+  it("keeps the localize tools grouped together, in the order they are run", () => {
+    // The order is the stepNumber the card draws in front of the title; it used to be a
+    // "1) " prefix on the title itself, which a translator would have had to carry.
     const localizeToolIds = TOOLS.filter((tool) => tool.group === "localize")
-      .sort((left, right) => left.title.localeCompare(right.title))
+      .sort((left, right) => (left.stepNumber ?? 0) - (right.stepNumber ?? 0))
       .map((tool) => tool.id);
 
     expect(localizeToolIds).toEqual([

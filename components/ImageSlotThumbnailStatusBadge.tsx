@@ -42,7 +42,7 @@ export const ImageSlotThumbnailStatusBadge: React.FC<ImageSlotThumbnailStatusBad
         color: "white",
       }}
     >
-      {status === "saving" && l10n("AiImageEditor.Status.Saving", "Saving...")}
+      {status === "saving" && l10n("EditTab.SavingNotification", "Saving...")}
       {status === "copying" && l10n("AiImageEditor.Status.Copying", "Copying...")}
       {status === "success" && l10n("AiImageEditor.Status.ThumbnailSaved", "Thumbnail saved!")}
       {status === "error" && l10n("AiImageEditor.Status.FailedToSave", "Failed to save")}

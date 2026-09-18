@@ -678,7 +678,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
     >
       <img
         src={imagePlaceholder}
-        alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
+        alt="Placeholder"
         style={{ width: 48, height: 48, opacity: 0.3 }}
       />
       {/* Drop/upload helper text intentionally omitted for cleaner UI */}
@@ -865,7 +865,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 >
                   <MagnifiableImage
                     src={image.imageData}
-                    alt={label || l10n("AiImageEditor.Slot.ReferenceAlt", "Reference")}
+                    alt={label || "Reference"}
                     enableLens={isMagnifierPinned}
                     // For book-image strips that can hold an entire book's worth of
                     // images, let the browser defer fetching off-screen thumbnails

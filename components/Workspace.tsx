@@ -596,10 +596,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             {showTargetPanel && showReferencePanel && (
               <Splitter
                 orientation="horizontal"
-                ariaLabel={l10n(
-                  "AiImageEditor.Splitter.EditAndReference",
-                  "Resize Image to Edit and Reference panels",
-                )}
+                ariaLabel="Resize Image to Edit and Reference panels"
                 onPointerDown={handleVerticalPointerDown}
                 onKeyDown={handleVerticalKeyDown}
               />
@@ -633,10 +630,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         {showLeftColumn && (
           <Splitter
             orientation="vertical"
-            ariaLabel={l10n(
-              "AiImageEditor.Splitter.EditAndResult",
-              "Resize Image to Edit and Result panels",
-            )}
+            ariaLabel="Resize Image to Edit and Result panels"
             onPointerDown={handleHorizontalPointerDown}
             onKeyDown={handleHorizontalKeyDown}
           />

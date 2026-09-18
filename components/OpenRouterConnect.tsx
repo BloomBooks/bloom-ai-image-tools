@@ -223,7 +223,7 @@ export function OpenRouterConnect({
     <Stack
       component="fieldset"
       spacing={3}
-      aria-label={l10n("AiImageEditor.OpenRouter.ConnectionFieldset", "OpenRouter connection")}
+      aria-label="OpenRouter connection"
       sx={{ border: "none", p: 0, m: 0, minInlineSize: 0 }}
     >
       <Typography variant="body2">
@@ -281,7 +281,7 @@ export function OpenRouterConnect({
                   <IconButton
                     size="small"
                     onClick={handlePaste}
-                    aria-label={l10n("AiImageEditor.OpenRouter.PasteApiKey", "Paste API key")}
+                    aria-label="Paste API key"
                     edge="end"
                     sx={{
                       color: theme.colors.textSecondary,

@@ -160,11 +160,7 @@ export const ThumbnailStripTabs: React.FC<ThumbnailStripTabsProps> = ({
                   ? l10n("AiImageEditor.Strip.Unpin", "Unpin strip")
                   : l10n("AiImageEditor.Strip.Pin", "Pin strip")
               }
-              aria-label={
-                isPinned
-                  ? l10n("AiImageEditor.Strip.UnpinNamed", "Unpin {0}", label)
-                  : l10n("AiImageEditor.Strip.PinNamed", "Pin {0}", label)
-              }
+              aria-label={isPinned ? `Unpin ${label}` : `Pin ${label}`}
               data-testid={`thumbnail-tab-pin-${stripId}`}
               sx={{
                 ...PIN_BUTTON_SX,

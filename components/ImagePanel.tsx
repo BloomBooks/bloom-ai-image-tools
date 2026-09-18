@@ -307,7 +307,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           <Box
             component="img"
             src={imagePlaceholder}
-            alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
+            alt="Placeholder"
             sx={{
               maxHeight: "60%",
               maxWidth: "220px",
@@ -346,7 +346,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
           <Box
             component="img"
             src={imagePlaceholder}
-            alt={l10n("AiImageEditor.Slot.PlaceholderAlt", "Placeholder")}
+            alt="Placeholder"
             sx={{ width: 48, height: 48, mb: 1.5, mx: "auto", opacity: 0.3 }}
           />
           <Box component="p" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>

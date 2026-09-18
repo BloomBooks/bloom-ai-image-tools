@@ -5,6 +5,7 @@ import { collectL10nCalls } from "../collectL10nCalls";
 import { STATIC_IMAGE_EDITOR_STRINGS } from "../staticStrings";
 import { ALL_IMAGE_EDITOR_STRINGS } from "../allStrings";
 import { TOOLS } from "../../components/tools/tools-registry";
+import { NOT_TRANSLATED } from "../untranslated";
 
 const repoRoot = join(__dirname, "..", "..");
 
@@ -58,13 +59,46 @@ describe("the editor's string table", () => {
     expect(Object.keys(STATIC_IMAGE_EDITOR_STRINGS).filter((id) => !asked.has(id))).toEqual([]);
   });
 
-  it("includes each tool's own text", () => {
+  it("includes each tool's own text, except what Bloom decided not to translate", () => {
     for (const tool of TOOLS) {
-      expect(ALL_IMAGE_EDITOR_STRINGS[`AiImageEditor.Tool.${tool.id}.Title`]).toBe(tool.title);
-      expect(ALL_IMAGE_EDITOR_STRINGS[`AiImageEditor.Tool.${tool.id}.Description`]).toBe(
-        tool.description,
-      );
+      const titleId = `AiImageEditor.Tool.${tool.id}.Title`;
+      if (!NOT_TRANSLATED.has(titleId)) {
+        expect(ALL_IMAGE_EDITOR_STRINGS[titleId]).toBe(tool.title);
+      }
+      const descriptionId = `AiImageEditor.Tool.${tool.id}.Description`;
+      if (tool.description?.trim() && !NOT_TRANSLATED.has(descriptionId)) {
+        expect(ALL_IMAGE_EDITOR_STRINGS[descriptionId]).toBe(tool.description);
+      }
     }
+  });
+
+  it("leaves the strings Bloom decided not to translate out of the table", () => {
+    const asked = [...NOT_TRANSLATED].filter((id) => id in ALL_IMAGE_EDITOR_STRINGS);
+    expect(asked).toEqual([]);
+  });
+
+  it("gives one string one ID", () => {
+    // Two IDs carrying the same English would be sent to a translator twice and could
+    // then drift apart. Share an ID instead: see SHARED_IDS in components/tools/toolStrings.ts.
+    const idsByEnglish = new Map<string, string[]>();
+    for (const [id, english] of Object.entries(ALL_IMAGE_EDITOR_STRINGS)) {
+      const key = english.trim().toLowerCase();
+      idsByEnglish.set(key, [...(idsByEnglish.get(key) ?? []), id]);
+    }
+    const duplicated = [...idsByEnglish.entries()].filter(([, ids]) => ids.length > 1);
+    expect(duplicated).toEqual([]);
+  });
+
+  it("asks for nothing empty, and nothing that is only digits or symbols", () => {
+    const notWorthTranslating = Object.entries(ALL_IMAGE_EDITOR_STRINGS).filter(
+      ([, english]) => !english.trim() || !/\p{Letter}/u.test(english),
+    );
+    expect(notWorthTranslating).toEqual([]);
+  });
+
+  it("keeps a tool's step number out of its translated title", () => {
+    const numbered = TOOLS.filter((tool) => /^\s*\d/.test(tool.title)).map((tool) => tool.id);
+    expect(numbered).toEqual([]);
   });
 
   it("reuses Bloom's existing IDs for the strings Bloom already has", () => {

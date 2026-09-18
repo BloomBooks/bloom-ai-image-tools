@@ -38,13 +38,13 @@ const formatReasoningLevel = (
     case "default":
       return l10n("Common.Default", "Default");
     case "none":
-      return l10n("AiImageEditor.Reasoning.None", "None");
+      return l10n("AiImageEditor.Level.None", "None");
     case "low":
-      return l10n("AiImageEditor.Reasoning.Low", "Low");
+      return l10n("AiImageEditor.Level.Low", "Low");
     case "medium":
-      return l10n("AiImageEditor.Reasoning.Medium", "Medium");
+      return l10n("AiImageEditor.Level.Medium", "Medium");
     case "high":
-      return l10n("AiImageEditor.Reasoning.High", "High");
+      return l10n("AiImageEditor.Level.High", "High");
     default:
       return null;
   }
@@ -158,7 +158,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       testId: "history-cost",
     },
     {
-      label: l10n("AiImageEditor.Info.Resolution", "Resolution"),
+      label: l10n("BookSettings.Resolution", "Resolution"),
       value: item.resolution ? `${item.resolution.width} x ${item.resolution.height}` : null,
       testId: "history-resolution",
     },
@@ -299,12 +299,12 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
             <Tooltip
               title={
                 promptCopied
-                  ? l10n("AiImageEditor.InfoDialog.Copied", "Copied")
+                  ? l10n("EditTab.SourceBubbleCopied", "Copied")
                   : l10n("AiImageEditor.InfoDialog.CopyPrompt", "Copy prompt")
               }
             >
               <IconButton
-                aria-label={l10n("AiImageEditor.InfoDialog.CopyFullPrompt", "Copy full prompt")}
+                aria-label="Copy full prompt"
                 onClick={handleCopyPrompt}
                 size="small"
                 data-testid="copy-full-prompt"

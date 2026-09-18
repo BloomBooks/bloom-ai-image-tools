@@ -4,7 +4,7 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import type { ArtStyle } from "../../types";
 import { theme } from "../../themes";
 import { CLEAR_ART_STYLE_ID, loadArtStylePreviewUrl } from "../../lib/artStyles";
-import { useL10n } from "../../lib/localization";
+import { useIsEnglishUi, useL10n } from "../../lib/localization";
 import { artStyleDescription, artStyleName } from "../../lib/artStyleStrings";
 
 const DIALOG_MAX_WIDTH = "min(1000px, 92vw)";
@@ -27,6 +27,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
   onClose,
 }) => {
   const l10n = useL10n();
+  const isEnglishUi = useIsEnglishUi();
   // Keep the "None" option pinned to the top of the list for quick access.
   const displayStyles = useMemo(() => {
     if (!styles.length) return styles;
@@ -182,7 +183,11 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
               </Button>
             </Stack>
           </Box>
-          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 4 }} ref={scrollAreaRef}>
+          <Box
+            sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 4 }}
+            ref={scrollAreaRef}
+            data-testid="art-style-chooser-scroll"
+          >
             <Box
               sx={{
                 display: "grid",
@@ -236,11 +241,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                       {previewSrc ? (
                         <img
                           src={previewSrc}
-                          alt={l10n(
-                            "AiImageEditor.ArtStyle.PreviewOfAlt",
-                            "{0} preview",
-                            artStyleName(l10n, style),
-                          )}
+                          alt={`${artStyleName(l10n, style)} preview`}
                           style={{
                             position: "absolute",
                             inset: 0,
@@ -282,15 +283,19 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                           {artStyleName(l10n, style)}
                         </Typography>
                       </Stack>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: theme.colors.textSecondary,
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {artStyleDescription(l10n, style) || style.promptDetail}
-                      </Typography>
+                      {/* English only: these lines are never translated, and English inside
+                          a translated interface reads worse than a card with just a name. */}
+                      {isEnglishUi && (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: theme.colors.textSecondary,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {artStyleDescription(style) || style.promptDetail}
+                        </Typography>
+                      )}
                     </Box>
                   </Box>
                 );

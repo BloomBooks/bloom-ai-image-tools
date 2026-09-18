@@ -71,7 +71,6 @@
     name: "Gemini 3 Pro Preview",
     badge: "Great but Expensive",
     description: "Good for changing an image. It leaves alone the parts you did not ask it to change. It follows your instructions better than the others here, but it costs more.",
-    pricing: "About $0.14 per image",
     pricePerImageUsd: 0.14,
     // Measured against OpenRouter 2026-09-01: this key resolves to the
     // google/gemini-3-pro-image-20260528 snapshot, which rejects 4K. Only the
@@ -115,7 +114,6 @@
     name: "Gemini 3.1 Flash",
     badge: "Great",
     description: "Good for changing an image. It leaves alone the parts you did not ask it to change. It does not follow your instructions quite as well as Gemini 3 Pro.",
-    pricing: "About $0.07 per image",
     pricePerImageUsd: 0.07,
     // Measured against OpenRouter 2026-09-01: this key resolves to the
     // google/gemini-3.1-flash-image-20260528 snapshot, which rejects 4K.

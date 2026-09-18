@@ -772,7 +772,7 @@ const ThumbVisualInner: React.FC<ThumbVisualProps> = ({
           type="text"
           value={draftName}
           placeholder={l10n("AiImageEditor.Characters.NamePlaceholder", "Name")}
-          aria-label={l10n("AiImageEditor.Characters.NameLabel", "Character name")}
+          aria-label="Character name"
           onChange={(event) => setDraftName(event.target.value)}
           onBlur={commitName}
           onPointerDown={(event) => {
@@ -1326,7 +1326,7 @@ const CharacterStackThumb: React.FC<{
     >
       <img
         src={previewSrc}
-        alt={l10n("AiImageEditor.Characters.StackAlt", "Character stack")}
+        alt="Character stack"
         draggable={false}
         style={{
           width: "100%",
@@ -1862,11 +1862,7 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
         >
           <IconButton
             data-testid={`thumbnail-strip-expand-${stripId}`}
-            aria-label={l10n(
-              "AiImageEditor.Strip.ExpandPreview",
-              "Expand {0} strip preview",
-              stripId,
-            )}
+            aria-label={`Expand ${stripId} strip preview`}
             disabled={!canOpenPreview}
             onClick={() => {
               if (!canOpenPreview) {

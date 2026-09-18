@@ -434,6 +434,9 @@ export interface ImageToolsWorkspaceProps {
    *  Should return a dictionary of translated strings for the current UI language.
    *  Missing keys fall back to the English defaults. */
   getLocalizations?: (strings: Record<string, string>) => Promise<Record<string, string>>;
+  /** Tells the editor which language the host's UI is in, so that text which is never
+   *  translated (the art style descriptions) can be hidden rather than shown in English. */
+  getUiLanguageId?: () => Promise<string>;
 }
 
 /**
@@ -863,14 +866,11 @@ function ImageToolsWorkspaceInner({
   const settingsButtonTitle = hostManagesHistory
     ? `${openRouterStatusLabel}.`
     : `${openRouterStatusLabel}. ${historyStatusLabel}.`;
+  // Only a screen reader ever reads this, so it stays in English; the visible
+  // tooltip above is the localized one.
   const settingsButtonLabel = hostManagesHistory
-    ? l10n("AiImageEditor.Settings.ButtonLabel", "Settings • {0}", openRouterStatusLabel)
-    : l10n(
-        "AiImageEditor.Settings.ButtonLabelWithHistory",
-        "Settings • {0}; {1}",
-        openRouterStatusLabel,
-        historyStatusLabel,
-      );
+    ? `Settings • ${openRouterStatusLabel}`
+    : `Settings • ${openRouterStatusLabel}; ${historyStatusLabel}`;
 
   const persistHistoryImage = useCallback(
     async (
@@ -4391,9 +4391,11 @@ function ImageToolsWorkspaceInner({
             );
           })()
         : creditsGauge?.source === "account"
-          ? l10n(
+          ? // "used" sits at the end in English and nowhere else; it goes beside the amount
+            // it belongs to so the sentence survives translation.
+            l10n(
               "AiImageEditor.Credits.AccountCreditsUsed",
-              "{0} of {1} account credits used",
+              "{0} used of {1} account credits",
               formatCreditsValue(creditsGauge.total - creditsGauge.remaining),
               formatCreditsValue(creditsGauge.total),
             )
@@ -4810,7 +4812,10 @@ function ImageToolsWorkspaceInner({
 
 export function ImageToolsWorkspace(props: ImageToolsWorkspaceProps) {
   return (
-    <LocalizationProvider getLocalizations={props.getLocalizations}>
+    <LocalizationProvider
+      getLocalizations={props.getLocalizations}
+      getUiLanguageId={props.getUiLanguageId}
+    >
       <ImageToolsWorkspaceInner {...props} />
     </LocalizationProvider>
   );

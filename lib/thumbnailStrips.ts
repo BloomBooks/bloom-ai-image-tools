@@ -91,6 +91,25 @@ export const stripTip = (l10n: L10nFunc, config: ThumbnailStripConfig): string =
   return english ? l10n(`AiImageEditor.Strip.${config.id}.Tip`, english) : english;
 };
 
+/**
+ * Every strip's name and tip, keyed by the same IDs stripLabel and stripTip ask for.
+ *
+ * Those two build their IDs from the strip's own id, which the generator that writes
+ * lib/staticStrings.ts cannot see, so the table is assembled here instead.
+ */
+export const collectStripStrings = (): Record<string, string> => {
+  const strings: Record<string, string> = {};
+  for (const config of Object.values(THUMBNAIL_STRIP_CONFIGS)) {
+    strings[`AiImageEditor.Strip.${config.id}.Label`] = config.label;
+    const tip = STRIP_TIPS[config.id];
+    const english = typeof tip === "function" ? tip(config) : tip;
+    if (english) {
+      strings[`AiImageEditor.Strip.${config.id}.Tip`] = english;
+    }
+  }
+  return strings;
+};
+
 export const resolveThumbnailStripConfigs = (
   overrides?: Partial<Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>>,
 ): Record<ThumbnailStripId, ThumbnailStripConfig> => {

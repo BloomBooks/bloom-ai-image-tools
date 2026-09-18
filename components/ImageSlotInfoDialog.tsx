@@ -87,12 +87,12 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
         <Tooltip
           title={
             promptCopied
-              ? l10n("AiImageEditor.InfoDialog.Copied", "Copied")
+              ? l10n("EditTab.SourceBubbleCopied", "Copied")
               : l10n("AiImageEditor.InfoDialog.CopyPrompt", "Copy prompt")
           }
         >
           <IconButton
-            aria-label={l10n("AiImageEditor.InfoDialog.CopyFullPrompt", "Copy full prompt")}
+            aria-label="Copy full prompt"
             onClick={handleCopyPrompt}
             size="small"
             data-testid="image-info-dialog-copy-prompt"
@@ -102,7 +102,7 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
           </IconButton>
         </Tooltip>
         <IconButton
-          aria-label={l10n("Common.Close", "Close")}
+          aria-label="Close"
           onClick={onClose}
           data-testid="image-info-dialog-close"
           sx={{

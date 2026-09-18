@@ -1027,7 +1027,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             disabled={isProcessing || (!hasTargetImage && batchTickedCount === 0)}
             options={options.map((option) => ({
               value: option.token,
-              label: option.label,
+              // buildUpscaleOptions works in plain English so it stays testable without
+              // a React context; the one row with a word in it is translated here.
+              label:
+                option.token === CONTAINER_UPSCALE_TOKEN
+                  ? l10n("AiImageEditor.Shape.MatchContainer", "Match Container")
+                  : option.label,
               caption: option.caption,
               tooltip: option.token === CONTAINER_UPSCALE_TOKEN && memo ? memo : undefined,
             }))}
@@ -1341,6 +1346,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                 color: labelColor,
               }}
             >
+              {tool.stepNumber ? `${tool.stepNumber}) ` : ""}
               {toolTitle(l10n, tool)}
             </Typography>
             {isSelected && tool.description && (

@@ -1,7 +1,7 @@
 import { expect, Page } from "@playwright/test";
 import { IMAGE_TOOLS_DB_NAME } from "../../services/persistence/constants";
 import { ENV_KEY_SKIP_FLAG } from "../../lib/authFlags";
-import { resetImageToolsPersistence } from "../playwright_helpers";
+import { resetImageToolsPersistence, setOpenRouterApiKey } from "../playwright_helpers";
 import type { Scene } from "./scenes";
 
 /** The editor's whole English string table, read from the running dev server so the
@@ -108,4 +108,40 @@ export async function selectTool(page: Page, toolId: string) {
   await expect(card.locator('[data-testid^="tool-model-picker-"], [data-testid^="input-"]').first())
     .toBeVisible({ timeout: 3_000 })
     .catch(() => undefined);
+}
+
+/** Point a tool at the Local Dummy model, which draws its result in the browser: no key,
+ *  no network, no cost. `delayMs` is how long each pretend generation takes. */
+export async function useDummyModel(page: Page, toolId: string, delayMs: number) {
+  await page.evaluate((ms) => {
+    (window as any).__bloomDummyDelayMs = ms;
+  }, delayMs);
+  await page.getByTestId(`tool-model-picker-${toolId}`).click();
+  await page.getByText("Local Dummy (No AI)").click();
+  await page.keyboard.press("Escape");
+}
+
+/** The OpenRouter key the e2e suite uses. Scenes that need a live connection are skipped
+ *  without it. Only the key check and the balance fetch are made; nothing is generated. */
+export const OPENROUTER_TEST_KEY = process.env.BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS ?? "";
+
+export async function connectWithTestKey(page: Page) {
+  await setOpenRouterApiKey(page, OPENROUTER_TEST_KEY);
+  // The header's credits meter appears once the balance has been fetched.
+  await expect(page.getByText("AI image generator credits")).toBeVisible({ timeout: 20_000 });
+}
+
+/** Show the key field as dots: the screenshot goes to Crowdin, and the key is a secret. */
+export async function maskApiKeyField(page: Page) {
+  await page.addStyleTag({
+    content: `[data-testid="openrouter-api-key-input"] input { -webkit-text-security: disc; }`,
+  });
+}
+
+export async function openSettingsGear(page: Page) {
+  await page
+    .getByRole("button", { name: /^Settings/ })
+    .first()
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
 }

@@ -11,9 +11,12 @@ import { extractTags } from "./tagExtractor";
 import { gotoScene, loadStringTable, settle } from "./screenshotHelpers";
 
 const outDir = join(process.cwd(), "screenshots-out");
-const only = process.env.SCREENSHOT_SCENES?.split(",")
+const onlyList = (process.env.SCREENSHOT_SCENES ?? "")
+  .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+// An empty list means every scene, not none.
+const only = onlyList.length ? onlyList : undefined;
 
 let table: Record<string, string>;
 
@@ -55,6 +58,7 @@ async function capture(page: Page, scene: Scene, name: string) {
 for (const scene of SCENES) {
   test(scene.name, async ({ page }) => {
     test.skip(!!only && !only.includes(scene.name), "not in SCREENSHOT_SCENES");
+    test.skip(!!scene.skip, scene.skip);
     if (scene.viewport) await page.setViewportSize(scene.viewport);
 
     await gotoScene(page, scene);

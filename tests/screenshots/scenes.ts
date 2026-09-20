@@ -2,7 +2,15 @@
 // Adding a string to a screen already listed here needs nothing; a string that only shows
 // in a new state needs a new entry.
 import { expect, Locator, Page } from "@playwright/test";
-import { openAllSections, selectTool } from "./screenshotHelpers";
+import {
+  connectWithTestKey,
+  maskApiKeyField,
+  openAllSections,
+  openSettingsGear,
+  OPENROUTER_TEST_KEY,
+  selectTool,
+  useDummyModel,
+} from "./screenshotHelpers";
 
 export interface Scene {
   name: string;
@@ -19,6 +27,8 @@ export interface Scene {
   after?: (page: Page, capture: (suffix: string) => Promise<void>) => Promise<void>;
   /** Default true. Turn off when a Popper legitimately overlaps text we still want. */
   hitTest?: boolean;
+  /** Why this scene cannot run on this machine; the runner skips it and says so. */
+  skip?: string;
   notes?: string;
 }
 
@@ -51,26 +61,43 @@ const extraToolIds = (process.env.SCREENSHOT_EXTRA_TOOLS ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+/** Open every dropdown inside `root`, one screenshot each, so the options show. */
+async function captureDropdowns(
+  page: Page,
+  root: Locator,
+  capture: (suffix: string) => Promise<void>,
+  prefix = "dropdown",
+) {
+  const dropdowns = root.getByRole("combobox");
+  const count = await dropdowns.count();
+  for (let i = 0; i < count; i++) {
+    await dropdowns.nth(i).click();
+    const listbox = page.getByRole("listbox");
+    await expect(listbox).toBeVisible();
+    await capture(`${prefix}-${i + 1}`);
+    await page.keyboard.press("Escape");
+    await expect(listbox).toBeHidden();
+  }
+}
+
 /** One scene per tool: its card open with its description, parameters and action button. */
 const toolScenes: Scene[] = [...TOOL_IDS, ...extraToolIds].map((toolId) => ({
   name: `tool-${toolId}`,
   route: HARNESS,
+  // Tall enough for a long card's action button to be on screen.
+  viewport: { width: 1280, height: 1000 },
   setup: (page) => selectTool(page, toolId),
-  // Each dropdown in the card, opened, so its options show.
-  after: async (page, capture) => {
-    const card = page.locator(`[data-tool-id="${toolId}"]`).first();
-    const dropdowns = card.getByRole("combobox");
-    const count = await dropdowns.count();
-    for (let i = 0; i < count; i++) {
-      await dropdowns.nth(i).click();
-      const listbox = page.getByRole("listbox");
-      await expect(listbox).toBeVisible();
-      await capture(`dropdown-${i + 1}`);
-      await page.keyboard.press("Escape");
-      await expect(listbox).toBeHidden();
-    }
-  },
+  after: (page, capture) =>
+    captureDropdowns(page, page.locator(`[data-tool-id="${toolId}"]`).first(), capture),
 }));
+
+const PROMPT = "Make the colors brighter";
+
+const resultImage = (page: Page) => page.getByTestId("result-panel").locator("img").first();
+
+const needsKey = OPENROUTER_TEST_KEY
+  ? undefined
+  : "BLOOM_OPENROUTER_KEY_FOR_PLAYWRIGHT_TESTS is not set";
 
 export const SCENES: Scene[] = [
   {
@@ -105,6 +132,9 @@ export const SCENES: Scene[] = [
       await page.getByTestId("tool-model-picker-custom").click();
       await expect(page.getByText("Local Dummy (No AI)")).toBeVisible();
     },
+    // The quality levels live in a dropdown inside the menu.
+    after: (page, capture) =>
+      captureDropdowns(page, page.locator('[role="presentation"], [role="menu"]'), capture),
   },
   {
     name: "settings-dialog",
@@ -114,10 +144,7 @@ export const SCENES: Scene[] = [
       if (await cta.isVisible()) {
         await cta.click();
       } else {
-        await page
-          .getByRole("button", { name: /^Settings\s+•/i })
-          .first()
-          .click();
+        await openSettingsGear(page);
       }
       await expect(page.getByRole("dialog")).toBeVisible();
     },
@@ -129,9 +156,27 @@ export const SCENES: Scene[] = [
     ready: (page) => page.getByRole("button", { name: "I just want to look around" }),
   },
   {
+    name: "standalone-empty",
+    route: "/",
+    ready: (page) => page.getByTestId("target-panel"),
+    // With a tool chosen and no image, the action button explains what is missing.
+    after: async (page, capture) => {
+      await selectTool(page, "custom");
+      await capture("tool");
+    },
+    notes: "The standalone editor with nothing loaded: the empty slots' invitations.",
+  },
+  {
     name: "playground-notice",
     route: `${HARNESS}&playground=on`,
     ready: (page) => page.getByTestId("playground-notice-dialog"),
+    // Past the notice, a tool's action button says it cannot run in this mode.
+    after: async (page, capture) => {
+      await page.getByTestId("playground-notice-dismiss").click();
+      await expect(page.getByTestId("playground-notice-dialog")).toBeHidden();
+      await selectTool(page, "custom");
+      await capture("tool");
+    },
   },
   {
     name: "book-image-actions",
@@ -190,5 +235,100 @@ export const SCENES: Scene[] = [
       await page.getByTestId("thumbnail-tab-characters").click();
       await expect(page.getByTestId("thumbnail-strip-characters")).toBeVisible();
     },
+  },
+
+  // States around a run, using the Local Dummy model so nothing is spent.
+  {
+    name: "create-image-ready",
+    route: `${HARNESS}&seed=empty-slot`,
+    viewport: { width: 1280, height: 1000 },
+    ready: (page) => page.getByTestId("input-styleId"),
+    setup: async (page) => {
+      await page.locator('[data-tool-id="generate_image"] textarea').first().fill("A red hen");
+      await expect(page.getByRole("button", { name: "Generate Image" })).toBeVisible();
+    },
+    notes: "Create an Image with a description typed, so the Generate button is live.",
+  },
+  {
+    name: "run-in-progress",
+    route: HARNESS,
+    setup: async (page) => {
+      await selectTool(page, "custom");
+      await useDummyModel(page, "custom", 120_000);
+      await page.getByTestId("input-prompt").fill(PROMPT);
+      await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Click to Cancel" })).toBeVisible();
+    },
+    notes: "A Custom Edit running: the cancel button and the busy result pane.",
+  },
+  {
+    name: "run-finished",
+    route: HARNESS,
+    setup: async (page) => {
+      await selectTool(page, "custom");
+      await useDummyModel(page, "custom", 100);
+      await page.getByTestId("input-prompt").fill(PROMPT);
+      await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
+      await expect(resultImage(page)).toBeVisible({ timeout: 20_000 });
+    },
+    after: async (page, capture) => {
+      await resultImage(page).hover();
+      await expect(page.getByRole("button", { name: "More actions" }).first()).toBeVisible();
+      await page.getByRole("button", { name: "More actions" }).first().click();
+      await capture("actions");
+    },
+    hitTest: false,
+    notes: "A Custom Edit finished: the result with its Use this button, then its action buttons.",
+  },
+  {
+    name: "batch-selected",
+    route: HARNESS,
+    setup: async (page) => {
+      await selectTool(page, "custom");
+      await useDummyModel(page, "custom", 4_000);
+      await page.getByTestId("input-prompt").fill(PROMPT);
+      for (const id of ["book-image-1", "book-image-2", "book-image-4"]) {
+        await page.getByTestId(`batch-tick-${id}`).click();
+      }
+      await expect(
+        page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }),
+      ).toBeVisible();
+    },
+    after: async (page, capture) => {
+      await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+      await expect(page.getByTestId("batch-progress-label")).toBeVisible();
+      await capture("running");
+      await expect(page.getByTestId("batch-progress-label")).toBeHidden({ timeout: 60_000 });
+      await capture("done");
+    },
+    notes: "Three book images ticked for a batch; then the batch running; then finished.",
+  },
+
+  // States that need a real OpenRouter connection. Only the key check and the balance
+  // fetch happen; no image is generated with the key.
+  {
+    name: "connected",
+    route: HARNESS,
+    skip: needsKey,
+    setup: connectWithTestKey,
+    after: async (page, capture) => {
+      // The meter's figures live in its tooltip.
+      await page.getByText("AI image generator credits").hover();
+      await expect(page.locator("[data-role='credits-tooltip']")).toHaveCSS("opacity", "1");
+      await capture("credits-tooltip");
+      await page.mouse.move(640, 400);
+      await maskApiKeyField(page);
+      await openSettingsGear(page);
+      const testKey = page.getByTestId("openrouter-test-key");
+      await expect(testKey).toBeVisible();
+      await capture("settings");
+      // The check ends with "Key verified, $x available" or an error line; either is worth a
+      // picture, so wait for the button to stop saying Testing rather than for one outcome.
+      await testKey.click();
+      await expect(testKey).toHaveText("Test Key", { timeout: 20_000 });
+      await capture("key-checked");
+    },
+    notes:
+      "Connected with an API key: the credits meter, then the settings dialog and a key check.",
   },
 ];

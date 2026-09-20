@@ -32,16 +32,17 @@ export function extractTags({ table, hitTest }: ExtractionInput): ExtractionResu
     (s ?? "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
   const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  const exact = new Map<string, string>();
-  const templates: { id: string; re: RegExp; literalLength: number }[] = [];
+  // Two ids may share one English text ("Estimate {0}" and "Estimate {0}{1}" look the same
+  // once filled in); both then get a tag on the same rectangle.
+  const exact = new Map<string, string[]>();
+  const templates: { id: string; re: RegExp; literalLength: number; numericOnly: boolean }[] = [];
   for (const [id, english] of Object.entries(table)) {
     const n = normalize(english);
     if (!n) continue;
     if (/\{\d\}/.test(n)) {
-      // "{0} and {1}" or "{0} left" would match almost any short text; text matching cannot
-      // place such a string, so leave it to the coverage report.
+      // "{0} and {1}" or "{0} left" would match almost any short text. Such a template is
+      // trusted only when what fills it is an amount ("US$0.30 left"), never words.
       const letters = n.replace(/\{\d\}/g, "").replace(/[^\p{L}]/gu, "").length;
-      if (letters < 8) continue;
       const pattern = n
         .split(/\{\d\}/)
         .map(escapeRegExp)
@@ -50,33 +51,43 @@ export function extractTags({ table, hitTest }: ExtractionInput): ExtractionResu
         id,
         re: new RegExp("^" + pattern + "$", "s"),
         literalLength: n.replace(/\{\d\}/g, "").length,
+        numericOnly: letters < 8,
       });
     } else {
-      exact.set(n, id);
+      exact.set(n, [...(exact.get(n) ?? []), id]);
     }
   }
   templates.sort((a, b) => b.literalLength - a.literalLength);
 
-  // A template such as "{0} of {1}" would otherwise match any text containing " of ", so the
-  // filled-in parts must look like values: short and on one line.
-  const templateMatch = (n: string): string | undefined => {
+  // A currency amount or a count, with at most a three-letter currency code.
+  const isAmount = (part: string) => /^[A-Z]{0,3}[^\p{L}\s]*[\d.,]+[^\p{L}]*$/u.test(part);
+
+  // The filled-in parts must look like values: short and on one line.
+  const templateMatch = (n: string): string[] => {
+    const ids: string[] = [];
     for (const t of templates) {
       const m = n.match(t.re);
-      if (m && m.slice(1).every((part) => part.length <= 40 && !/[\r\n]/.test(part))) {
-        return t.id;
-      }
+      if (!m) continue;
+      const parts = m.slice(1);
+      if (!parts.every((part) => part.length <= 40 && !/[\r\n]/.test(part))) continue;
+      if (t.numericOnly && !parts.every(isAmount)) continue;
+      ids.push(t.id);
     }
-    return undefined;
+    return ids;
   };
 
-  const match = (raw: string | null | undefined): string | undefined => {
+  const lookup = (n: string): string[] => exact.get(n) ?? templateMatch(n);
+
+  /** Every id whose English is this text; empty when none is. */
+  const match = (raw: string | null | undefined): string[] => {
     const n = normalize(raw);
-    if (!n || n.length > 300) return undefined;
-    // Tool titles may carry a step number ("1) Extract Cast of Characters") the code adds.
-    const unnumbered = n.replace(/^\d+\)\s+/, "");
-    return (
-      exact.get(n) ?? templateMatch(n) ?? (unnumbered !== n ? exact.get(unnumbered) : undefined)
-    );
+    if (!n || n.length > 300) return [];
+    const direct = lookup(n);
+    if (direct.length) return direct;
+    // Tool titles may carry a step number ("1) Extract Cast of Characters") the code adds, and
+    // a status line may start with a tick or a light bulb; neither is part of the string.
+    const trimmed = n.replace(/^\d+\)\s+/, "").replace(/^[^\p{L}\p{N}{]+/u, "");
+    return trimmed !== n ? lookup(trimmed) : [];
   };
 
   const viewportWidth = window.innerWidth;
@@ -91,9 +102,17 @@ export function extractTags({ table, hitTest }: ExtractionInput): ExtractionResu
     if (right - x < 2 || bottom - y < 2) return null;
     if (!(el as HTMLElement).checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }))
       return null;
-    if (hitTest) {
-      const probe = document.elementFromPoint((x + right) / 2, (y + bottom) / 2);
-      if (!probe || !(el.contains(probe) || probe.contains(el))) return null;
+    // A hover card with pointer-events: none is never what elementFromPoint returns, yet it
+    // is plainly visible, so it is exempt from the hit test. Otherwise the element must be
+    // what the pointer would hit at one of three points across its middle; a button's icon
+    // can sit over the centre of its label without hiding the label.
+    if (hitTest && getComputedStyle(el).pointerEvents !== "none") {
+      const midY = (y + bottom) / 2;
+      const hit = [0.5, 0.2, 0.8].some((f) => {
+        const probe = document.elementFromPoint(x + (right - x) * f, midY);
+        return !!probe && (el.contains(probe) || probe.contains(el));
+      });
+      if (!hit) return null;
     }
     return {
       x: Math.round(x),
@@ -135,25 +154,23 @@ export function extractTags({ table, hitTest }: ExtractionInput): ExtractionResu
       // innerText carries CSS text-transform (the section headers are uppercased), so try
       // the raw textContent as well. A single text node may also be the string on its own,
       // next to a sibling node holding an icon character.
-      let id =
-        match(direct) ??
-        match(el.textContent) ??
-        match(html.innerText) ??
-        textNodes.map(match).find(Boolean);
+      const first = (candidates: (string | null | undefined)[]) =>
+        candidates.map(match).find((ids) => ids.length) ?? [];
+      let ids = first([direct, el.textContent, html.innerText, ...textNodes]);
       let target: Element = el;
-      if (!id) {
+      if (!ids.length) {
         // Text split across inline elements (a bold word, a link) lives in the parent.
         let ancestor: Element | null = el.parentElement;
-        for (let depth = 0; ancestor && depth < 2 && !id; depth++) {
+        for (let depth = 0; ancestor && depth < 2 && !ids.length; depth++) {
           if (ancestor.childElementCount <= 4) {
-            id = match(ancestor.textContent);
-            if (id) target = ancestor;
+            ids = match(ancestor.textContent);
+            if (ids.length) target = ancestor;
           }
           ancestor = ancestor.parentElement;
         }
       }
-      if (id) {
-        consider(id, target.textContent ?? direct, "text", target);
+      if (ids.length) {
+        for (const id of ids) consider(id, target.textContent ?? direct, "text", target);
       } else if (visibleRect(el) && direct.length <= 200) {
         unmatched.add(direct);
       }
@@ -163,19 +180,18 @@ export function extractTags({ table, hitTest }: ExtractionInput): ExtractionResu
       el.closest(".MuiInputBase-root") ?? el.closest("button") ?? el.closest("[role=button]") ?? el;
     const input = el as HTMLInputElement;
     if (input.placeholder && input.value === "") {
-      const id = match(input.placeholder);
-      if (id) consider(id, input.placeholder, "placeholder", control);
+      for (const id of match(input.placeholder)) {
+        consider(id, input.placeholder, "placeholder", control);
+      }
     }
     for (const attr of ["title", "aria-label"]) {
       const value = el.getAttribute(attr);
       if (!value) continue;
-      const id = match(value);
-      if (id) consider(id, value, "label", control);
+      for (const id of match(value)) consider(id, value, "label", control);
     }
     const alt = el.getAttribute("alt");
     if (alt) {
-      const id = match(alt);
-      if (id) consider(id, alt, "alt", el);
+      for (const id of match(alt)) consider(id, alt, "alt", el);
     }
   }
 

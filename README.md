@@ -85,7 +85,9 @@ it. Three commands keep those screenshots current; nothing they produce is commi
   is by matching the visible text against `ALL_IMAGE_EDITOR_STRINGS`. It ends with
   `screenshots-out/coverage.md`, which lists the strings no screenshot shows yet.
 - `pnpm screenshots:upload:dry` says what an upload would do without touching Crowdin.
-- `pnpm screenshots:upload` needs `BLOOM_CROWDIN_TOKEN` (a sil-bloom manager token). It
+- `pnpm screenshots:upload` needs `BLOOM_CROWDIN_TOKEN`: the **SILCrowdinBot** token, so no
+  developer's name is attached to the uploads (the same rule as for translations in
+  BloomDesktop's `DistFiles/localization/README.md`). It
   uploads each PNG as `AiImageEditor/<scene>.png`, lets Crowdin's OCR tag what it can, then
   adds our positioned tags for the rest. Strings not yet in Crowdin (they arrive when
   BloomDesktop's `DistFiles/localization/en/*.xlf` changes reach master and sync) are

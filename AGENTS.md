@@ -28,7 +28,7 @@ Use the chrome-devtools in a terminal to drive and probe the running app.
 
 - Use `vp run e2e` to run UI tests
 - Run specific file: `vp run e2e <file-name>`
-- Playwright starts its own dev server with `vp dev --host --port 3000`, so a separate dev server is usually unnecessary
+- Playwright starts its own dev server with `vp dev --host --port 3000` and never reuses one that is already listening. If port 3000 is busy (a `vp dev` in this or another checkout), the run fails instead of testing the wrong app; stop that server or run with `E2E_PORT=3100 vp run e2e <file-name>`
 - To see all renderer console messages and failed network requests: set `E2E_VERBOSE=1` before `vp run e2e <file-name>`
 - For information on writing tests, see .github/skills/playwright/SKILL.md
 - The Local Dummy model (free, localhost-only) has window test hooks for deterministic

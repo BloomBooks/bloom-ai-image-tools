@@ -1,5 +1,39 @@
 # bloom-ai-image-tools
 
+## 0.2.9
+
+- Report which tools people actually use, and which of their pictures reach the book
+
+  The editor told its host about generations and nothing else, so there was no way to ask which
+  tools earn their place. It now reports five events through `IBloomHostControl.trackEvent`
+  (built in `lib/analyticsEvents.ts`):
+
+  `AI Editor Generate` keeps every property it had and adds the style id, the reasoning level,
+  the image quality, whether the tool's reference images are optional, which page the picture is
+  for (`current`, `other` or `none`), whether that page's slot was empty, and the size of the
+  batch the run belongs to.
+
+  `AI Editor Batch Run` is new and fires twice per batch, once as it starts and once as it ends,
+  carrying the tool, model, style, how many images were in it, and how many succeeded, failed or
+  were stopped.
+
+  `AI Editor Accept` is new and fires when a picture goes into the book, whether by "Use this
+  Image" or the all-slots Replace button. Every tool in the accepted picture's ancestry gets its
+  own event, with its position in the chain, its cost, how long ago it ran, and whether it was
+  the last step -- so "this tool contributed to a kept picture" and "this tool made the kept
+  picture" are both countable.
+
+  `AI Editor Open` and `AI Editor Close` are new and bracket a session: how many book images
+  there were and which tool the editor opened on, then how the session ended, how many pictures
+  were committed, how many generations were attempted, and how long it lasted.
+
+  No property is ever free text. Prompts, parameter text and image names stay out, as they
+  always have; every event also sends every one of its properties on every fire, empty rather
+  than absent, so each event has a single shape.
+
+  **Bloom must register the new event names and their properties** before any of this is
+  recorded: it accepts only known events carrying known properties, and drops the rest.
+
 ## 0.1.15
 
 ### Patch Changes

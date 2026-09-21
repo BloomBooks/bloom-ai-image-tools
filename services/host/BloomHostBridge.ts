@@ -208,7 +208,11 @@ export interface IBloomHostControl {
    *
    *  NEVER pass prompt text, parameter values, image names, or anything else the user typed or
    *  lifted out of their book: a prompt can contain arbitrary content. Counts, enum choices,
-   *  durations, costs and model ids only. */
+   *  durations, costs and model ids only.
+   *
+   *  The events the editor sends, and the properties each one carries, are defined in
+   *  lib/analyticsEvents.ts. The host accepts only event names and properties it knows, so
+   *  anything added there needs a matching change on the host side. */
   trackEvent: (event: string, properties?: Record<string, string | number | boolean>) => void;
   /** Translate the editor's whole string table in one round-trip: takes every localization
    *  ID with its English default and returns what the host has for the current UI language.

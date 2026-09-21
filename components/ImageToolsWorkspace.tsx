@@ -81,6 +81,17 @@ import {
 } from "../services/persistence/fileSystemAccess";
 import { getStyleIdFromParams, getStyleIdFromImageRecord } from "../lib/artStyles";
 import {
+  ACCEPT_EVENT,
+  AnalyticsProperties,
+  BATCH_RUN_EVENT,
+  buildAcceptEventProperties,
+  buildBatchRunEventProperties,
+  buildGenerateEventProperties,
+  CLOSE_EVENT,
+  GENERATE_EVENT,
+  OPEN_EVENT,
+} from "../lib/analyticsEvents";
+import {
   ensureDataUrl,
   getImageDimensions,
   getMimeTypeFromUrl,
@@ -440,6 +451,11 @@ export interface ImageToolsWorkspaceProps {
    *  on to Segment). Optional: with no host to tell, nothing is recorded and nothing breaks.
    *  Never pass prompt text or anything else the user typed -- see IBloomHostControl. */
   onTrackEvent?: (event: string, properties?: Record<string, string | number | boolean>) => void;
+  /** Hands the host adapter the function that reports the end of this editing session,
+   *  for it to call when the session ends. The adapter owns every exit (the host asking
+   *  us to close, Cancel, a commit) while the editor owns the numbers that go in the
+   *  event, so the two meet here. Calling it more than once reports nothing extra. */
+  onSessionCloseReporter?: (report: (outcome: "committed" | "cancelled") => void) => void;
   /** Called once at mount with all editor string IDs and their English defaults.
    *  Should return a dictionary of translated strings for the current UI language.
    *  Missing keys fall back to the English defaults. */
@@ -479,6 +495,7 @@ function ImageToolsWorkspaceInner({
   thumbnailStripConfigOverrides,
   onModalOpenChange,
   onTrackEvent,
+  onSessionCloseReporter,
 }: ImageToolsWorkspaceProps) {
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
   // Tuner) so primary-colored UI and brand-tinted text re-skin from one color.
@@ -1264,6 +1281,7 @@ function ImageToolsWorkspaceInner({
     const launchedOnAnEmptySlot = !!explicitId && placeholderBookImageIds.has(explicitId);
     if (launchedOnAnEmptySlot) {
       setActiveToolId(CREATE_IMAGE_TOOL_ID);
+      initialToolIdRef.current = CREATE_IMAGE_TOOL_ID;
     }
 
     setState((prev) => {
@@ -1744,7 +1762,9 @@ function ImageToolsWorkspaceInner({
 
           if (cancelled) return;
           setParamsByTool(mergedParams);
-          setActiveToolId(resolveStoredToolId(persisted.activeToolId));
+          const storedToolId = resolveStoredToolId(persisted.activeToolId);
+          setActiveToolId(storedToolId);
+          initialToolIdRef.current = storedToolId;
 
           if (!cancelled) {
             if (resolvedStyleId) {
@@ -2604,6 +2624,47 @@ function ImageToolsWorkspaceInner({
   // telling us something about output quality that a plain total never would. Attempts stopped
   // before anything was sent (no API key) deliberately do not consume a number.
   const generationAttemptCountRef = useRef(0);
+  // How many images the user put into the book this session, and when the session began:
+  // both are reported once, by the close event.
+  const imagesCommittedCountRef = useRef(0);
+  const sessionStartedAtMsRef = useRef(Date.now());
+  // Close is one per session however the session ends (the host asking us to close, the
+  // Cancel button, or a commit, which closes the editor in Bloom).
+  const closeEventSentRef = useRef(false);
+  // Which tool the editor opened on, captured as it is decided rather than read back from
+  // state: the auto-select effect below sets it during the same commit the open event is
+  // reported in, so the rendered value is still the previous one at that point.
+  const initialToolIdRef = useRef<string | null>(null);
+  const openEventSentRef = useRef(false);
+
+  /**
+   * Tell the host about something the user did. Every analytics call in this file goes
+   * through here, because none of them may ever affect the thing they are observing: a
+   * host whose callback throws would otherwise fail a generation or lose a commit.
+   */
+  const trackEvent = useCallback(
+    (event: string, properties: AnalyticsProperties) => {
+      try {
+        onTrackEvent?.(event, properties);
+      } catch (error) {
+        console.warn("onTrackEvent host callback failed", error);
+      }
+    },
+    [onTrackEvent],
+  );
+
+  /**
+   * Whether the book slot an image is headed for is empty: the host says so for its own
+   * slots, and a slot record that stands for an empty slot says so itself. History comes
+   * from the live ref, because a batch run spans many renders.
+   */
+  const isEmptyTargetSlot = useCallback(
+    (slotId: string | null | undefined): boolean =>
+      !!slotId &&
+      (placeholderBookImageIds.has(slotId) ||
+        Boolean(stateRef.current.history.find((item) => item.id === slotId)?.isEmptyBookSlot)),
+    [placeholderBookImageIds],
+  );
 
   /**
    * Run one generation, telling the host how the attempt went. Only the generation call is
@@ -2613,7 +2674,13 @@ function ImageToolsWorkspaceInner({
    */
   const runToolOnImageTracked = async (
     args: RunToolOnImageArgs,
-    batch: boolean,
+    run: {
+      batch: boolean;
+      /** How many images the surrounding run covers: the batch's size, or 1. */
+      batchSize: number;
+      /** The book slot this image is headed for, if any. */
+      slotId: string | null | undefined;
+    },
   ): Promise<RunToolOnImageResult> => {
     // Not every "generation" costs anything: remove_background is done locally, and the free
     // Local Dummy model can be picked for any tool. Counting those alongside paid ones would
@@ -2622,26 +2689,29 @@ function ImageToolsWorkspaceInner({
     // is the one modelsCatalog uses, remove_background included; the model-level case is caught
     // by spentCredits on success, which is the only thing that knows for certain.
     const runsLocally = args.tool.id === "remove_background" || !!args.tool.localOnly;
-    const common = {
-      tool: args.tool.id,
-      model: args.toolModel?.id ?? "",
-      // Whether they are editing a picture that was already there or making one from nothing.
-      sourceKind: args.targetImage ? "existing image" : "blank",
+    const common = buildGenerateEventProperties({
+      tool: args.tool,
+      params: args.params,
+      toolModel: args.toolModel ?? null,
+      reasoningByTool: args.reasoningByTool,
+      qualityByTool: args.qualityByTool,
       referenceCount: args.constrainedReferences.length,
-      batch,
+      hasTargetImage: Boolean(args.targetImage),
       runsLocally,
-    };
-    // Isolated from the generation itself. These calls sit either side of the await, so a host
-    // whose analytics code threw would otherwise be caught by the catch below: the success case
-    // would be reported as a failure AND rethrown, losing an image the user had already paid
-    // for, and the failure case would replace the real error with the analytics one. Telling the
-    // host about a generation must never be able to affect the generation.
-    const report = (properties: Record<string, string | number | boolean>) => {
-      try {
-        onTrackEvent?.("AI Editor Generate", { ...common, ...properties });
-      } catch (error) {
-        console.warn("onTrackEvent host callback failed", error);
-      }
+      batch: run.batch,
+      batchSize: run.batchSize,
+      slotId: run.slotId,
+      launchedBookImageId: selectedBookImageId ?? null,
+      bookImageSlotIds,
+      targetSlotEmpty: isEmptyTargetSlot(run.slotId),
+    });
+    // Isolated from the generation itself (see trackEvent). These calls sit either side of the
+    // await, so a host whose analytics code threw would otherwise be caught by the catch below:
+    // the success case would be reported as a failure AND rethrown, losing an image the user had
+    // already paid for, and the failure case would replace the real error with the analytics
+    // one. Telling the host about a generation must never be able to affect the generation.
+    const report = (properties: AnalyticsProperties) => {
+      trackEvent(GENERATE_EVENT, { ...common, ...properties });
     };
     try {
       // Whether the Image Kind choice is the user's own decides whether the run
@@ -2849,7 +2919,9 @@ function ImageToolsWorkspaceInner({
             },
             onPhase: setPhase,
           },
-          false,
+          // The slot the result will land in, resolved exactly as createHistoryItem
+          // below resolves it, so the reported page is the one the image goes to.
+          { batch: false, batchSize: 1, slotId: resolveIncomingSlotId(targetImage) },
         );
       } catch (error) {
         if (error instanceof MissingApiKeyError) {
@@ -3393,6 +3465,26 @@ function ImageToolsWorkspaceInner({
     }
     const constrainedReferences = referenceItems.slice(0, max);
 
+    // One event per batch invocation, so batch runs can be counted as runs rather than
+    // inferred from the per-image generate events. Sent again at the end with the
+    // outcome counts (same shape, phase says which).
+    const batchRunCommon = {
+      tool,
+      toolModel,
+      params,
+      imageCount: orderedIncomingIds.length,
+    };
+    trackEvent(
+      BATCH_RUN_EVENT,
+      buildBatchRunEventProperties({
+        ...batchRunCommon,
+        phase: "started",
+        succeeded: 0,
+        failed: 0,
+        cancelled: 0,
+      }),
+    );
+
     setResultImageIds([]);
     setState((prev) => ({ ...prev, isProcessing: true, error: null }));
 
@@ -3463,7 +3555,11 @@ function ImageToolsWorkspaceInner({
             onProgressStart: () => {},
             onPhase: () => {},
           },
-          true,
+          {
+            batch: true,
+            batchSize: orderedIncomingIds.length,
+            slotId: resolveIncomingSlotId(targetImage),
+          },
         );
 
         shouldRefreshCredits = shouldRefreshCredits || runResult.shouldRefreshCredits;
@@ -3652,6 +3748,22 @@ function ImageToolsWorkspaceInner({
     );
 
     const cancelled = abortController.signal.aborted && !stoppedByMissingApiKey;
+
+    // Whatever neither succeeded nor failed was stopped: a cancel click, or the run
+    // giving up because there is no API key.
+    trackEvent(
+      BATCH_RUN_EVENT,
+      buildBatchRunEventProperties({
+        ...batchRunCommon,
+        phase: "finished",
+        succeeded: completedCount,
+        failed: failedIncomingIds.length,
+        cancelled: Math.max(
+          0,
+          orderedIncomingIds.length - completedCount - failedIncomingIds.length,
+        ),
+      }),
+    );
 
     setBatchRun(null);
     setState((prev) => ({
@@ -4431,12 +4543,115 @@ function ImageToolsWorkspaceInner({
     [replacementItemsByIncomingId],
   );
 
+  /**
+   * Report the images the user just put into their book. Every tool in an accepted
+   * image's ancestry gets its own event (see buildAcceptEventProperties), which is what
+   * makes "did this tool contribute to a picture that was kept?" answerable for the
+   * middle of an edit chain and not just its last step.
+   */
+  const reportAcceptedImages = useCallback(
+    (entries: Array<{ slotId: string; item: ImageRecord }>, batch: boolean) => {
+      if (!entries.length) {
+        return;
+      }
+      const nowMs = Date.now();
+      entries.forEach(({ slotId, item }) => {
+        buildAcceptEventProperties({
+          committed: item,
+          itemsById: historyItemsById,
+          slotId,
+          launchedBookImageId: selectedBookImageId ?? null,
+          bookImageSlotIds,
+          batch,
+          targetSlotEmpty: isEmptyTargetSlot(slotId),
+          nowMs,
+        }).forEach((properties) => trackEvent(ACCEPT_EVENT, properties));
+      });
+      imagesCommittedCountRef.current += entries.length;
+    },
+    [bookImageSlotIds, historyItemsById, isEmptyTargetSlot, selectedBookImageId, trackEvent],
+  );
+
+  /**
+   * The end of one editing session, reported once however it ended. The host adapter
+   * calls this, because it is the only side that sees every way out: the host asking us
+   * to close, the Cancel button, and a commit (which closes the editor in Bloom).
+   */
+  const reportSessionClose = useCallback(
+    (outcome: "committed" | "cancelled") => {
+      if (closeEventSentRef.current) {
+        return;
+      }
+      closeEventSentRef.current = true;
+      trackEvent(CLOSE_EVENT, {
+        outcome,
+        imagesCommitted: imagesCommittedCountRef.current,
+        generateAttempts: generationAttemptCountRef.current,
+        durationSeconds: Math.max(
+          0,
+          Math.round((Date.now() - sessionStartedAtMsRef.current) / 1000),
+        ),
+      });
+    },
+    [trackEvent],
+  );
+
+  useEffect(() => {
+    onSessionCloseReporter?.(reportSessionClose);
+  }, [onSessionCloseReporter, reportSessionClose]);
+
+  // The editor has finished starting up once its state is hydrated and the launch slot
+  // has been honored, which is also when the tool it opens on is settled.
+  useEffect(() => {
+    if (openEventSentRef.current || !isHydrated) {
+      return;
+    }
+    if (
+      bookImagesStripMode === "host" &&
+      resolvedBookImageEntries.length &&
+      !didAutoSelectBookImageTargetRef.current
+    ) {
+      return;
+    }
+    openEventSentRef.current = true;
+    trackEvent(OPEN_EVENT, {
+      bookImageCount: bookImages.length,
+      launchedOnEmptySlot: launchedEmptyBookSlotId != null,
+      initialTool: initialToolIdRef.current ?? activeToolId ?? "",
+    });
+  }, [
+    activeToolId,
+    bookImages.length,
+    bookImagesStripMode,
+    isHydrated,
+    launchedEmptyBookSlotId,
+    resolvedBookImageEntries.length,
+    trackEvent,
+  ]);
+
+  const handleCommitBookImages = useCallback(() => {
+    if (!onCommitBookImages) {
+      return;
+    }
+    // The same entries the host adapter will commit: a slot with an image assigned to
+    // it. A slot the user left alone has none and is not an accepted image.
+    const entries = Object.entries(replacementItemsByIncomingId)
+      .filter(([, item]) => Boolean(item?.imageData))
+      .map(([slotId, item]) => ({ slotId, item: item as ImageRecord }));
+    reportAcceptedImages(entries, true);
+    onCommitBookImages();
+  }, [onCommitBookImages, replacementItemsByIncomingId, reportAcceptedImages]);
+
   const handleUseCurrentResult = useCallback(() => {
     if (onCommitCurrentResult) {
       if (!currentResultItem?.incomingSlotId || !currentResultItem.imageData) {
         return;
       }
 
+      reportAcceptedImages(
+        [{ slotId: currentResultItem.incomingSlotId, item: currentResultItem }],
+        false,
+      );
       onCommitCurrentResult(currentResultItem);
       return;
     }
@@ -4446,7 +4661,7 @@ function ImageToolsWorkspaceInner({
     }
 
     handleAssignReplacement(currentResultItem.incomingSlotId, currentResultItem.id);
-  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult]);
+  }, [currentResultItem, handleAssignReplacement, onCommitCurrentResult, reportAcceptedImages]);
 
   const handleToolSelectWithConstraints = (toolId: string | null) => {
     setActiveToolId(toolId);
@@ -4841,7 +5056,7 @@ function ImageToolsWorkspaceInner({
                       ),
                     testId: bookImagesActionTestId,
                     disabled: !hasBookImageReplacement,
-                    onClick: onCommitBookImages,
+                    onClick: handleCommitBookImages,
                   }
                 : undefined
             }

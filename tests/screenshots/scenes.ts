@@ -35,7 +35,6 @@ export interface Scene {
 const HARNESS = "/?mode=bloom-harness";
 
 const TOOL_IDS = [
-  "enhance_drawing",
   "custom",
   "improve_drawing",
   "upscale",

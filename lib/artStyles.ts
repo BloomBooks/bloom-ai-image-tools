@@ -219,6 +219,14 @@ export const getArtStyleById = (id: string | undefined | null): ArtStyle | null 
   return ART_STYLES.find((style) => style.id === id) ?? null;
 };
 
+/** True when the style with this id lists `category` among its categories. */
+export const artStyleHasCategory = (id: string | undefined | null, category: string): boolean => {
+  const wanted = category.trim().toLowerCase();
+  if (!wanted.length) return false;
+  const style = getArtStyleById(id);
+  return (style?.categories ?? []).some((value) => value.trim().toLowerCase() === wanted);
+};
+
 export const getArtStylePrompt = (
   id: string | undefined,
   mode: "short" | "full" = "short",

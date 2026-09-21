@@ -118,20 +118,25 @@ describe("model pricing declarations", () => {
       // Exactly one of the two: the UI computes an estimate from one and
       // shows the other as a fixed line.
       expect(byToken !== byImage, model.id).toBe(true);
+      // A paid model's price line is built from its number, through the one
+      // localized sentence in ToolModelPicker's describePrice, so no paid model
+      // carries an English price string of its own. "Free" on the local dummy
+      // model is the only `pricing` string left, and it is skipped above.
+      expect(model.pricing, model.id).toBeUndefined();
       if (byToken) {
-        expect(model.pricing, model.id).toBeUndefined();
         expect(getTokenPricingForModel(model.id)).toEqual({
           textInputUsdPerMillion: 5,
           imageInputUsdPerMillion: 8,
           outputUsdPerMillion: 30,
         });
       } else {
-        expect(model.pricing, model.id).toBeTruthy();
+        expect(model.pricePerImageUsd, model.id).toBeGreaterThan(0);
         expect(getTokenPricingForModel(model.id)).toBeNull();
       }
     }
     expect(getModelInfoById(SUNBURST)?.tokenPricing).toBeDefined();
     expect(getModelInfoById(GEMINI_FLASH)?.pricePerImageUsd).toBe(0.07);
+    expect(getModelInfoById(GEMINI_PRO)?.pricePerImageUsd).toBe(0.14);
   });
 });
 

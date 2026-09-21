@@ -36,7 +36,7 @@ describe("ethnicity tool prompt", () => {
       .sort((left, right) => left.title.localeCompare(right.title))
       .map((tool) => tool.id);
 
-    expect(enhanceToolIds).toEqual(["custom", "enhance_drawing", "improve_drawing", "upscale"]);
+    expect(enhanceToolIds).toEqual(["custom", "improve_drawing", "upscale"]);
   });
 
   it("keeps extract cast further instructions subordinate to the reference images", () => {
@@ -194,7 +194,6 @@ describe("ethnicity tool prompt", () => {
         "change_text",
         "coloring_book",
         "custom",
-        "enhance_drawing",
         "ethnicity",
         "improve_drawing",
         "remove_background",
@@ -230,6 +229,37 @@ describe("ethnicity tool prompt", () => {
       expect(tool).toBeDefined();
       expect(toolSupportsBatch(tool)).toBe(false);
     }
+  });
+});
+
+describe("change style tool prompt", () => {
+  const changeStyle = () => TOOLS.find((tool) => tool.id === "change_style");
+
+  it("guards the result against being painted when the style is line art", () => {
+    const prompt = changeStyle()?.promptTemplate?.({ styleId: "line-drawing-sketch" });
+
+    expect(prompt).toContain("stays a line drawing");
+    expect(prompt).toContain("Line Drawing and Sketch Style");
+  });
+
+  it("leaves the line-art guard off a painterly style", () => {
+    const prompt = changeStyle()?.promptTemplate?.({ styleId: "watercolor-dream" });
+
+    expect(prompt).not.toContain("stays a line drawing");
+  });
+
+  it("appends extra instructions only when they are given", () => {
+    const withExtras = changeStyle()?.promptTemplate?.({
+      styleId: "watercolor-dream",
+      extraInstructions: "Keep the hat blue",
+    });
+    const withoutExtras = changeStyle()?.promptTemplate?.({
+      styleId: "watercolor-dream",
+      extraInstructions: "   ",
+    });
+
+    expect(withExtras).toContain("Extra instructions: Keep the hat blue");
+    expect(withoutExtras).not.toContain("Extra instructions:");
   });
 });
 

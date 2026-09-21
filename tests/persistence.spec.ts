@@ -4,6 +4,7 @@ import {
   resetImageToolsPersistence,
   setOpenRouterApiKey,
 } from "./playwright_helpers";
+import { selectTool } from "./screenshots/screenshotHelpers";
 
 const referenceFixture = "tests/fixtures/ref.svg";
 
@@ -20,7 +21,7 @@ test.describe("state persistence", () => {
 
     await page.getByTestId("target-upload-input").setInputFiles(referenceFixture);
 
-    await page.getByRole("button", { name: /Custom Edit/i }).click();
+    await selectTool(page, "custom");
 
     await expect(page.getByTestId("reference-panel")).toBeVisible();
     await page.getByTestId("reference-upload-input-0").setInputFiles(referenceFixture);
@@ -29,31 +30,23 @@ test.describe("state persistence", () => {
     const promptValue = "Make the background teal and add glowing stars.";
     await promptLocator.fill(promptValue);
 
-    await page.getByRole("button", { name: /Model:/i }).click();
+    // The tool carries its own model and reasoning choice, both from the
+    // picker on its card.
+    const modelPicker = page.getByTestId("tool-model-picker-custom");
+    await modelPicker.click();
+    // Each item's accessible name is the model's description tooltip, so pick
+    // it out by the name shown on it.
+    await page.getByRole("menuitem").filter({ hasText: "Gemini 3 Pro Preview" }).click();
 
-    // Wait for dialog to open
-    const modelOption = page.getByRole("button", { name: /GPT-5 Image Mini/i });
-    await expect(modelOption).toBeVisible();
-
-    // If the user hasn't chosen a level for a model yet, use the model's
-    // initialReasoningLevel from the registry.
-    await expect(page.getByTestId("model-reasoning-google/gemini-3.1-flash-image")).toContainText(
-      /Medium/i,
-    );
-
-    await modelOption.click();
-
-    const miniReasoning = page.getByTestId("model-reasoning-openai/gpt-5-image-mini");
-    await expect(miniReasoning).toBeVisible();
-    await miniReasoning.click();
+    await modelPicker.click();
+    const reasoningSelect = page.getByTestId("tool-reasoning-custom");
+    // Gemini 3 Pro names no initialReasoningLevel, so an untouched tool sits at
+    // "Default" until the user picks a level.
+    await expect(reasoningSelect).toHaveText(/Default/i);
+    await reasoningSelect.click();
     await page.getByRole("option", { name: /^High$/i }).click();
-
-    const okButton = page.getByRole("button", { name: /^OK$/i });
-    await expect(okButton).toBeVisible();
-    await okButton.click();
-
-    // Wait for dialog to close
-    await expect(okButton).not.toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(reasoningSelect).toBeHidden();
 
     const historyStrip = page.getByTestId("thumbnail-strip-history").first();
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
@@ -85,16 +78,14 @@ test.describe("state persistence", () => {
 
     await expect(historyStrip.getByTestId("history-card")).toHaveCount(2);
     await expect(promptLocator).toHaveValue(promptValue);
-    await expect(page.getByRole("button", { name: /Model:/i })).toHaveText(/GPT-5 Image Mini/);
+    await expect(page.getByTestId("tool-model-picker-custom")).toHaveAttribute(
+      "aria-label",
+      /Gemini 3 Pro Preview/,
+    );
 
-    await page.getByRole("button", { name: /Model:/i }).click();
-    await expect(page.getByTestId("model-reasoning-openai/gpt-5-image-mini")).toContainText(
-      /High/i,
-    );
-    await expect(page.getByTestId("model-reasoning-google/gemini-3.1-flash-image")).toContainText(
-      /Medium/i,
-    );
-    await page.getByRole("button", { name: /^Cancel$/i }).click();
+    await page.getByTestId("tool-model-picker-custom").click();
+    await expect(page.getByTestId("tool-reasoning-custom")).toHaveText(/High/i);
+    await page.keyboard.press("Escape");
   });
 
   test("persists textarea size across reload", async ({ page }) => {
@@ -104,7 +95,7 @@ test.describe("state persistence", () => {
     await setOpenRouterApiKey(page, "persist-textarea-size-key");
 
     // Image Description (generate_image / prompt)
-    await page.getByRole("button", { name: /Create an Image/i }).click();
+    await selectTool(page, "generate_image");
     const promptLocator = page.getByTestId("input-prompt");
     await expect(promptLocator).toBeVisible();
     await promptLocator.fill("A test prompt");
@@ -114,8 +105,8 @@ test.describe("state persistence", () => {
       el.dispatchEvent(new Event("pointerup", { bubbles: true }));
     });
 
-    // Extra Instructions (enhance_drawing / extraInstructions)
-    await page.getByRole("button", { name: /Enhance Line Drawing/i }).click();
+    // Extra Instructions (change_style / extraInstructions)
+    await selectTool(page, "change_style");
     const extraLocator = page.getByTestId("input-extraInstructions");
     await expect(extraLocator).toBeVisible();
     await extraLocator.fill("Extra instructions");
@@ -132,7 +123,7 @@ test.describe("state persistence", () => {
     await page.reload();
 
     // Verify Extra Instructions height restored.
-    await page.getByRole("button", { name: /Enhance Line Drawing/i }).click();
+    await selectTool(page, "change_style");
     const restoredExtra = page.getByTestId("input-extraInstructions");
     await expect(restoredExtra).toBeVisible();
     const extraHeight = await restoredExtra.evaluate((el) =>
@@ -141,7 +132,7 @@ test.describe("state persistence", () => {
     expect(extraHeight).toBeGreaterThanOrEqual(140);
 
     // Switch back to Create an Image and verify prompt height restored.
-    await page.getByRole("button", { name: /Create an Image/i }).click();
+    await selectTool(page, "generate_image");
     const restoredPrompt = page.getByTestId("input-prompt");
     const promptHeight = await restoredPrompt.evaluate((el) =>
       Math.round(el.getBoundingClientRect().height),

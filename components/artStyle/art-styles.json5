@@ -35,14 +35,6 @@
   },
 
   {
-    id: "cleanup-line-art",
-    name: "Cleanup Old Line Art",
-    promptDetail: "Generate a clean black and white line drawing that matches the original in content and composition. Keep the same aspect ratio.",
-    description: "Cleanup old line art",
-    categories: ["Line Art"],
-    sampleImageUrl: "art-styles/cleanup-line-art.png",
-  },
-  {
     id: "clear-line-flat-color",
     name: "Clear Line & Flat Color",
     promptDetail: "Educational illustration for low-literacy audience, clear continuous black outlines, flat solid colors, no shading, no shadows, full-body characters (no cropping), eye-level perspective, simple background with distinct ground line, literal interpretation.",

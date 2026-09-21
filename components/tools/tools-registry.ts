@@ -15,7 +15,12 @@ import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { ColoringBookIcon } from "../Icons";
 import { ToolDefinition, ToolParameter } from "../../types";
-import { applyArtStyleToPrompt, DEFAULT_ART_STYLE_ID, getArtStyleById } from "../../lib/artStyles";
+import {
+  applyArtStyleToPrompt,
+  artStyleHasCategory,
+  DEFAULT_ART_STYLE_ID,
+  getArtStyleById,
+} from "../../lib/artStyles";
 import {
   DEFAULT_CREATE_ASPECT_RATIO,
   MATCH_CONTAINER_ASPECT_RATIO,
@@ -84,7 +89,6 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "make_gif",
   "ethnicity",
   "apply_localized_characters",
-  "enhance_drawing",
   "break_comic_into_images",
   "change_style",
   "change_text",
@@ -178,6 +182,54 @@ export const ALL_TOOLS: ToolDefinition[] = (
       },
       referenceImages: "0+",
       editImage: false,
+    },
+    {
+      id: "change_style",
+      title: "Change Style",
+      description: "Restyle the selected image.",
+      group: "more",
+      icon: BrushOutlinedIcon,
+      parameters: [
+        {
+          name: "styleId",
+          label: "",
+          type: "art-style",
+          defaultValue: DEFAULT_ART_STYLE_ID,
+          excludeNoneStyle: true,
+          excludeArtStyleIds: [COLORING_BOOK_STYLE_ID],
+        },
+        {
+          name: "extraInstructions",
+          label: "Extra Instructions",
+          type: "textarea",
+          placeholder: "Add any extra instructions...",
+          optional: true,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
+        const styleName = getArtStyleById(selectedStyleId)?.name || "the requested art direction";
+        const extraInstructions = params.extraInstructions?.trim();
+        const parts = [
+          `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`,
+        ];
+        if (artStyleHasCategory(selectedStyleId, "Line Art")) {
+          // Every clause here is load-bearing against GPT Image, which redraws
+          // rather than edits and will otherwise hand back a fully painted
+          // illustration: it reads "polished illustration" as the target genre,
+          // and says nothing about color unless the prompt does.
+          parts.push(
+            "The result stays a line drawing. Form comes from the lines and from hatching, not from filled or painted areas. Make the intended lines confident, and leave out stray pencil marks, smudges, and construction lines. Introduce no hue the original does not have, and do not fill shapes with color or shade them into solid volumes, unless the art direction below explicitly asks for color.",
+          );
+        }
+        const styledPrompt = applyArtStyleToPrompt(parts.join(" "), selectedStyleId);
+        if (!extraInstructions) {
+          return styledPrompt;
+        }
+        return `${styledPrompt}\n\nExtra instructions: ${extraInstructions}`;
+      },
+      referenceImages: "0+",
+      allowBatch: true,
     },
     {
       id: "break_into_pieces",
@@ -344,51 +396,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
       hiddenSizeDefault: "2k",
     },
     {
-      id: "enhance_drawing",
-      preserveInEdit:
-        "the composition, the characters, the perspective, the line work, and the colors of the original.",
-      title: "Enhance Line Drawing",
-      description: "",
-      group: "enhance",
-      icon: AutoFixHighOutlinedIcon,
-      parameters: [
-        {
-          name: "styleId",
-          label: "",
-          type: "art-style",
-          defaultValue: "cleanup-line-art",
-          artStyleCategories: ["Line Art"],
-          excludeNoneStyle: true,
-        },
-        {
-          name: "extraInstructions",
-          label: "Extra Instructions",
-          type: "textarea",
-          placeholder: "Add any extra instructions...",
-          optional: true,
-        },
-      ],
-      promptTemplate: (params: Record<string, string>) => {
-        const styleId = params.styleId || "cleanup-line-art";
-        const extraInstructions = params.extraInstructions?.trim();
-        // Every clause here is load-bearing against GPT Image, which redraws
-        // rather than edits and will otherwise hand back a fully painted
-        // illustration: it reads "polished illustration" as the target genre,
-        // and says nothing about color unless the prompt does.
-        const basePrompt =
-          "Finish this drawing. The result is the same drawing, cleaned up and drawn well: the same composition, the same characters, the same perspective, and the same lines, with stray pencil marks, smudges, and construction lines gone and the intended lines made confident. It stays a line drawing. Form comes from the lines and from hatching that the original already uses, not from filled or painted areas. Use only the colors the original drawing uses, on the same paper or background: a drawing in one color stays in that one color. Introduce no hue that is not already there, and do not fill shapes with color or shade them into solid volumes, unless the art direction below explicitly asks for color.";
-        const styledPrompt = applyArtStyleToPrompt(basePrompt, styleId);
-        if (!extraInstructions) {
-          return styledPrompt;
-        }
-        return `${styledPrompt}\n\nExtra instructions: ${extraInstructions}`;
-      },
-      referenceImages: "0+",
-      // Batch-eligible: single target image in, single image result out, with
-      // no derived multi-file output (see toolSupportsBatch in toolHelpers.ts).
-      allowBatch: true,
-    },
-    {
       id: "change_text",
       preserveInEdit:
         "the font, the lettering style and color, the position and size of the text, the background behind it, and every other part of the image.",
@@ -516,31 +523,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
         ].join("\n\n");
       },
       actionButtonLabel: "Make Coloring Page",
-      referenceImages: "0",
-      allowBatch: true,
-    },
-    {
-      id: "change_style",
-      title: "Change Style",
-      description: "Restyle the selected image.",
-      group: "more",
-      icon: BrushOutlinedIcon,
-      parameters: [
-        {
-          name: "styleId",
-          label: "",
-          type: "art-style",
-          defaultValue: DEFAULT_ART_STYLE_ID,
-          excludeNoneStyle: true,
-          excludeArtStyleIds: [COLORING_BOOK_STYLE_ID],
-        },
-      ],
-      promptTemplate: (params: Record<string, string>) => {
-        const selectedStyleId = params.styleId || DEFAULT_ART_STYLE_ID;
-        const styleName = getArtStyleById(selectedStyleId)?.name || "the requested art direction";
-        const base = `Re-render this image using ${styleName}. Preserve the exact composition, characters, and lighting cues while only changing the rendering technique.`;
-        return applyArtStyleToPrompt(base, selectedStyleId);
-      },
       referenceImages: "0",
       allowBatch: true,
     },

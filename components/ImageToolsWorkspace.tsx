@@ -1607,18 +1607,6 @@ function ImageToolsWorkspaceInner({
               .find((styleId): styleId is string => Boolean(styleId)) || null;
           const resolvedStyleId = persistedStyleId || fallbackStyleId;
 
-          const enhanceParams = mergedParams.enhance_drawing;
-          if (
-            enhanceParams?.styleId &&
-            enhanceParams.styleId !== "cleanup-line-art" &&
-            enhanceParams.styleId === resolvedStyleId
-          ) {
-            mergedParams.enhance_drawing = {
-              ...enhanceParams,
-              styleId: "cleanup-line-art",
-            };
-          }
-
           if (cancelled) return;
           setParamsByTool(mergedParams);
           setActiveToolId(persisted.activeToolId ?? null);

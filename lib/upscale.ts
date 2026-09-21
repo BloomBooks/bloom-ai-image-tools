@@ -15,7 +15,11 @@ import { snapToOpenAiImageSize, type PixelSize } from "./imageSizes";
 /** Stable values persisted as the `targetResolution` parameter. */
 export type UpscaleTargetToken = "container" | "hd" | "2k" | "4k";
 
-/** The Target Resolution value that means "enough pixels to fill the image container". */
+/**
+ * The tool's stored default for Target Resolution. It names no row on the menu:
+ * the tiers are what the user picks between, and this resolves as the smallest
+ * of them (see `resolveUpscaleTarget`).
+ */
 export const CONTAINER_UPSCALE_TOKEN: UpscaleTargetToken = "container";
 
 /** The resolution Bloom computed for the page slot this image sits in. */
@@ -28,7 +32,7 @@ export interface UpscaleHostTarget {
 
 export interface UpscaleOption {
   token: UpscaleTargetToken;
-  /** "Match Container", "HD", "2K", "4K": the row's name, with no pixels in it. */
+  /** "HD", "2K", "4K": the row's name, with no pixels in it. */
   label: string;
   /** The pixels this row asks for, shown as a second line under the label. */
   caption?: string;
@@ -145,8 +149,8 @@ const fitInsideBox = (
 const SHAPE_MATCH_TOLERANCE = 0.02;
 
 /**
- * What Match Container asks for: the image container's pixels, in the
- * SOURCE's shape rather than the container's.
+ * What a picture inside a page container is scaled up to: the container's
+ * pixels, in the SOURCE's shape rather than the container's.
  *
  * Upscaling must not reframe the picture, and asking a model for the slot's
  * own dimensions does exactly that whenever the two shapes differ. A 1024 x
@@ -189,16 +193,26 @@ const captionFor = (dimensions: ImageDimensions | null): string | undefined =>
   dimensions ? formatUpscaleDimensions(dimensions) : undefined;
 
 /**
- * What the Match Container row asks for: the container's pixels, in the
- * image's shape. Null without a host target.
+ * Scaling up never asks for fewer pixels than the picture already has: a tier
+ * below the source's own size stands at the source instead. Inside Bloom with
+ * no container the tier menu does not show, so the stored token is all there
+ * is, and HD would otherwise shrink a 2400 x 1800 picture to 1440 x 1080.
  */
-const containerTarget = resolveAutoTarget;
+const atLeastSource = (
+  target: ImageDimensions | null,
+  source: ImageDimensions | null | undefined,
+): ImageDimensions | null => {
+  if (!target || !isUsableDimensions(source)) {
+    return target;
+  }
+  return Math.max(source.width, source.height) > Math.max(target.width, target.height)
+    ? { width: source.width, height: source.height }
+    : target;
+};
 
 /**
  * The selector's options, in display order. Each row carries, under its name,
- * the pixels it will ask for, in the image's own shape. "Match Container" exists
- * only when the host sent a target for this slot, so a source without one
- * simply starts at HD.
+ * the pixels it will ask for, in the image's own shape.
  *
  * `snap` is how the selected model would change the pixels before sending them
  * (see snapPixelsForModel): GPT Image 2.5 caps an edge at 3840 and the total
@@ -208,26 +222,15 @@ const containerTarget = resolveAutoTarget;
  */
 export const buildUpscaleOptions = (
   source: ImageDimensions | null | undefined,
-  hostTarget?: UpscaleHostTarget | null,
   snap: (dimensions: ImageDimensions | null) => ImageDimensions | null = (d) => d,
 ): UpscaleOption[] => {
-  const container = snap(containerTarget(source, hostTarget));
-  const options: UpscaleOption[] = [];
-
-  if (container) {
-    options.push({
-      token: CONTAINER_UPSCALE_TOKEN,
-      label: "Match Container",
-      caption: captionFor(container),
-      dimensions: container,
-    });
-  }
-
-  const hd = snap(fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE));
-  options.push({ token: "hd", label: "HD", caption: captionFor(hd), dimensions: hd });
+  const hd = snap(atLeastSource(fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE), source));
+  const options: UpscaleOption[] = [
+    { token: "hd", label: "HD", caption: captionFor(hd), dimensions: hd },
+  ];
 
   (["2k", "4k"] as const).forEach((token) => {
-    const dimensions = snap(fitToLongEdge(source, TIER_LONG_EDGES[token]));
+    const dimensions = snap(atLeastSource(fitToLongEdge(source, TIER_LONG_EDGES[token]), source));
     options.push({
       token,
       label: token.toUpperCase(),
@@ -241,25 +244,20 @@ export const buildUpscaleOptions = (
 
 /**
  * The pixel target for a stored token, in the image's own shape. A token this
- * build does not know (a value persisted by an older one, or an empty one)
- * means the default: the container when the host sent one, else HD.
+ * build does not know — an empty one, or the container token a stored default
+ * still carries — means HD. Every tier is held at the source's own size or
+ * above, so a run can only add pixels.
  */
 export const resolveUpscaleTarget = (
   paramValue: string | null | undefined,
   source: ImageDimensions | null | undefined,
-  hostTarget?: UpscaleHostTarget | null,
 ): ImageDimensions | null => {
   const token = (paramValue || "").trim().toLowerCase();
 
   if (token === "2k" || token === "4k") {
-    return fitToLongEdge(source, TIER_LONG_EDGES[token]);
+    return atLeastSource(fitToLongEdge(source, TIER_LONG_EDGES[token]), source);
   }
-  if (token === "hd") {
-    return fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE);
-  }
-  return (
-    containerTarget(source, hostTarget) ?? fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE)
-  );
+  return atLeastSource(fitInBox(source, HD_BOX_LONG_EDGE, HD_BOX_SHORT_EDGE), source);
 };
 
 /** The tool's resolution parameter, or undefined for every other tool. */

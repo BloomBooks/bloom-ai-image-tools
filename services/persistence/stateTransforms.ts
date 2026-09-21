@@ -1,3 +1,4 @@
+import { readImageSourceSummary } from "../../lib/imageSourceSummary";
 import { PersistedImageToolsState } from "../../types";
 
 const migrateLegacyBookImagesNaming = (
@@ -29,6 +30,10 @@ const migrateLegacyBookImagesNaming = (
     ...entry,
     origin: (entry.origin as string) === "environment" ? "bookImages" : entry.origin,
     toolId: (entry.toolId as string) === "environment" ? "bookImages" : entry.toolId,
+    // A build before `sourceSummary` became structured stored a finished sentence here,
+    // and the info panel indexes into the lines it describes; every read path has to
+    // arrive as `ImageSourceSummary | null`.
+    sourceSummary: readImageSourceSummary(entry.sourceSummary),
   }));
 
   return {

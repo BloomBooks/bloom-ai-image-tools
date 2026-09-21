@@ -280,6 +280,13 @@ export interface ToolDefinition {
    * tools that decompose a page so a high-res source isn't downscaled.
    */
   autoSizeFromInput?: boolean;
+  /**
+   * The tool redraws the whole picture in full detail, so a run bills for that
+   * detail rather than for its pixels (see DETAILED_EDIT_OUTPUT_TOKENS). Not
+   * every tool with a size picker qualifies: Coloring Book asks for a target
+   * resolution too, and flat outlines cost what the size table says.
+   */
+  detailedEdit?: boolean;
   /** Hidden tools without a shape picker can still override their requested aspect ratio. */
   hiddenAspectRatioDefault?: string;
   /** Tools without a size picker can still request a specific output size tier. */

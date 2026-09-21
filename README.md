@@ -94,6 +94,11 @@ it. Three commands keep those screenshots current; nothing they produce is commi
   skipped and listed in `screenshots-out/upload-report.json`; run again with `--refresh-ids`
   once they have landed. Unchanged screenshots are skipped on later runs; `--force` redoes
   them and `--scene <name>` limits a run to one.
+- `--prune` deletes the `AiImageEditor/` screenshots on Crowdin that the current scenes no
+  longer account for, so a translator is never shown a screen the editor does not have any
+  more, and drops them from `screenshots-out/upload-manifest.json`. It needs the whole set
+  of scenes, so it cannot be combined with `--scene`; add `--dry-run` to see what it would
+  delete.
 
 A string on a screen that is already a scene needs nothing. A string that only shows in a
 new state needs a new entry in `scenes.ts`. `SCREENSHOT_SCENES=name1,name2` captures only

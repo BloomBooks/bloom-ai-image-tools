@@ -83,6 +83,10 @@ export const describeImageSource = (
     }
     case "text":
       return source.text.trim() ? [source.text] : [];
+    default:
+      // A record written by an older build can hold a shape this build does not know,
+      // and callers index into the result; an unknown kind must still yield an array.
+      return [];
   }
 };
 

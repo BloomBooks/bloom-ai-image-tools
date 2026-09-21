@@ -151,9 +151,9 @@ interface ToolPanelProps {
   targetImageResolution?: { width: number; height: number } | null;
   /** The resolution the host says the image container wants: the target
    *  image's container, or the empty one the editor was launched on when there
-   *  is no image to edit. It is the Match Container row of the Size and Target
-   *  Resolution menus and the size a container-following run asks for
-   *  (lib/slotTarget.ts). */
+   *  is no image to edit. It is the Match Container row of the Shape menu, the
+   *  size Scale Up plans for (lib/upscale.ts), and the size a
+   *  container-following run asks for (lib/slotTarget.ts). */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
   /** True when Bloom launched the editor on a book: every image then has a
    *  page container that decides its size, so the Size menu never shows. */
@@ -1034,12 +1034,12 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         // labeled with the pixels the selected model will be sent for it, in
         // the image's own shape: a pixel-size model has an edge cap and a pixel
         // budget, so its "4K" reads the size inside them, not 4096.
-        const options = buildUpscaleOptions(targetImageResolution, null, (dimensions) =>
+        const options = buildUpscaleOptions(targetImageResolution, (dimensions) =>
           snapPixelsForModel(toolModel?.id, dimensions),
         );
-        // The stored token can name an option this image doesn't offer (the
-        // container token, after a slot that had one), so fall back to the
-        // first option rather than showing an empty select.
+        // The tool's stored default names no row (CONTAINER_UPSCALE_TOKEN), so
+        // fall back to the first option rather than showing an empty select.
+        // That is the same tier resolveUpscaleTarget gives the default.
         const selectedToken = options.some((option) => option.token === value)
           ? value
           : options[0]?.token || "hd";

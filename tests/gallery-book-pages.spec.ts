@@ -63,8 +63,12 @@ test.describe("gallery book pages", () => {
     await expect(replacedColumn.getByTestId("image-preview-dialog-page-label")).toHaveText(
       "Page 3",
     );
-    const captions = replacedColumn.getByTestId("image-preview-dialog-page-caption");
-    await expect(captions).toHaveText(["In the book now", "Replacement"]);
+    await expect(replacedColumn.getByTestId("image-preview-dialog-in-book-caption")).toHaveText(
+      "In the book now",
+    );
+    await expect(replacedColumn.getByTestId("image-preview-dialog-replacement-caption")).toHaveText(
+      "Replacement",
+    );
     await expect(replacedColumn.locator("img")).toHaveCount(2);
     // No run numbers or prompt in a page column: the two pictures are the point.
     await expect(replacedColumn.getByTestId("image-preview-dialog-facts")).toHaveCount(0);
@@ -75,7 +79,12 @@ test.describe("gallery book pages", () => {
     await expect(untouchedColumn.getByTestId("image-preview-dialog-page-label")).toHaveText(
       "Page 4",
     );
-    await expect(untouchedColumn.getByTestId("image-preview-dialog-page-caption")).toHaveCount(0);
+    await expect(untouchedColumn.getByTestId("image-preview-dialog-in-book-caption")).toHaveCount(
+      0,
+    );
+    await expect(
+      untouchedColumn.getByTestId("image-preview-dialog-replacement-caption"),
+    ).toHaveCount(0);
     await expect(untouchedColumn.locator("img")).toHaveCount(1);
 
     // The gallery opens showing a whole page column -- both pictures at once --

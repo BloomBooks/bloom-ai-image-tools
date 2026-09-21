@@ -14,10 +14,10 @@ export const NOT_TRANSLATED = new Set<string>([
   // Tools and fields for whoever is preparing the artwork, not for the person writing the book.
   "AiImageEditor.Tool.break_comic_into_images.Description",
   "AiImageEditor.Tool.break_comic_into_images.Param.furtherInstructions.Placeholder",
+  "AiImageEditor.Panel.OriginalComic",
   "AiImageEditor.Tool.break_into_pieces.Title",
   "AiImageEditor.Tool.break_into_pieces.Description",
   "AiImageEditor.Tool.break_into_pieces.Param.furtherInstructions.Placeholder",
-  "AiImageEditor.Tool.coloring_book.Description",
 
   // The panel of technical details about one generated picture.
   "AiImageEditor.Info.ArtStyle",

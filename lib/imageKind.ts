@@ -202,7 +202,5 @@ export const detectImageKind = async (dataUrl: string): Promise<ImageKind | null
   if (!context) return null;
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
   const raster = context.getImageData(0, 0, canvas.width, canvas.height);
-  const kind = classifyImageKind(raster);
-  console.log("[improve-quality] image kind", { kind, ...imageKindStats(raster) });
-  return kind;
+  return classifyImageKind(raster);
 };

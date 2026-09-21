@@ -248,8 +248,9 @@ export const ALL_TOOLS: ToolDefinition[] = (
       referenceImages: "1+",
       editImage: false,
       derivedResultMode: "split-images",
-      // No shape picker (see HIDE_ASPECT_RATIO_TOOL_IDS). Declared so a shape
-      // persisted before the picker was hidden is ignored.
+      // The tool has no shape picker (see HIDE_ASPECT_RATIO_TOOL_IDS), so this
+      // is the shape it asks for, and it wins over any shape in the stored
+      // parameters.
       hiddenAspectRatioDefault: "1:1",
     },
     {
@@ -389,6 +390,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
       // The detector (lib/imageKind.ts) sets the Image Kind choice when a
       // target image arrives, and the user can change it.
       id: "improve_quality",
+      detailedEdit: true,
       preserveInEdit: "the composition, the subjects, the colors, the style, and the framing.",
       title: "Improve Quality",
       description: "Make the image sharp, clean, and large enough for this page.",
@@ -844,3 +846,11 @@ export const ALL_TOOLS: ToolDefinition[] = (
 
 /** The tools the app offers: every defined tool that is not switched off. */
 export const TOOLS: ToolDefinition[] = ALL_TOOLS.filter((tool) => !tool.disabled);
+
+/**
+ * A stored tool id, or null when it names no tool this build offers. Saved state
+ * outlives the tool list, and an id that matches nothing leaves the workspace with
+ * a tool selected and no tool to show for it.
+ */
+export const resolveStoredToolId = (toolId: string | null | undefined): string | null =>
+  toolId && TOOLS.some((tool) => tool.id === toolId) ? toolId : null;

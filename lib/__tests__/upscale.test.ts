@@ -43,26 +43,7 @@ describe("fitInBox", () => {
 });
 
 describe("buildUpscaleOptions", () => {
-  it("offers Container first, captioned with the pixels it asks for, when the host sent a target", () => {
-    const options = buildUpscaleOptions(
-      { width: 900, height: 600 },
-      { width: 1417, height: 945, memo: "for a 120mm x 80mm container" },
-    );
-
-    expect(options.map((option) => option.token)).toEqual([
-      CONTAINER_UPSCALE_TOKEN,
-      "hd",
-      "2k",
-      "4k",
-    ]);
-    // A 3:2 image in a container measured at 1.4995:1 is already its shape,
-    // so the container's own number stands.
-    expect(options[0].label).toBe("Match Container");
-    expect(options[0].caption).toBe("1417 x 945");
-    expect(options[0].dimensions).toEqual({ width: 1417, height: 945 });
-  });
-
-  it("omits Container and starts at HD when the host sent no target", () => {
+  it("starts at HD", () => {
     const options = buildUpscaleOptions({ width: 900, height: 600 });
 
     expect(options.map((option) => option.token)).toEqual(["hd", "2k", "4k"]);
@@ -82,7 +63,7 @@ describe("buildUpscaleOptions", () => {
     // caps an edge at 3840); the caption then says what will actually be sent.
     const capEdge = (d: { width: number; height: number } | null) =>
       d && d.width > 3840 ? { width: 3840, height: Math.round((3840 * d.height) / d.width) } : d;
-    const options = buildUpscaleOptions({ width: 900, height: 600 }, null, capEdge);
+    const options = buildUpscaleOptions({ width: 900, height: 600 }, capEdge);
 
     expect(options[1].caption).toBe("2048 x 1365");
     expect(options[2].caption).toBe("3840 x 2560");
@@ -104,22 +85,19 @@ describe("buildUpscaleOptions", () => {
     expect(options.every((option) => option.dimensions === null)).toBe(true);
   });
 
-  it("ignores a host target with unusable dimensions", () => {
-    const options = buildUpscaleOptions({ width: 900, height: 600 }, { width: 0, height: 945 });
+  it("never captions a tier below the picture's own size", () => {
+    const options = buildUpscaleOptions({ width: 2400, height: 1800 });
 
-    expect(options.map((option) => option.token)).toEqual(["hd", "2k", "4k"]);
+    expect(options[0].caption).toBe("2400 x 1800");
+    expect(options[1].caption).toBe("2400 x 1800");
+    expect(options[2].caption).toBe("4096 x 3072");
   });
 });
 
 describe("resolveUpscaleTarget", () => {
   const source = { width: 900, height: 600 };
-  const hostTarget = { width: 1417, height: 945 };
 
-  it("returns the container's target for the container token", () => {
-    expect(resolveUpscaleTarget(CONTAINER_UPSCALE_TOKEN, source, hostTarget)).toEqual(hostTarget);
-  });
-
-  it("falls back to HD for the container token with no host target", () => {
+  it("resolves the stored default to HD", () => {
     expect(resolveUpscaleTarget(CONTAINER_UPSCALE_TOKEN, source)).toEqual({
       width: 1620,
       height: 1080,
@@ -127,9 +105,7 @@ describe("resolveUpscaleTarget", () => {
   });
 
   it("reads a token this build does not know as the default", () => {
-    // The container when the host sent one, else HD.
     for (const stale of ["auto", "8k", "", undefined]) {
-      expect(resolveUpscaleTarget(stale, source, hostTarget), String(stale)).toEqual(hostTarget);
       expect(resolveUpscaleTarget(stale, source), String(stale)).toEqual({
         width: 1620,
         height: 1080,
@@ -138,11 +114,21 @@ describe("resolveUpscaleTarget", () => {
   });
 
   it("resolves the tier tokens off the image's shape", () => {
-    expect(resolveUpscaleTarget("2k", source, hostTarget)).toEqual({ width: 2048, height: 1365 });
-    expect(resolveUpscaleTarget("4K", source, hostTarget)).toEqual({ width: 4096, height: 2731 });
+    expect(resolveUpscaleTarget("2k", source)).toEqual({ width: 2048, height: 1365 });
+    expect(resolveUpscaleTarget("4K", source)).toEqual({ width: 4096, height: 2731 });
   });
 
-  it("returns null when there is nothing to scale and no host target", () => {
+  it("never asks for fewer pixels than the picture already has", () => {
+    // Inside Bloom with no container sent, the menu does not show and the
+    // stored default is all there is; HD would shrink this picture.
+    const big = { width: 2400, height: 1800 };
+    expect(resolveUpscaleTarget(CONTAINER_UPSCALE_TOKEN, big)).toEqual(big);
+    expect(resolveUpscaleTarget("hd", big)).toEqual(big);
+    expect(resolveUpscaleTarget("2k", big)).toEqual(big);
+    expect(resolveUpscaleTarget("4k", big)).toEqual({ width: 4096, height: 3072 });
+  });
+
+  it("returns null when there is nothing to scale", () => {
     expect(resolveUpscaleTarget("hd", null)).toBeNull();
   });
 });
@@ -163,17 +149,10 @@ describe("size tier the request maps to", () => {
     expect(pickSizeTokenForLongEdge(Math.max(fourK.width, fourK.height))).toBe("4k");
   });
 
-  it("maps a small host target down to the 1k tier", () => {
-    const target = resolveUpscaleTarget(
-      CONTAINER_UPSCALE_TOKEN,
-      { width: 900, height: 600 },
-      {
-        width: 1024,
-        height: 683,
-      },
-    )!;
+  it("maps a small picture's default target up to the 2k tier", () => {
+    const target = resolveUpscaleTarget(CONTAINER_UPSCALE_TOKEN, { width: 512, height: 341 })!;
 
-    expect(pickSizeTokenForLongEdge(Math.max(target.width, target.height))).toBe("1k");
+    expect(pickSizeTokenForLongEdge(Math.max(target.width, target.height))).toBe("2k");
   });
 });
 
@@ -217,17 +196,6 @@ describe("resolveAutoTarget", () => {
 
   it("is null without a host target", () => {
     expect(resolveAutoTarget({ width: 1024, height: 1024 }, null)).toBeNull();
-  });
-
-  it("drives the Container option and the resolved request alike", () => {
-    const source = { width: 1024, height: 1024 };
-    const options = buildUpscaleOptions(source, { ...slot, memo: "for a 124mm x 92mm container" });
-
-    expect(options[0].caption).toBe("1088 x 1088");
-    expect(resolveUpscaleTarget(CONTAINER_UPSCALE_TOKEN, source, slot)).toEqual({
-      width: 1088,
-      height: 1088,
-    });
   });
 });
 

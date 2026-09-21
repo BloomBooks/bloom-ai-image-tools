@@ -8,6 +8,7 @@ import {
   HistorySnapshot,
 } from "./types";
 import type { ImageRecord, ThumbnailStripsSnapshot } from "../../types";
+import { readImageSourceSummary } from "../../lib/imageSourceSummary";
 import { imageFileNameForEntry } from "./ids";
 import { supportsFolderStorage } from "./folder/FolderHistoryBackend";
 
@@ -35,7 +36,8 @@ export const historyEntryToImageRecord = (
   reasoningLevel: entry.reasoningLevel ?? null,
   timestamp: entry.timestamp,
   promptUsed: entry.promptUsed,
-  sourceSummary: entry.sourceSummary ?? null,
+  // An entry written before `sourceSummary` became structured holds a finished sentence.
+  sourceSummary: readImageSourceSummary(entry.sourceSummary),
   caption: entry.caption ?? null,
   credits: entry.credits ?? null,
   resolution: entry.resolution,

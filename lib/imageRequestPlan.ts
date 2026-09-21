@@ -154,7 +154,7 @@ export const planImageRequest = (input: ImageRequestPlanInput): ImageRequestPlan
     ? null
     : scaleUp?.state !== "no-container"
       ? scaleUp!.request
-      : resolveUpscaleTarget(params?.[targetResolutionParam.name], targetImageResolution, null);
+      : resolveUpscaleTarget(params?.[targetResolutionParam.name], targetImageResolution);
 
   // Inside Bloom, the host says how many pixels the image container wants, and
   // a result that belongs in the container is asked for at that size, in the

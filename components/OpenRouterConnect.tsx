@@ -101,20 +101,27 @@ export function OpenRouterConnect({
     try {
       const status = await fetchOpenRouterKeyStatus(key);
       const remaining = status.limitRemaining ?? status.accountRemainingCredits;
-      const balancePart =
-        remaining !== null
-          ? l10n(
-              "AiImageEditor.OpenRouter.AvailableBalance",
-              ", {0} available",
-              new Intl.NumberFormat("en-US", {
-                style: "currency",
-                currency: "USD",
-                currencyDisplay: "symbol",
-              }).format(remaining),
-            )
-          : "";
+      // Two whole sentences rather than one with a fragment slotted in: where the
+      // amount falls in the sentence, and whether it needs a comma, is the
+      // translator's to decide.
+      const balance =
+        remaining === null
+          ? null
+          : new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              currencyDisplay: "symbol",
+            }).format(remaining);
       setTestState("success");
-      setTestMessage(l10n("AiImageEditor.OpenRouter.KeyVerified", "Key verified{0}", balancePart));
+      setTestMessage(
+        balance === null
+          ? l10n("AiImageEditor.OpenRouter.KeyVerified", "Key verified")
+          : l10n(
+              "AiImageEditor.OpenRouter.KeyVerifiedWithBalance",
+              "Key verified, {0} available",
+              balance,
+            ),
+      );
       // A null limit means there's no per-key spending cap; warn so the user can set one.
       setKeyHasNoLimit(status.limit === null);
     } catch (err) {

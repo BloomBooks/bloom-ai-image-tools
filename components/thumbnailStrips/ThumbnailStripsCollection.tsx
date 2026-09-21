@@ -132,7 +132,9 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
       return l10n(
         "AiImageEditor.Strip.ManyStrips",
         "{0}, and {1}",
-        labels.slice(0, -1).join(", "),
+        // What goes between the first items of a list is the translator's, not
+        // a comma and a space the code assumes.
+        labels.slice(0, -1).join(l10n("AiImageEditor.Strip.ListSeparator", ", ")),
         labels[labels.length - 1],
       );
     };

@@ -25,6 +25,21 @@ export const modelBadge = (l10n: L10nFunc, badge: string): string => {
   return id ? l10n(id, badge) : badge;
 };
 
+/**
+ * The ID for one model's description, which the picker shows as the tooltip on its row.
+ *
+ * Unlike a badge, a description belongs to the one model it is about, so it is keyed by the
+ * model's own OpenRouter key with the punctuation that key carries ("/", ".") flattened,
+ * since a localization ID is read as dot-separated parts.
+ */
+export const modelDescriptionId = (modelId: string): string =>
+  `AiImageEditor.Model.${modelId.trim().replace(/[^A-Za-z0-9]+/g, "-")}.Description`;
+
+export const modelDescription = (l10n: L10nFunc, model: { id: string; description?: string }) => {
+  const english = model.description?.trim();
+  return english ? l10n(modelDescriptionId(model.id), english) : "";
+};
+
 /** Every model string, keyed by the same IDs the helpers above ask for. */
 export const collectModelStrings = (): Record<string, string> => {
   const strings: Record<string, string> = {};
@@ -32,6 +47,10 @@ export const collectModelStrings = (): Record<string, string> => {
     const id = model.badge ? modelBadgeId(model.badge) : undefined;
     if (id && model.badge) {
       strings[id] = model.badge;
+    }
+    const description = model.description?.trim();
+    if (description) {
+      strings[modelDescriptionId(model.id)] = description;
     }
   }
   return strings;

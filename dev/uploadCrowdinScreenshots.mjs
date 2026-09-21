@@ -1,7 +1,11 @@
 // Uploads the editor's screenshots to Crowdin and tags each one with the strings it shows.
 //
-//   node dev/uploadCrowdinScreenshots.mjs [--dry-run] [--scene <name>] [--refresh-ids] [--force]
+//   node dev/uploadCrowdinScreenshots.mjs [--dry-run] [--scene <name>] [--refresh-ids] [--force] [--prune]
 //   node dev/uploadCrowdinScreenshots.mjs --spike [--keep]     prove the mechanism end to end
+//
+// --prune deletes every Crowdin screenshot under AiImageEditor/ that the scenes in
+// screenshots-out/ no longer account for, and drops it from upload-manifest.json. It needs
+// the whole set of scenes, so it refuses to run alongside --scene, and it honors --dry-run.
 //
 // Needs BLOOM_CROWDIN_TOKEN (a sil-bloom manager or owner token). Reads what
 // `pnpm screenshots:capture` wrote to screenshots-out/, and keeps two files there:
@@ -49,6 +53,7 @@ const argValue = (flag) => {
 const outDir = join(repoRoot, argValue("--dir") ?? "screenshots-out");
 const dryRun = args.has("--dry-run");
 const force = args.has("--force");
+const prune = args.has("--prune");
 const onlyScene = argValue("--scene");
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -218,8 +223,56 @@ async function uploadScene(client, scene, index, manifest) {
   return result;
 }
 
+/** Every AiImageEditor/ screenshot the project holds, oldest page first. */
+async function listOurScreenshots(client) {
+  const all = [];
+  let offset = 0;
+  for (;;) {
+    const { data } = await client.screenshotsApi.listScreenshots(PROJECT_ID, {
+      limit: 500,
+      offset,
+    });
+    all.push(...data.map((d) => d.data));
+    if (data.length < 500) break;
+    offset += 500;
+  }
+  return all.filter((shot) => shot.name?.startsWith(NAME_PREFIX));
+}
+
+/**
+ * Crowdin keeps a screenshot after the scene that made it is gone, and a picture of a screen
+ * the editor no longer has is worse for a translator than no picture at all. Deletes every
+ * AiImageEditor/ screenshot the current scenes do not account for.
+ */
+async function pruneScreenshots(client, scenes, manifest, manifestPath) {
+  const keep = new Set(scenes.map((scene) => `${NAME_PREFIX}${scene.name}.png`));
+  // The spike's screenshot is not a scene, and `--spike --keep` is what decides its fate.
+  keep.add(`${NAME_PREFIX}spike.png`);
+
+  const stale = (await listOurScreenshots(client)).filter((shot) => !keep.has(shot.name));
+  if (!stale.length) {
+    console.log("\nPrune: nothing to remove.");
+    return;
+  }
+  for (const shot of stale) {
+    console.log(`${dryRun ? "would delete" : "deleting"} ${shot.name} (${shot.id})`);
+    if (dryRun) continue;
+    await client.screenshotsApi.deleteScreenshot(PROJECT_ID, shot.id);
+    const sceneName = shot.name.slice(NAME_PREFIX.length).replace(/\.png$/, "");
+    if (sceneName in manifest) {
+      delete manifest[sceneName];
+      writeJson(manifestPath, manifest);
+    }
+  }
+  console.log(`\nPrune: ${stale.length} screenshot(s)${dryRun ? " would be" : ""} removed.`);
+}
+
 async function runUpload(client) {
   await assertProject(client);
+  if (prune && onlyScene) {
+    console.error("--prune needs the whole set of scenes; run it without --scene.");
+    process.exit(2);
+  }
   const scenes = loadScenes();
   if (!scenes.length) {
     console.error(`No scenes in ${outDir}. Run pnpm screenshots:capture first.`);
@@ -272,6 +325,7 @@ async function runUpload(client) {
     `\n${dryRun ? "Dry run. " : ""}${results.length} screenshots; ${missing.size} distinct ids are not in Crowdin yet (listed in screenshots-out/upload-report.json). ` +
       `Re-run with --refresh-ids after BloomDesktop's XLF changes sync to Crowdin.`,
   );
+  if (prune) await pruneScreenshots(client, scenes, manifest, manifestPath);
   if (failed) process.exit(1);
 }
 

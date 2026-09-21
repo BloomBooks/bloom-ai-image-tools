@@ -151,7 +151,10 @@ export const HistoryStrip: React.FC<HistoryStripProps> = ({
             color: theme.colors.textMuted,
             backgroundColor: "transparent",
           }}
-          title="You can drag these items to the above panels."
+          title={l10n(
+            "AiImageEditor.History.DragTip",
+            "You can drag these items to the above panels.",
+          )}
           aria-label="History strip drag instructions"
         >
           <Icon path={Icons.Info} className="w-4 h-4" />

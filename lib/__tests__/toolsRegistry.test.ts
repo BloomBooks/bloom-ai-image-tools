@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, resolveStoredToolId, TOOLS } from "../../components/tools/tools-registry";
 import { toolSupportsBatch } from "../toolHelpers";
 
 describe("ethnicity tool prompt", () => {
@@ -349,5 +349,22 @@ describe("preserve-what-you-are-not-changing instruction", () => {
       expect(tool?.preserveInEdit, toolId).toBeUndefined();
       expect(tool?.promptTemplate({}), toolId).not.toContain("Change only what is asked for");
     }
+  });
+});
+
+describe("resolveStoredToolId", () => {
+  it("keeps an id the app still offers", () => {
+    expect(resolveStoredToolId("change_style")).toBe("change_style");
+  });
+
+  it("drops an id for a tool that is gone or switched off", () => {
+    // Saved state outlives the tool list; a restored id that matches nothing
+    // would leave the workspace with a tool selected and no panel for it.
+    for (const stale of ["upscale", "enhance_drawing", "improve_drawing", "", null, undefined]) {
+      expect(resolveStoredToolId(stale), String(stale)).toBeNull();
+    }
+    const disabled = ALL_TOOLS.find((tool) => tool.disabled);
+    expect(disabled).toBeDefined();
+    expect(resolveStoredToolId(disabled!.id)).toBeNull();
   });
 });

@@ -24,7 +24,7 @@ import { ImageToolsBar } from "./ImageToolsBar";
 import { OpenRouterApiError, OPENROUTER_KEYS_URL } from "../services/openRouterService";
 import { BREAK_COMIC_MERGE_MARGIN_RATIO } from "../lib/breakComic";
 import { fetchOpenRouterKeyStatus, OpenRouterKeyStatus } from "../lib/openRouterKeyStatus";
-import { CREATE_IMAGE_TOOL_ID, TOOLS } from "./tools/tools-registry";
+import { CREATE_IMAGE_TOOL_ID, resolveStoredToolId, TOOLS } from "./tools/tools-registry";
 import { theme } from "../themes";
 import { useBrandedDarkTheme } from "./materialUITheme";
 import {
@@ -775,6 +775,10 @@ function ImageToolsWorkspaceInner({
   // treats their pick as covering every image of a batch, where a guess is
   // re-checked per image (see resolveImageKind in lib/imageKind.ts).
   const imageKindChosenByUserRef = useRef(false);
+  // How many times the user has picked the Image Kind. Detection is async, so a
+  // detector compares this with what it read before its await: a pick made while
+  // it was running wins over the guess it came back with.
+  const imageKindChoiceCountRef = useRef(0);
   // Put a guessed kind on every tool that has the parameter. A guess replaces
   // an earlier guess; the user's pick takes over from it until the next guess.
   const applyImageKindGuess = useCallback((option: string) => {
@@ -792,12 +796,17 @@ function ImageToolsWorkspaceInner({
   useEffect(() => {
     if (!targetImageIdForKind || !targetImageDataForKind) return;
     if (kindAppliedForImageIdRef.current === targetImageIdForKind) return;
+    // Claim the image before the await: the effect re-runs while detection is in
+    // flight, and a second detector for the same image would guess over the
+    // first one's result.
+    kindAppliedForImageIdRef.current = targetImageIdForKind;
+    const choicesBeforeDetection = imageKindChoiceCountRef.current;
     let cancelled = false;
     void (async () => {
       try {
         const kind = await detectImageKind(await ensureDataUrl(targetImageDataForKind));
         if (cancelled || !kind) return;
-        kindAppliedForImageIdRef.current = targetImageIdForKind;
+        if (imageKindChoiceCountRef.current !== choicesBeforeDetection) return;
         applyImageKindGuess(imageKindOption(kind));
       } catch {
         // A source we cannot read keeps the choice as it is.
@@ -819,12 +828,15 @@ function ImageToolsWorkspaceInner({
     const ticksKey = tickedIdsForKind.join(",");
     if (!tickedIdsForKind.length) {
       kindAppliedForTicksRef.current = null;
-      imageKindChosenByUserRef.current = false;
+      // The displayed Image Kind does not change when the ticks clear, so
+      // neither does whether it is the user's own pick; only a fresh guess
+      // replacing the value clears that (see applyImageKindGuess).
       return;
     }
     if (kindAppliedForTicksRef.current === ticksKey) return;
     kindAppliedForTicksRef.current = ticksKey;
     if (imageKindChosenByUserRef.current) return;
+    const choicesBeforeDetection = imageKindChoiceCountRef.current;
     let cancelled = false;
     void (async () => {
       const kinds: ImageKind[] = [];
@@ -840,6 +852,7 @@ function ImageToolsWorkspaceInner({
         }
       }
       if (cancelled || !kinds.length) return;
+      if (imageKindChoiceCountRef.current !== choicesBeforeDetection) return;
       applyImageKindGuess(imageKindOption(majorityImageKind(kinds)));
     })();
     return () => {
@@ -1731,7 +1744,7 @@ function ImageToolsWorkspaceInner({
 
           if (cancelled) return;
           setParamsByTool(mergedParams);
-          setActiveToolId(persisted.activeToolId ?? null);
+          setActiveToolId(resolveStoredToolId(persisted.activeToolId));
 
           if (!cancelled) {
             if (resolvedStyleId) {
@@ -3664,6 +3677,7 @@ function ImageToolsWorkspaceInner({
     // and from then on it covers every image a batch runs over.
     if (paramName === IMAGE_KIND_PARAM) {
       imageKindChosenByUserRef.current = true;
+      imageKindChoiceCountRef.current += 1;
     }
     setParamsByTool((prev) => ({
       ...prev,
@@ -4701,15 +4715,18 @@ function ImageToolsWorkspaceInner({
                   },
                 }}
               >
-                {pendingFsReconnect
-                  ? l10n(
-                      "AiImageEditor.History.ReconnectHistoryFolder",
-                      "Reconnect history folder{0}",
-                      pendingFsReconnect.directoryName
-                        ? ` (${pendingFsReconnect.directoryName})`
-                        : "",
-                    )
-                  : l10n("AiImageEditor.History.ConnectHistoryFolder", "Connect history folder")}
+                {!pendingFsReconnect
+                  ? l10n("AiImageEditor.History.ConnectHistoryFolder", "Connect history folder")
+                  : pendingFsReconnect.directoryName
+                    ? l10n(
+                        "AiImageEditor.History.ReconnectNamedHistoryFolder",
+                        "Reconnect history folder ({0})",
+                        pendingFsReconnect.directoryName,
+                      )
+                    : l10n(
+                        "AiImageEditor.History.ReconnectHistoryFolder",
+                        "Reconnect history folder",
+                      )}
               </Button>
             )}
           </Stack>

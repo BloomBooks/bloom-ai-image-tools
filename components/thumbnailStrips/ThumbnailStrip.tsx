@@ -641,6 +641,8 @@ const EditableBookImageEmptyPair: React.FC<{
   );
 };
 
+// The word "Cast" below is drawn into the SVG placeholder image itself, not laid
+// out as text beside it, so it stays in English on purpose.
 const createCharacterStackSvgDataUrl = (frontImageData: string | null) => {
   const frontImageMarkup = frontImageData
     ? `<image href="${frontImageData}" x="32" y="18" width="48" height="66" preserveAspectRatio="xMidYMid slice" clip-path="url(#front-clip)" />`

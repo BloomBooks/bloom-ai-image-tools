@@ -35,7 +35,7 @@ import {
 import { formatCost } from "../../lib/formatters";
 import { theme } from "../../themes";
 import { L10nFunc, useL10n } from "../../lib/localization";
-import { modelBadge } from "../../lib/modelStrings";
+import { modelBadge, modelDescription } from "../../lib/modelStrings";
 
 interface ToolModelPickerProps {
   tool: ToolDefinition;
@@ -255,7 +255,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
                   reach its items to manage selection and focus. An empty title
                   disables the tooltip, so a model with no description simply
                   has none. */}
-              <Tooltip title={model.description || ""} placement="right" arrow>
+              <Tooltip title={modelDescription(l10n, model)} placement="right" arrow>
                 <ListItemText
                   primary={
                     <Stack

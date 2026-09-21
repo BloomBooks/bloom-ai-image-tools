@@ -35,6 +35,7 @@ import {
   PersistedImageToolsState,
   SavedImageLocation,
 } from "../../types";
+import { readImageSourceSummary } from "../../lib/imageSourceSummary";
 import { IMAGE_TOOLS_STATE_VERSION } from "./constants";
 import { prepareStateForPersistence, restoreStateFromPersistence } from "./stateTransforms";
 import { IBloomHostFiles, IBloomHostHistoryImage } from "../host/BloomHostBridge";
@@ -83,8 +84,14 @@ const buildHistoryRecord = (image: IBloomHostHistoryImage): ImageRecord => {
     return buildRecoveredRecord(image);
   }
   // The filename stem is authoritative for the id and the URL for the bytes,
-  // so they win over whatever the sidecar happened to record.
-  return { ...image.metadata, id: image.id, imageData: image.url };
+  // so they win over whatever the sidecar happened to record. A sidecar written
+  // before `sourceSummary` became structured holds a finished sentence.
+  return {
+    ...image.metadata,
+    id: image.id,
+    imageData: image.url,
+    sourceSummary: readImageSourceSummary(image.metadata.sourceSummary),
+  };
 };
 
 /** Build the editor's history from the host-enumerated folder, oldest-first

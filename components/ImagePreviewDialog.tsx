@@ -374,7 +374,7 @@ const BookPageColumn: React.FC<{
         <>
           <Typography
             variant="caption"
-            data-testid="image-preview-dialog-page-caption"
+            data-testid="image-preview-dialog-in-book-caption"
             sx={columnCaptionStyles}
           >
             {l10n("AiImageEditor.Preview.InTheBookNow", "In the book now")}
@@ -396,7 +396,7 @@ const BookPageColumn: React.FC<{
           </Box>
           <Typography
             variant="caption"
-            data-testid="image-preview-dialog-page-caption"
+            data-testid="image-preview-dialog-replacement-caption"
             sx={columnCaptionStyles}
           >
             {/* The same word the book-images strip labels its lower row with. */}

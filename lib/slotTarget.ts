@@ -78,9 +78,9 @@ export const pickedSizeTier = (value: string | null | undefined): string | null 
 
 /**
  * Whether a tool's result is the kind of picture that belongs in the container.
- * The exceptions each make something else: a target-resolution parameter has
- * its own Match Container row built on the same host target; break-comic
- * matches the page it is cutting
+ * The exceptions each make something else: a target-resolution parameter plans
+ * its own size against the same host target (planScaleUp); break-comic matches
+ * the page it is cutting
  * up; the sheet tools (cast, game pieces, GIF frames) make a sheet that is
  * split afterwards; a tool with a fixed shape (the palette strip) has said what
  * shape it needs.

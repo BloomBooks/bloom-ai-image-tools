@@ -67,7 +67,7 @@ describe("which tools follow the image container", () => {
   });
 
   it("excludes the tools whose result is not the container's picture", () => {
-    // Improve Quality's Size selector has its own Match Container row.
+    // Improve Quality plans its own size against the container (planScaleUp).
     expect(toolCanFollowSlot(getTool("improve_quality"))).toBe(false);
     // Break-comic matches the page it cuts up.
     expect(toolCanFollowSlot(getTool("break_comic_into_images"))).toBe(false);

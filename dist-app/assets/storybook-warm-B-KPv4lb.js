@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/storybook-warm-Ddlph8Ou.png`;export{e as default};

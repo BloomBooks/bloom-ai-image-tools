@@ -300,6 +300,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
         playgroundMode={initPayload.playgroundMode ?? false}
         onCredentialsChange={(creds) => bridge.saveCredentials(creds)}
         onTrackEvent={(event, properties) => bridge.trackEvent(event, properties)}
+        onModalOpenChange={(open) => bridge.setModalOpen(open)}
         bookImages={hostBookImages}
         bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"

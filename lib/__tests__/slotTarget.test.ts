@@ -11,6 +11,7 @@ import {
   pickedSizeTier,
   resolveSizeTokenValue,
   resolveSlotTarget,
+  SIZE_TIER_TOKENS,
   toolCanFollowSlot,
 } from "../slotTarget";
 
@@ -21,6 +22,18 @@ const getTool = (id: string): ToolDefinition => {
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };
+
+// No tool in the registry offers a size picker now — every one of them takes
+// the image container's size — but a tool definition can still carry one, and
+// this module decides what a picked tier means. These tests give a copy of
+// Create an Image a picker to exercise that.
+const withSizePicker = (tool: ToolDefinition): ToolDefinition => ({
+  ...tool,
+  parameters: [
+    ...tool.parameters,
+    { name: "size", label: "Size", type: "size", options: [...SIZE_TIER_TOKENS] },
+  ],
+});
 
 // A landscape image container, as Bloom describes one.
 const CONTAINER = { width: 1417, height: 945 };
@@ -96,8 +109,9 @@ describe("resolveSlotTarget: shape", () => {
     expect(target?.aspectRatio).toBe("3:2");
     expect(target?.targetDimensions).toEqual(CONTAINER);
     expect(target?.sizeSource).toBe("container");
-    // The pickers' defaults are the container, so an untouched tool follows it.
-    expect(findSizeParam(tool.parameters)?.defaultValue).toBe(CONTAINER_SIZE_TOKEN);
+    // There is no size to pick and the shape picker's default is the
+    // container, so an untouched tool follows it.
+    expect(findSizeParam(tool.parameters)).toBeUndefined();
     expect(getRequestedAspectRatioValue(tool, {})).toBe(MATCH_CONTAINER_ASPECT_RATIO);
   });
 
@@ -143,7 +157,13 @@ describe("resolveSlotTarget: size", () => {
   it("keeps the shape when the user picks a tier", () => {
     // The reported bug: picking a tier handed the shape back to the tool's own
     // default, so a 4:3 container got a prompt asking for a 1:1 square.
-    const target = resolveFor(getTool("generate_image"), { size: "1k" }, { host: BLOOM_CONTAINER });
+    const target = resolveFor(
+      withSizePicker(getTool("generate_image")),
+      { size: "1k" },
+      {
+        host: BLOOM_CONTAINER,
+      },
+    );
     expect(target?.shapeSource).toBe("container");
     expect(target?.aspectRatio).toBe("4:3");
     expect(target?.targetDimensions).toEqual({ width: 1024, height: 768 });
@@ -152,7 +172,7 @@ describe("resolveSlotTarget: size", () => {
   });
 
   it("asks for the picked tier's pixels rather than the container's", () => {
-    const target = resolveFor(getTool("generate_image"), { size: "4k" });
+    const target = resolveFor(withSizePicker(getTool("generate_image")), { size: "4k" });
     expect(target?.sizeToken).toBe("4k");
     expect(target?.aspectRatio).toBe("3:2");
     // The container's real shape (1417:945), not the named ratio nearest it,
@@ -162,7 +182,7 @@ describe("resolveSlotTarget: size", () => {
 
   it("scales an image's shape to a picked tier too", () => {
     const target = resolveFor(
-      getTool("generate_image"),
+      withSizePicker(getTool("generate_image")),
       { size: "2k", aspectRatio: MATCH_IMAGE_ASPECT_RATIO },
       { image: IMAGE },
     );
@@ -171,14 +191,17 @@ describe("resolveSlotTarget: size", () => {
   });
 
   it("lets a fixed shape and a picked tier combine", () => {
-    const target = resolveFor(getTool("generate_image"), { size: "1k", aspectRatio: "9:16" });
+    const target = resolveFor(withSizePicker(getTool("generate_image")), {
+      size: "1k",
+      aspectRatio: "9:16",
+    });
     expect(target?.aspectRatio).toBe("9:16");
     expect(target?.targetDimensions).toEqual({ width: 576, height: 1024 });
   });
 
   it("treats a stored size from an older build as the container", () => {
     for (const stale of ["auto", "512k", "Auto"]) {
-      const target = resolveFor(getTool("generate_image"), { size: stale });
+      const target = resolveFor(withSizePicker(getTool("generate_image")), { size: stale });
       expect(target?.sizeSource, stale).toBe("container");
       expect(target?.targetDimensions, stale).toEqual(CONTAINER);
     }
@@ -200,7 +223,7 @@ describe("resolveSlotTarget: size", () => {
 });
 
 describe("reading a stored size", () => {
-  const sizeParam = findSizeParam(getTool("generate_image").parameters);
+  const sizeParam = findSizeParam(withSizePicker(getTool("generate_image")).parameters);
 
   it("knows the tiers, and nothing else", () => {
     expect(pickedSizeTier("2K")).toBe("2k");

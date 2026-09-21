@@ -15,7 +15,7 @@ import {
   type ImageRequestPlanInput,
 } from "../imageRequestPlan";
 import { getModelInfoById } from "../modelsCatalog";
-import { DEFAULT_STANDALONE_SIZE_TOKEN, findSizeParam } from "../slotTarget";
+import { SIZE_TIER_TOKENS } from "../slotTarget";
 import { toolRequiresEditImage } from "../toolHelpers";
 import { resolveAutoTarget } from "../upscale";
 
@@ -29,6 +29,17 @@ const getTool = (id: string): ToolDefinition => {
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };
+
+// No tool in the registry offers a size picker now — every one of them takes
+// the image container's size — but a tool definition can still carry one, and
+// a picked tier is still planned for. This gives a copy of Create an Image one.
+const withSizePicker = (tool: ToolDefinition): ToolDefinition => ({
+  ...tool,
+  parameters: [
+    ...tool.parameters,
+    { name: "size", label: "Size", type: "size", options: [...SIZE_TIER_TOKENS] },
+  ],
+});
 
 const planFor = (
   toolId: string,
@@ -79,6 +90,7 @@ describe("requestedShapeRule", () => {
 describe("planImageRequest", () => {
   it("asks for the picked tier and shape on a generation, with no exact pixels", () => {
     const { plan, input } = planFor("generate_image", {
+      tool: withSizePicker(getTool("generate_image")),
       params: { aspectRatio: "16:9", size: "1k" },
     });
     expect(plan.requestedSize).toBe("1k");
@@ -140,17 +152,19 @@ describe("planImageRequest", () => {
     expect(plan.shapeSource).toBe("container");
     expect(plan.sizeSource).toBe("container");
     expect(plan.targetDimensions).toEqual(container);
-    expect(plan.requestedSize).toBe("2k");
+    // No size picker, so no tier token: the container's pixels reach the
+    // request directly, as they do for every other tool that follows it.
+    expect(plan.requestedSize).toBeUndefined();
+    expect(plan.slotTarget?.sizeToken).toBe("2k");
     expect(plan.requestedAspectRatio).toBe("16:9");
   });
 
-  it("makes a new picture standalone a 1k square, whatever rule is stored", () => {
+  it("makes a new picture standalone a square, whatever rule is stored", () => {
     for (const aspectRatio of [MATCH_CONTAINER_ASPECT_RATIO, MATCH_IMAGE_ASPECT_RATIO, "auto"]) {
       const { plan } = planFor("generate_image", { params: { aspectRatio } });
       expect(plan.requestedAspectRatio, aspectRatio).toBe("1:1");
       expect(plan.shapeSource, aspectRatio).toBe("fixed");
-      expect(plan.requestedSize, aspectRatio).toBe(DEFAULT_STANDALONE_SIZE_TOKEN);
-      expect(plan.sizeSource, aspectRatio).toBe("tier");
+      expect(plan.requestedSize, aspectRatio).toBeUndefined();
       expect(plan.targetDimensions, aspectRatio).toBeUndefined();
     }
   });
@@ -171,7 +185,7 @@ describe("planImageRequest", () => {
     expect(describeShapeRequest(image.plan, image.input)).toBe("nearest: 5:4");
     // A fixed ratio is its own name.
     const fixed = planFor("generate_image", {
-      params: { aspectRatio: "3:2", size: "1k" },
+      params: { aspectRatio: "3:2" },
       toolModel: GEMINI_FLASH,
     });
     expect(describeShapeRequest(fixed.plan, fixed.input)).toBeNull();
@@ -227,7 +241,7 @@ describe("planImageRequest", () => {
   it("predicts no pixels for a model that takes a tier token instead", () => {
     const { plan, input } = planFor("generate_image", {
       toolModel: GEMINI_FLASH,
-      params: { aspectRatio: "16:9", size: "1k" },
+      params: { aspectRatio: "16:9" },
     });
     expect(predictOutputPixels(plan, input)).toBeNull();
   });
@@ -243,16 +257,11 @@ describe("planImageRequest", () => {
   });
 
   it("files every tool with no picks and no image under the same size key as before", () => {
-    // The model menu's measured-stats lookup: a tool with a size picker files
-    // under the standalone default tier, one with a hidden size default under
-    // that default, and the rest under the sentinel.
+    // The model menu's measured-stats lookup: a tool with a hidden size
+    // default files under that default, and the rest under the sentinel.
     for (const tool of TOOLS) {
       const { plan } = planFor(tool.id);
-      const sizeParam = findSizeParam(tool.parameters);
-      const expected = sizeParam
-        ? DEFAULT_STANDALONE_SIZE_TOKEN
-        : (tool.hiddenSizeDefault ?? DEFAULT_SIZE_TOKEN);
-      expect(plan.sizeToken, tool.id).toBe(expected);
+      expect(plan.sizeToken, tool.id).toBe(tool.hiddenSizeDefault ?? DEFAULT_SIZE_TOKEN);
     }
   });
 });

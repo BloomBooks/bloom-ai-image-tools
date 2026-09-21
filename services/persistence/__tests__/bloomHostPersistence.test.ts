@@ -67,6 +67,7 @@ const createBridge = () => {
     async commit() {},
     cancel() {},
     log() {},
+    setModalOpen() {},
     openExternalUrl() {},
     saveCredentials() {},
     trackEvent() {},
@@ -124,8 +125,13 @@ describe("createBloomHostPersistence", () => {
     // Sidecar metadata is preserved.
     expect(history.find((item) => item.id === "edit-2")?.isStarred).toBe(true);
     expect(history.find((item) => item.id === "edit-1")?.promptUsed).toBe("first");
-    // Orphan is recovered with sensible defaults.
-    expect(history.find((item) => item.id === "orphan-1")?.promptUsed).toBe("Recovered image");
+    // Orphan is recovered with sensible defaults. It has no prompt to show; what it
+    // does have is where it was found, which the info panel says in the user's language
+    // rather than from a stored English sentence.
+    expect(history.find((item) => item.id === "orphan-1")?.promptUsed).toBe("");
+    expect(history.find((item) => item.id === "orphan-1")?.sourceSummary).toEqual({
+      kind: "recoveredFromFolder",
+    });
   });
 
   it("round-trips credits through the sidecar (and leaves them absent when unset)", async () => {

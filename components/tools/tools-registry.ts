@@ -48,25 +48,9 @@ import {
   parseGifEnding,
   parseGifFrameCount,
 } from "../../lib/gifAnimationPrompt";
-import {
-  CONTAINER_SIZE_TOKEN,
-  DEFAULT_STANDALONE_SIZE_TOKEN,
-  SIZE_TIER_TOKENS,
-} from "../../lib/slotTarget";
 
 const ETHNICITY_OPTIONS = ETHNICITY_CATEGORIES.map((category) => category.label);
 const DEFAULT_ETHNICITY_OPTION = ETHNICITY_OPTIONS[0] ?? "Asian (General)";
-const SIZE_OPTIONS = SIZE_TIER_TOKENS;
-// The size whose prompt hint stands in when the run has settled the size to no
-// particular tier. The run path settles it before the template runs, so this
-// is only a last resort.
-const DEFAULT_SIZE = DEFAULT_STANDALONE_SIZE_TOKEN;
-const SIZE_HINTS: Record<string, string> = {
-  "1k": "1k image (1024px on the long edge.)",
-  "2k": "2k image (2048px on the long edge.)",
-  "4k": "4k image (4096px on the long edge.)",
-};
-
 const PALETTE_COLOR_OPTIONS = ["3", "4", "5", "6", "7"] as const;
 const COLORING_BOOK_STYLE_ID = "coloring-book-page";
 const COLORING_BOOK_DIFFICULTY_OPTIONS = ["Simple", "Moderate", "Complex"] as const;
@@ -110,6 +94,11 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "improve_drawing",
   "remove_object",
   "stylized_title",
+  // The shape here would be the sheet's, not a piece's: each piece is cut out
+  // at its own bounding box afterwards, so it keeps its own shape whatever the
+  // sheet is. A square sheet holds a tidy grid of both portrait and landscape
+  // pieces, so there is nothing for a picker to do.
+  "break_into_pieces",
 ]);
 
 const shouldExposeAspectRatio = (tool: ToolDefinition) =>
@@ -171,26 +160,14 @@ export const ALL_TOOLS: ToolDefinition[] = (
           // lib/imageRequestPlan.ts).
           ...createAspectRatioParameter(MATCH_CONTAINER_ASPECT_RATIO),
         },
-        {
-          name: "size",
-          label: "Size",
-          type: "size",
-          options: [...SIZE_OPTIONS],
-          // The image container's size inside Bloom; standalone, 1k (see
-          // lib/slotTarget.ts).
-          defaultValue: CONTAINER_SIZE_TOKEN,
-        },
       ],
       promptTemplate: (params: Record<string, string>) => {
         const promptText = (params.prompt || "").trim();
         const basePrompt = promptText || "Create a new illustration.";
-        const selectedSize = (params.size && params.size.trim()) || DEFAULT_SIZE;
-        const sizeHint = SIZE_HINTS[selectedSize] || SIZE_HINTS[DEFAULT_SIZE];
         // The text half of this lives in NO_UNREQUESTED_TEXT_INSTRUCTION, which
         // every tool prompt gets.
         const noFrameReminder = "Do not add any frame.";
-        const combinedPrompt = `${basePrompt}\n\n${sizeHint} ${noFrameReminder}`;
-        return applyArtStyleToPrompt(combinedPrompt, params.styleId);
+        return applyArtStyleToPrompt(`${basePrompt}\n\n${noFrameReminder}`, params.styleId);
       },
       referenceImages: "0+",
       editImage: false,
@@ -246,7 +223,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
     {
       id: "break_into_pieces",
       title: "Break into Pieces",
-      description: "Turn one or more reference images into a clean sheet of separate game pieces.",
+      description: "Extract images that you can use in a game.",
       group: "games",
       icon: CallSplitOutlinedIcon,
       parameters: [
@@ -271,6 +248,9 @@ export const ALL_TOOLS: ToolDefinition[] = (
       referenceImages: "1+",
       editImage: false,
       derivedResultMode: "split-images",
+      // No shape picker (see HIDE_ASPECT_RATIO_TOOL_IDS). Declared so a shape
+      // persisted before the picker was hidden is ignored.
+      hiddenAspectRatioDefault: "1:1",
     },
     {
       id: "extract_cast_of_characters",
@@ -547,22 +527,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
       autoSizeFromInput: true,
     },
     {
-      id: "pdf_to_images",
-      title: "PDF to Images",
-      description: "Convert a PDF into a series of images. Free.",
-      group: "more",
-      icon: PictureAsPdfOutlinedIcon,
-      parameters: [],
-      // No model call: a local tool has no prompt. Kept for the shared interface.
-      promptTemplate: () => "",
-      // The one button that is not "Go": it opens a file picker rather than
-      // running anything.
-      actionButtonLabel: "Choose PDF…",
-      referenceImages: "0",
-      editImage: false,
-      localOnly: true,
-    },
-    {
       id: "coloring_book",
       title: "Coloring Book",
       description: "",
@@ -812,6 +776,22 @@ export const ALL_TOOLS: ToolDefinition[] = (
       promptTemplate: () => `Replace the background with transparency.`,
       referenceImages: "0",
       allowBatch: true,
+    },
+    {
+      id: "pdf_to_images",
+      title: "PDF to Images",
+      description: "Convert a PDF into a series of images. Free.",
+      group: "more",
+      icon: PictureAsPdfOutlinedIcon,
+      parameters: [],
+      // No model call: a local tool has no prompt. Kept for the shared interface.
+      promptTemplate: () => "",
+      // The one button that is not "Go": it opens a file picker rather than
+      // running anything.
+      actionButtonLabel: "Choose PDF…",
+      referenceImages: "0",
+      editImage: false,
+      localOnly: true,
     },
   ] as ToolDefinition[]
 )

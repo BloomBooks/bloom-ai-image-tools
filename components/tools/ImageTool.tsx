@@ -72,7 +72,6 @@ import {
 } from "../../lib/slotTarget";
 import { buildUpscaleOptions, planScaleUp, type UpscaleHostTarget } from "../../lib/upscale";
 import { ToolModelPicker } from "./ToolModelPicker";
-import { formatCost } from "../../lib/formatters";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
 import { kWarningColor } from "../materialUITheme";
 import { useL10n } from "../../lib/localization";
@@ -1215,48 +1214,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       batchTickedCount === 1
         ? l10n("AiImageEditor.Run.BatchGoOne", "Go (1 Image)")
         : l10n("AiImageEditor.Run.BatchGo", "Go ({0} Images)", String(batchTickedCount));
-    // Batch: each ticked image priced at its own size, then summed. A tick with
-    // no target details yet (the array is shorter than the count) is priced as
-    // an image of unknown size. Single run: the one image to edit, if any.
-    const toolModelId = resolveToolModelId(tool, modelByTool);
-    let estimatedBatchCost: number | null = null;
-    if (isBatchModeForTool) {
-      const targets: (RunCostTarget | null)[] = Array.from(
-        { length: batchTickedCount },
-        (_, index) => batchTargets?.[index] ?? null,
-      );
-      let sum = 0;
-      for (const target of targets) {
-        const estimate = estimateForTool(tool, toolModelId, target);
-        if (!estimate) {
-          sum = NaN;
-          break;
-        }
-        sum += estimate.usd;
-      }
-      estimatedBatchCost = Number.isFinite(sum) ? sum : null;
-    }
-    const singleRunEstimate =
-      !isBatchModeForTool && requiresOpenRouter
-        ? estimateForTool(
-            tool,
-            toolModelId,
-            // A Create run has no image to edit but still draws for the
-            // container, whose size decides what the output costs. An edit
-            // with no image cannot run, so it has no estimate.
-            hasTargetImage || (targetImageSuggestedTarget && !toolRequiresEditImage(tool))
-              ? {
-                  resolution: targetImageResolution ?? null,
-                  suggestedTarget: targetImageSuggestedTarget ?? null,
-                }
-              : null,
-          )
-        : null;
-    // Only a token-priced estimate earns a line under the button: a fixed
-    // per-image price already reads on the model's own menu row and would
-    // just repeat itself here.
-    const singleRunCostUsd = singleRunEstimate?.kind === "token" ? singleRunEstimate.usd : null;
-
     const cardBackground = "linear-gradient(180deg, #212741 0%, #191f34 100%)";
     const cardBorderColor = isSelected ? theme.colors.focus : "transparent";
     const cardBorderWidth = isSelected ? 2 : 0;
@@ -1463,32 +1420,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                   </Stack>
                 ) : (
                   <>
-                    {/* The estimate sits above the button so it is read before
-                        the run is started. */}
-                    {isBatchModeForTool && estimatedBatchCost != null && (
-                      <FormHelperText
-                        data-testid="batch-cost-estimate"
-                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
-                      >
-                        {l10n(
-                          "AiImageEditor.Run.EstimatedCost",
-                          "Estimated cost: {0}",
-                          formatCost(estimatedBatchCost),
-                        )}
-                      </FormHelperText>
-                    )}
-                    {!isBatchModeForTool && !isProcessing && singleRunCostUsd != null && (
-                      <FormHelperText
-                        data-testid="run-cost-estimate"
-                        sx={{ textAlign: "center", fontSize: "0.85rem" }}
-                      >
-                        {l10n(
-                          "AiImageEditor.Run.Estimate",
-                          "Estimate {0}",
-                          formatCost(singleRunCostUsd),
-                        )}
-                      </FormHelperText>
-                    )}
                     <Button
                       // Always a plain button — never a native submit. If this were
                       // type="submit", clicking it to cancel would flip isProcessing

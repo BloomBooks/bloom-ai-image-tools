@@ -55,15 +55,13 @@ test.describe("gallery book pages", () => {
     const dialog = page.getByTestId("image-preview-dialog");
     await expect(dialog).toBeVisible();
 
-    // The page the run was for: the "Replacing" tag, the two captions, and both
-    // pictures — the one in the book now and the one that will replace it.
+    // The page the run was for: the two captions and both pictures — the one in
+    // the book now and the one that will replace it. The outline says it is
+    // being replaced; data-replacing is how a test sees that.
     const replacedColumn = pageColumn(page, "book-image-3");
     await expect(replacedColumn).toHaveAttribute("data-replacing", "true");
     await expect(replacedColumn.getByTestId("image-preview-dialog-page-label")).toHaveText(
       "Page 3",
-    );
-    await expect(replacedColumn.getByTestId("image-preview-dialog-replacing-pill")).toHaveText(
-      "Replacing",
     );
     const captions = replacedColumn.getByTestId("image-preview-dialog-page-caption");
     await expect(captions).toHaveText(["In the book now", "Replacement"]);
@@ -78,8 +76,18 @@ test.describe("gallery book pages", () => {
       "Page 4",
     );
     await expect(untouchedColumn.getByTestId("image-preview-dialog-page-caption")).toHaveCount(0);
-    await expect(untouchedColumn.getByTestId("image-preview-dialog-replacing-pill")).toHaveCount(0);
     await expect(untouchedColumn.locator("img")).toHaveCount(1);
+
+    // The gallery opens showing a whole page column -- both pictures at once --
+    // so the before and after can be compared without reaching for the zoom.
+    // The column width is worked back from the height available, so this is the
+    // assertion that catches a column sized on width alone.
+    await expect(async () => {
+      const columnBox = await replacedColumn.boundingBox();
+      const scrollerBox = await dialog.locator(".MuiDialogContent-root").boundingBox();
+      expect(columnBox?.height ?? 0).toBeGreaterThan(0);
+      expect(columnBox?.height ?? 0).toBeLessThanOrEqual(scrollerBox?.height ?? 0);
+    }).toPass({ timeout: 5_000 });
 
     // The gallery's own furniture is still there.
     await expect(dialog.getByText("Gallery", { exact: true })).toBeVisible();
@@ -106,6 +114,14 @@ test.describe("gallery book pages", () => {
     });
     await page.waitForTimeout(500);
     await dialog.screenshot({ path: SCREENSHOT_PATH });
+
+    // The reset button puts the columns back to the size the gallery opened at.
+    // Taken after the screenshot, which wants the zoomed-out view.
+    await page.getByTestId("image-preview-dialog-reset-zoom").click();
+    await expect(async () => {
+      const resetColumn = (await replacedColumn.boundingBox())?.width ?? 0;
+      expect(resetColumn).toBe(wideColumn);
+    }).toPass({ timeout: 5_000 });
 
     await page.getByTestId("image-preview-dialog-close").click();
     await expect(dialog).toBeHidden();

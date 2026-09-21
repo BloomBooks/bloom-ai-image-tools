@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { ImageRecord } from "../types";
 import { getHighContrastScrollbarStyles, theme } from "../themes";
 import { TRANSPARENCY_BACKGROUND_STYLE } from "./transparencyBackground";
@@ -49,12 +50,36 @@ export interface ImagePreviewDialogProps {
 // host's own window chrome stays clear of the gallery's close button.
 const GALLERY_INSET_PX = 20;
 
-// Width of one gallery item at zoom 1, in pixels. Ctrl+wheel scales this, and
-// the row wraps, so zooming out fits more images per row and then more rows.
+// The widest a gallery item is ever drawn. Ctrl+wheel scales it, and the row
+// wraps, so zooming out fits more images per row and then more rows.
 const BASE_ITEM_WIDTH = 560;
+// A column narrower than this is too small to judge a picture by, so the
+// height fit stops here and the column scrolls instead.
+const MIN_ITEM_WIDTH = 220;
 const MIN_ZOOM = 0.12;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.12;
+
+// Everything in a replacing book-page column that is not one of the two
+// pictures: the padding above and below the row of columns, the column's own
+// padding, its page label, the two captions, the arrow between the pictures,
+// the gaps between all of those, and the padding each picture box puts around
+// its image. Used to work back from the height the gallery has to the width
+// its columns can be, so both pictures are on screen without anyone reaching
+// for the zoom.
+const PAGE_COLUMN_CHROME_HEIGHT_PX = 216;
+// The same for width: the column's padding plus one picture box's padding, all
+// of which sits between the column's width and the image's own.
+const PAGE_COLUMN_CHROME_WIDTH_PX = 48;
+// The shape assumed for an image whose record does not say. Matches the "4 / 3"
+// placeholder PreviewPicture draws before the bytes arrive.
+const ASSUMED_IMAGE_RATIO = 3 / 4;
+
+/** How tall an image is drawn per pixel of width. */
+const heightPerWidth = (image: ImageRecord): number =>
+  image.resolution && image.resolution.width > 0 && image.resolution.height > 0
+    ? image.resolution.height / image.resolution.width
+    : ASSUMED_IMAGE_RATIO;
 
 const previewFrameStyles = {
   borderRadius: 3,
@@ -317,14 +342,12 @@ const BookPageColumn: React.FC<{
         outline: isReplacing ? `2px solid ${theme.colors.accent}` : "none",
       }}
     >
-      {/* Standalone book images carry no page label, so there is nothing to head
-          the column with until a replacement puts the tag there. */}
-      {(pageLabel || isReplacing) && (
+      {/* Standalone book images carry no page label, so they get no heading. */}
+      {pageLabel && (
         <Box
           sx={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
             gap: 1,
             px: 0.5,
             minWidth: 0,
@@ -344,25 +367,6 @@ const BookPageColumn: React.FC<{
           >
             {pageLabel}
           </Typography>
-          {isReplacing && (
-            <Box
-              data-testid="image-preview-dialog-replacing-pill"
-              sx={{
-                flex: "0 0 auto",
-                px: 1,
-                py: 0.25,
-                borderRadius: 999,
-                backgroundColor: theme.colors.accent,
-                color: "#ffffff",
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              {l10n("AiImageEditor.Preview.Replacing", "Replacing")}
-            </Box>
-          )}
         </Box>
       )}
 
@@ -453,7 +457,39 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
     return () => scrollElement.removeEventListener("wheel", onWheel);
   }, [scrollElement]);
 
-  const itemWidth = Math.round(BASE_ITEM_WIDTH * zoom);
+  // The gallery's own height, watched because the starting width is worked out
+  // from it and the host window can be resized while the gallery is open.
+  const [availableHeight, setAvailableHeight] = React.useState(0);
+  React.useEffect(() => {
+    if (!scrollElement) return undefined;
+    const observer = new ResizeObserver(() => setAvailableHeight(scrollElement.clientHeight));
+    observer.observe(scrollElement);
+    setAvailableHeight(scrollElement.clientHeight);
+    return () => observer.disconnect();
+  }, [scrollElement]);
+
+  // The width a column is drawn at before the user zooms. A book page stacks
+  // the picture in the book now above the one replacing it, so a width chosen
+  // on its own cuts the second one off the bottom of the screen: the height
+  // decides, and the tallest pair in the gallery decides for all of them.
+  const startingWidth = React.useMemo(() => {
+    const tallest = pageItems.reduce(
+      (worst, item) =>
+        Math.max(
+          worst,
+          item.images.reduce((sum, i) => sum + heightPerWidth(i), 0),
+        ),
+      0,
+    );
+    if (!availableHeight || !tallest) {
+      return BASE_ITEM_WIDTH;
+    }
+    const fitted =
+      (availableHeight - PAGE_COLUMN_CHROME_HEIGHT_PX) / tallest + PAGE_COLUMN_CHROME_WIDTH_PX;
+    return Math.max(MIN_ITEM_WIDTH, Math.min(BASE_ITEM_WIDTH, fitted));
+  }, [availableHeight, pageItems]);
+
+  const itemWidth = Math.round(startingWidth * zoom);
 
   return (
     <Dialog
@@ -488,8 +524,25 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
           sx={{ ml: 1.5, color: "#94a3b8" }}
           data-testid="image-preview-dialog-zoom-hint"
         >
-          {l10n("AiImageEditor.Preview.ZoomHint", "Ctrl + mouse wheel to resize the images")}
+          {l10n("AiImageEditor.Preview.ZoomHint", "Ctrl + mouse wheel to zoom")}
         </Typography>
+        <Tooltip title={l10n("AiImageEditor.Preview.ResetZoom", "Reset zoom")}>
+          {/* Deliberately quiet: it sits beside the hint rather than in the
+              button row, and is only worth reaching for once you have zoomed. */}
+          <IconButton
+            aria-label="Reset the gallery zoom"
+            onClick={() => setZoom(1)}
+            data-testid="image-preview-dialog-reset-zoom"
+            size="small"
+            sx={{
+              ml: 0.5,
+              color: "#94a3b8",
+              "&:hover": { color: "#f8fafc", backgroundColor: "rgba(248, 250, 252, 0.08)" },
+            }}
+          >
+            <RestartAltIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <IconButton
           aria-label="Close image preview"
           onClick={onClose}
@@ -498,7 +551,9 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
             position: "absolute",
             right: 12,
             top: 12,
-            color: "inherit",
+            backgroundColor: theme.colors.accent,
+            color: "#fff",
+            "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
           }}
         >
           <CloseIcon />
@@ -526,6 +581,9 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
             width: "100%",
             minHeight: 0,
             alignItems: "flex-start",
+            // Room for a replacing column's outline, which is drawn outside its
+            // box and would otherwise be clipped by the scrolling content above.
+            pt: 1,
             pb: 2,
           }}
         >
@@ -566,7 +624,15 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
       </DialogContent>
 
       <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 2.5, justifyContent: "flex-end" }}>
-        <Button onClick={onClose} variant="contained" color="inherit">
+        <Button
+          onClick={onClose}
+          variant="contained"
+          sx={{
+            backgroundColor: theme.colors.accent,
+            color: "#fff",
+            "&:hover": { backgroundColor: theme.colors.accent, opacity: 0.9 },
+          }}
+        >
           {l10n("Common.Close", "Close")}
         </Button>
       </DialogActions>

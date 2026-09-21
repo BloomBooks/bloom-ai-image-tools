@@ -433,6 +433,9 @@ export interface ImageToolsWorkspaceProps {
   thumbnailStripConfigOverrides?: Partial<
     Record<ThumbnailStripId, Partial<Omit<ThumbnailStripConfig, "id">>>
   >;
+  /** Called when the editor opens or closes a modal of its own, so a host drawing chrome
+   *  over the editor can get it out of the way -- see IBloomHostControl.setModalOpen. */
+  onModalOpenChange?: (open: boolean) => void;
   /** Report an analytics event to the host, which decides what to do with it (Bloom sends it
    *  on to Segment). Optional: with no host to tell, nothing is recorded and nothing breaks.
    *  Never pass prompt text or anything else the user typed -- see IBloomHostControl. */
@@ -474,6 +477,7 @@ function ImageToolsWorkspaceInner({
   bookImagesActionTip,
   bookImagesActionTestId,
   thumbnailStripConfigOverrides,
+  onModalOpenChange,
   onTrackEvent,
 }: ImageToolsWorkspaceProps) {
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
@@ -952,6 +956,20 @@ function ImageToolsWorkspaceInner({
         .filter((item) => item.images.length > 0),
     [bookImageSlotIds, historyItemsById, previewDialogImageIdGroups, previewDialogShowsBookPages],
   );
+  // Bloom paints its own close button on top of our iframe, where nothing we render can
+  // cover it, so two close buttons end up a few pixels apart and the wrong one shuts the
+  // whole tool. Tell the host while the gallery is up so it can stand its chrome down.
+  // Held in a ref so a host that passes a fresh callback each render does not make this
+  // fire on every render.
+  const modalOpenChangeRef = useRef(onModalOpenChange);
+  modalOpenChangeRef.current = onModalOpenChange;
+  const isGalleryOpen = previewDialogItems.length > 0;
+  useEffect(() => {
+    modalOpenChangeRef.current?.(isGalleryOpen);
+    // Unmounting with the gallery up (the host tore the editor down) must not leave the
+    // host's chrome hidden for the next launch.
+    return isGalleryOpen ? () => modalOpenChangeRef.current?.(false) : undefined;
+  }, [isGalleryOpen]);
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
       ? l10n("AiImageEditor.Status.KeyFromEnvironment", "OpenRouter key supplied by environment")

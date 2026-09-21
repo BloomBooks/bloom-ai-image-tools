@@ -182,6 +182,12 @@ export interface IBloomHostControl {
   commit: (replacements: IBloomCommitReplacement[]) => Promise<void>;
   cancel: () => void;
   log: (level: "info" | "warn" | "error", message: string) => void;
+  /** Tell the host the editor has put a modal of its own on screen, so the host can get
+   *  its own chrome out of the way. Bloom draws its close button on top of the iframe,
+   *  where nothing the editor renders can cover it, and two close buttons a few pixels
+   *  apart invite shutting the whole tool when you meant to leave the dialog. Fire and
+   *  forget: a host that does not implement it simply keeps its chrome. */
+  setModalOpen: (open: boolean) => void;
   /** Ask the host to open a URL in the user's default browser (not the WebView).
    *  Used for OpenRouter OAuth so login happens with the user's normal browser
    *  identity; the resulting code is retrieved out-of-band via the localhost
@@ -268,6 +274,11 @@ type IframeMessage =
       channel: "bloom-ai-image-tools";
       type: "log";
       payload: { level: "info" | "warn" | "error"; message: string };
+    }
+  | {
+      channel: "bloom-ai-image-tools";
+      type: "modal-open";
+      payload: { open: boolean };
     }
   | {
       channel: "bloom-ai-image-tools";
@@ -496,6 +507,9 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
     log(level, message) {
       postToParent({ channel: iframeChannel, type: "log", payload: { level, message } });
     },
+    setModalOpen(open) {
+      postToParent({ channel: iframeChannel, type: "modal-open", payload: { open } });
+    },
     openExternalUrl(url) {
       postToParent({ channel: iframeChannel, type: "open-external", payload: { url } });
     },
@@ -682,6 +696,10 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
     },
     log(level, message) {
       console[level](`[BloomHarness] ${message}`);
+    },
+    setModalOpen() {
+      // The harness draws no chrome of its own over the editor, so there is nothing
+      // to get out of the way.
     },
     openExternalUrl(url) {
       if (typeof window !== "undefined") {

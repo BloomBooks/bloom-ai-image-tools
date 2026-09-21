@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/line-art-colored-pencil-BdjJvaP4.png`;export{e as default};

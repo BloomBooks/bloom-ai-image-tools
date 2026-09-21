@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/wimmelbuch-BEiCSV5g.png`;export{e as default};

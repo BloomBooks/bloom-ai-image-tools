@@ -9,6 +9,7 @@ import { copyTextToClipboard } from "../lib/textClipboard";
 import { formatMimeLabel } from "../lib/imageUtils";
 import { formatCost } from "../lib/formatters";
 import { L10nFunc, useL10n } from "../lib/localization";
+import { describeImageSource } from "../lib/imageSourceSummary";
 import { toolTitle } from "./tools/toolStrings";
 
 const rowStyle: React.CSSProperties = {
@@ -78,6 +79,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
       ? item.promptUsed
       : l10n("AiImageEditor.Info.PromptUnavailable", "Prompt unavailable.");
   const isPromptLong = promptContent.length > PROMPT_COLLAPSE_THRESHOLD;
+  const sourceLines = describeImageSource(l10n, item.sourceSummary);
 
   const [promptCopied, setPromptCopied] = React.useState(false);
   const [promptExpanded, setPromptExpanded] = React.useState(false);
@@ -232,7 +234,7 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           </div>
         ))}
 
-      {item.sourceSummary && (
+      {sourceLines.length > 0 && (
         <div
           style={{
             marginTop: 8,
@@ -249,9 +251,11 @@ export const ImageInfoPanel: React.FC<ImageInfoPanelProps> = ({ item }) => {
           >
             {l10n("AiImageEditor.Info.Sources", "Sources:")}
           </span>
-          <div style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>
-            {item.sourceSummary}
-          </div>
+          {sourceLines.map((line) => (
+            <div key={line} style={{ color: theme.colors.textSecondary, fontSize: "11px" }}>
+              {line}
+            </div>
+          ))}
         </div>
       )}
 

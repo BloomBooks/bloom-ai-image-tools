@@ -388,7 +388,10 @@ describe("writeImageFile", () => {
 
     expect(persisted?.appState.history.map((item) => item.id)).toEqual(["orphan"]);
     expect(persisted?.appState.history[0].imageFileName).toBe("orphan.png");
-    expect(persisted?.appState.history[0].promptUsed).toBe("Recovered image");
+    // An orphan has no prompt to show; what it does have is where it was found, which
+    // the info panel says in the user's language rather than from a stored sentence.
+    expect(persisted?.appState.history[0].promptUsed).toBe("");
+    expect(persisted?.appState.history[0].sourceSummary).toEqual({ kind: "recoveredFromFolder" });
     expect(persisted?.appState.history[0].resolution).toEqual({ width: 640, height: 480 });
   });
 

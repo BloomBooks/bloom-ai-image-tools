@@ -550,7 +550,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
       preserveInEdit:
         "the whole illustration underneath, including the composition, the characters and their faces, and the colors.",
       title: "Add Stylized Title",
-      description: "Add a stylized title overlay that fits well the illustration.",
+      description: "",
       group: "text",
       icon: TitleOutlinedIcon,
       parameters: [

@@ -1,4 +1,5 @@
 import type { ImageCredits, ModelReasoningLevel, ThumbnailStripsSnapshot } from "../../types";
+import type { ImageSourceSummary } from "../../lib/imageSourceSummary";
 
 /**
  * Metadata for a single image in the history. Bytes are stored separately
@@ -21,7 +22,7 @@ export interface HistoryEntry {
   origin?: "generated" | "uploaded" | "bookImages" | "bookOriginal";
   isStarred?: boolean;
   sourceStyleId?: string | null;
-  sourceSummary?: string | null;
+  sourceSummary?: ImageSourceSummary | null;
   /** Human-facing text for the image (e.g. an OCR-extracted panel caption). */
   caption?: string | null;
   /** Human-assigned name for the image's subject (e.g. a character name). */

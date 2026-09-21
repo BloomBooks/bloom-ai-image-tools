@@ -65,7 +65,7 @@ const HARNESS_BOOK_IMAGE_CREDITS: Record<string, ImageCredits> = {
 // Resolutions a real Bloom would compute for some slots from the size their
 // image container occupies on the page (see IBloomHostBookImage.suggestedTarget).
 // Slots absent from this map deliberately have none, so the harness exercises
-// both the "Auto" and the no-Auto paths of the Upscale selector.
+// both the "Auto" and the no-Auto paths of the Size selector.
 const HARNESS_BOOK_IMAGE_SUGGESTED_TARGETS: Record<
   string,
   { width: number; height: number; memo?: string }
@@ -99,7 +99,7 @@ const DEMO_HISTORY: IBloomHostHistoryImage[] = [
       model: "google/gemini-2.5-flash-image",
       timestamp: 1000,
       promptUsed: "Make it papercut",
-      sourceSummary: "Papercut edit",
+      sourceSummary: { kind: "text", text: "Papercut edit" },
       origin: "generated",
     },
   },
@@ -116,7 +116,7 @@ const DEMO_HISTORY: IBloomHostHistoryImage[] = [
       model: "google/gemini-2.5-flash-image",
       timestamp: 2000,
       promptUsed: "Clean line art",
-      sourceSummary: "Line art edit",
+      sourceSummary: { kind: "text", text: "Line art edit" },
       isStarred: true,
       origin: "generated",
       // Credits carried from an edited source image, persisted in the sidecar.
@@ -147,7 +147,7 @@ const seededResultHistoryImage = (resultUrl: string): IBloomHostHistoryImage => 
     model: "manual",
     timestamp: 1,
     promptUsed: "",
-    sourceSummary: "",
+    sourceSummary: null,
     origin: "generated",
   },
 });
@@ -207,7 +207,7 @@ const createStaleReopenState = (): PersistedImageToolsState => ({
         model: "manual",
         timestamp: 1,
         promptUsed: "",
-        sourceSummary: "",
+        sourceSummary: null,
         resolution: undefined,
         isStarred: false,
         origin: "generated",
@@ -228,7 +228,7 @@ const createStaleReopenState = (): PersistedImageToolsState => ({
         model: "",
         timestamp: 0,
         promptUsed: "Book Image",
-        sourceSummary: "Book Image",
+        sourceSummary: { kind: "bookImage" },
         resolution: undefined,
         isStarred: false,
         origin: "bookImages",

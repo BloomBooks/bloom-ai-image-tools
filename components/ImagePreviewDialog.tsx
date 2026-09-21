@@ -18,6 +18,7 @@ import { formatMegabytes, getDataUrlByteSize } from "../lib/imageUtils";
 import { getModelNameById } from "../lib/modelsCatalog";
 import { formatCost } from "../lib/formatters";
 import { useL10n } from "../lib/localization";
+import { describeImageSource } from "../lib/imageSourceSummary";
 
 export interface ImagePreviewDialogItem {
   id: string;
@@ -109,7 +110,14 @@ const PreviewImage: React.FC<{
 
   // A book image is named by its slot ("Page 3 - Image 2"), which is how the
   // user knows which one it is; only a generated image is named by its prompt.
-  const caption = (image.pageLabel || image.promptUsed || "").trim();
+  // An image that was imported rather than generated has no prompt, so it falls
+  // back to where it came from ("From storybook.pdf").
+  const caption = (
+    image.pageLabel ||
+    image.promptUsed ||
+    describeImageSource(l10n, image.sourceSummary)[0] ||
+    ""
+  ).trim();
 
   // The record's own shape, so a slot keeps its place in the grid before the
   // image decodes instead of collapsing to nothing and shoving the rest around.

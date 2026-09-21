@@ -30,37 +30,3 @@ export const formatCreditsValue = (value: number | null | undefined): string => 
   });
   return `US$${formatted}`;
 };
-
-/**
- * Builds a human-readable summary of source images used in an operation.
- * Returns null if no images were used.
- */
-export const formatSourceSummary = (
-  editImageCount: number,
-  referenceImageCount: number,
-): string | null => {
-  const normalizedEdit = Math.max(0, editImageCount);
-  const normalizedReference = Math.max(0, referenceImageCount);
-  const parts: string[] = [];
-
-  if (normalizedEdit > 0) {
-    const label = normalizedEdit === 1 ? "image" : "images";
-    parts.push(`${normalizedEdit} ${label} to edit`);
-  }
-
-  if (normalizedReference > 0) {
-    const label = normalizedReference === 1 ? "reference image" : "reference images";
-    parts.push(`${normalizedReference} ${label}`);
-  }
-
-  if (!parts.length) {
-    return null;
-  }
-
-  if (parts.length === 1) {
-    return `Included ${parts[0]}.`;
-  }
-
-  const summary = `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return `Included ${summary}.`;
-};

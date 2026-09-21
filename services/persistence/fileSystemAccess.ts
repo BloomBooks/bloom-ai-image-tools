@@ -1,5 +1,6 @@
 import { createStore, del, get, set } from "idb-keyval";
 import { getImageDimensions, getMimeTypeFromUrl } from "../../lib/imageUtils";
+import { readImageSourceSummary } from "../../lib/imageSourceSummary";
 import {
   IMAGE_TOOLS_FS_DB_NAME,
   IMAGE_TOOLS_FS_HANDLE_KEY,
@@ -347,7 +348,7 @@ const imageRecordFromHistoryEntry = (
   reasoningLevel: entry.reasoningLevel ?? null,
   timestamp: entry.timestamp,
   promptUsed: entry.promptUsed,
-  sourceSummary: entry.sourceSummary ?? null,
+  sourceSummary: readImageSourceSummary(entry.sourceSummary),
   caption: entry.caption ?? null,
   name: entry.name ?? null,
   credits: entry.credits ?? null,
@@ -417,8 +418,8 @@ const buildRecoveredHistoryEntry = (
   model: "",
   reasoningLevel: null,
   timestamp: image.lastModified || 0,
-  promptUsed: "Recovered image",
-  sourceSummary: "Recovered from folder",
+  promptUsed: "",
+  sourceSummary: { kind: "recoveredFromFolder" },
   resolution: undefined,
   isStarred: options?.isStarred ?? false,
   origin: "generated",

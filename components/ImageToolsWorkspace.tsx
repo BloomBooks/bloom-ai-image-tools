@@ -91,7 +91,8 @@ import {
   getToolReferenceMode,
   toolSupportsBatch,
 } from "../lib/toolHelpers";
-import { formatCreditsValue, formatSourceSummary } from "../lib/formatters";
+import { formatCreditsValue } from "../lib/formatters";
+import { ImageSourceSummary } from "../lib/imageSourceSummary";
 import {
   captionLeadingNumber,
   parseCaptionArray,
@@ -299,8 +300,8 @@ const buildBookImageEntry = (url: string, index: number): ImageRecord => ({
   cost: 0,
   model: "",
   timestamp: 0,
-  promptUsed: "Book Image",
-  sourceSummary: "Book Image",
+  promptUsed: "",
+  sourceSummary: { kind: "bookImage" },
   resolution: undefined,
   isStarred: false,
   origin: "bookImages",
@@ -337,8 +338,8 @@ const buildRecoveredHistoryEntry = (entry: {
   cost: 0,
   model: "",
   timestamp: entry.lastModified || 0,
-  promptUsed: "Recovered image",
-  sourceSummary: "Recovered from folder",
+  promptUsed: "",
+  sourceSummary: { kind: "recoveredFromFolder" },
   resolution: undefined,
   isStarred: false,
   origin: "generated",
@@ -2344,8 +2345,13 @@ function ImageToolsWorkspaceInner({
           cost: 0,
           model: "",
           timestamp: Date.now(),
-          promptUsed: `Page ${page.pageNumber} of ${file.name}`,
-          sourceSummary: `${file.name} (page ${page.pageNumber} of ${pages.length})`,
+          promptUsed: "",
+          sourceSummary: {
+            kind: "pdfPage",
+            fileName: file.name,
+            pageNumber: page.pageNumber,
+            pageCount: pages.length,
+          },
           resolution: page.dimensions,
           isStarred: false,
           sourceMime: getMimeTypeFromUrl(page.dataUrl),
@@ -2452,8 +2458,8 @@ function ImageToolsWorkspaceInner({
         cost: 0,
         model: "",
         timestamp: Date.now(),
-        promptUsed: "Original book image",
-        sourceSummary: "Original book image",
+        promptUsed: "",
+        sourceSummary: { kind: "originalBookImage" },
         resolution,
         isStarred: false,
         origin: "bookOriginal",
@@ -2644,7 +2650,11 @@ function ImageToolsWorkspaceInner({
         null;
       const editImageCount = requiresEditImage && targetImage ? 1 : 0;
       const referenceImageCount = constrainedReferences.length;
-      const sourceSummary = formatSourceSummary(editImageCount, referenceImageCount);
+      const sourceSummary: ImageSourceSummary = {
+        kind: "toolRun",
+        editImageCount,
+        referenceImageCount,
+      };
 
       const isBreakComic = tool.id === "break_comic_into_images";
       // Phase plan for the loading overlay. Only tools that do more than a
@@ -3293,7 +3303,11 @@ function ImageToolsWorkspaceInner({
           getStyleIdFromImageRecord(targetImage) ||
           referenceStyleId ||
           null;
-        const sourceSummary = formatSourceSummary(1, constrainedReferences.length);
+        const sourceSummary: ImageSourceSummary = {
+          kind: "toolRun",
+          editImageCount: 1,
+          referenceImageCount: constrainedReferences.length,
+        };
 
         const runResult = await runToolOnImageTracked(
           {

@@ -1,5 +1,6 @@
 import type { ElementType, ReactNode } from "react";
 import type { ImageSizeTier } from "./lib/imageSizes";
+import type { ImageSourceSummary } from "./lib/imageSourceSummary";
 
 export interface ToolParameter {
   name: string;
@@ -359,7 +360,8 @@ export interface ImageRecordData {
   reasoningLevel?: ModelReasoningLevel | null;
   timestamp: number;
   promptUsed: string;
-  sourceSummary?: string | null;
+  /** Where this image came from, shown in the info panel's "Sources" block. */
+  sourceSummary?: ImageSourceSummary | null;
   resolution?: { width: number; height: number };
   isStarred?: boolean;
   origin?: "generated" | "uploaded" | "bookImages" | "bookOriginal";

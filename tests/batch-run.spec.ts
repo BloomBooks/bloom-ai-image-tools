@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { resetImageToolsPersistence } from "./playwright_helpers";
 
 // Covers WP4/WP7 of PLAN-batch-processing.md: the batch runner behind the morphed
-// "Apply Changes to N Images" button, running up to BATCH_CONCURRENCY (lib/batchPool.ts,
+// "Go (N Images)" button, running up to BATCH_CONCURRENCY (lib/batchPool.ts,
 // currently 4) images in parallel with 429 backoff. Uses the Local Dummy model
 // (localhost-only, never calls OpenRouter) so these specs run with zero API spend.
 //
@@ -65,11 +65,9 @@ test.describe("batch runner", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await expect(
-      page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go (3 Images)", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
 
     // All 3 run in parallel (BATCH_CONCURRENCY is 4), so no single id is
     // guaranteed to land first; wait for every slot to fill, in any order.
@@ -85,7 +83,7 @@ test.describe("batch runner", () => {
     for (const id of ["book-image-1", "book-image-2", "book-image-4"]) {
       await expect(batchTickCheckbox(page, id)).not.toBeChecked();
     }
-    await expect(page.getByRole("button", { name: "Apply Changes", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
   });
 
   test("runs ticked images in parallel: multiple spinners are visible at once (WP7)", async ({
@@ -100,7 +98,7 @@ test.describe("batch runner", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
 
     // All 3 fit inside BATCH_CONCURRENCY (4) and should start together. A
     // sequential runner could never show more than one spinner at a time, so
@@ -131,7 +129,7 @@ test.describe("batch runner", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
 
     // The generic "Click to Cancel" processing button never appears for a
     // batch run — it's replaced by the progress bar + labeled Cancel.
@@ -170,7 +168,7 @@ test.describe("batch runner", () => {
 
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await page.getByRole("button", { name: "Apply Changes to 2 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (2 Images)", exact: true }).click();
 
     // book-image-1 isn't rate-limited and lands first; the pane follows it.
     await expect(outgoingSlotImage(page, "book-image-1")).toBeVisible({ timeout: 15_000 });
@@ -238,7 +236,7 @@ test.describe("batch runner", () => {
     }, originalSrc!);
 
     await batchTickCheckbox(page, "book-image-2").click();
-    await page.getByRole("button", { name: "Apply Changes to 1 Image", exact: true }).click();
+    await page.getByRole("button", { name: "Go (1 Image)", exact: true }).click();
     await expect(outgoingSlotImage(page, "book-image-2")).toBeVisible({ timeout: 15_000 });
 
     // The history strip now holds the harness's 3 seeded entries + the
@@ -266,7 +264,7 @@ test.describe("batch runner", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
 
     await expect(outgoingSlotImage(page, "book-image-1")).toBeVisible({ timeout: 15_000 });
     await expect(outgoingSlotImage(page, "book-image-4")).toBeVisible({ timeout: 15_000 });
@@ -280,7 +278,7 @@ test.describe("batch runner", () => {
     // Re-running retries exactly the straggler (only book-image-2 is still
     // ticked). The forced-failure hook only targets call #2, which is already
     // spent, so this run succeeds.
-    await page.getByRole("button", { name: "Apply Changes to 1 Image", exact: true }).click();
+    await page.getByRole("button", { name: "Go (1 Image)", exact: true }).click();
     await expect(outgoingSlotImage(page, "book-image-2")).toBeVisible({ timeout: 15_000 });
     await expect(batchTickCheckbox(page, "book-image-2")).not.toBeChecked();
   });
@@ -299,7 +297,7 @@ test.describe("batch runner", () => {
 
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
-    await page.getByRole("button", { name: "Apply Changes to 2 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (2 Images)", exact: true }).click();
 
     await expect(outgoingSlotImage(page, "book-image-1")).toBeVisible({ timeout: 15_000 });
     await expect(outgoingSlotImage(page, "book-image-2")).toBeVisible({ timeout: 15_000 });
@@ -327,7 +325,7 @@ test.describe("batch runner", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
     await batchTickCheckbox(page, "book-image-4").click();
-    await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+    await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
 
     await expect(outgoingSlotImage(page, "book-image-1")).toBeVisible({ timeout: 15_000 });
     await expect(outgoingSlotImage(page, "book-image-4")).toBeVisible({ timeout: 15_000 });
@@ -344,8 +342,6 @@ test.describe("batch runner", () => {
     await expect(batchTickCheckbox(page, "book-image-4")).not.toBeChecked();
     await expect(batchTickCheckbox(page, "book-image-2")).toBeChecked();
     await expect(page.getByText(/failed/)).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Apply Changes to 1 Image", exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go (1 Image)", exact: true })).toBeVisible();
   });
 });

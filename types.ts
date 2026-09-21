@@ -392,14 +392,13 @@ export interface ImageRecordData {
    * The resolution the host says this image's page slot wants, with a memo
    * explaining how it got the number (see IBloomHostBookImage.suggestedTarget).
    * Carried on book images and their pre-edit snapshots only: it describes a
-   * book slot, so a generated result has none and the Upscale tool then offers
+   * book slot, so a generated result has none and Improve Quality then offers
    * no "Auto" option.
    */
   suggestedTarget?: { width: number; height: number; memo?: string | null } | null;
   /**
    * MIME type of the bytes this image arrived as ("image/jpeg"), shown as the
-   * info panel's Format row and used to auto-check "Remove fuzziness" for JPEG
-   * sources. Absent when the format was never determined.
+   * info panel's Format row. Absent when the format was never determined.
    */
   sourceMime?: string | null;
 }

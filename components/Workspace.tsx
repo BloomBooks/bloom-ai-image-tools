@@ -304,10 +304,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const resultCancelButton = onCancel ? (
     <Button
       type="button"
-      variant="outlined"
+      variant="contained"
       size="small"
       data-testid={cancelActionTestId ?? "result-cancel-button"}
       onClick={onCancel}
+      // Sits over the image, so a solid pill and no border (see AGENTS.md).
       sx={{
         borderRadius: "999px",
         textTransform: "none",
@@ -316,12 +317,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({
         py: 0.5,
         fontSize: "0.75rem",
         fontWeight: 600,
-        backgroundColor: "transparent",
-        color: theme.colors.accent,
-        borderColor: theme.colors.accent,
+        boxShadow: "none",
+        backgroundColor: theme.colors.surface,
+        color: theme.colors.textPrimary,
         "&:hover": {
-          backgroundColor: "rgba(148, 163, 184, 0.12)",
-          borderColor: theme.colors.accentHover,
+          backgroundColor: theme.colors.surfaceAlt,
+          boxShadow: "none",
         },
       }}
     >

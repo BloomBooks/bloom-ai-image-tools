@@ -28,7 +28,7 @@ test("creates a new robot image via OpenRouter", async ({ page }) => {
   const promptBox = page.getByTestId("input-prompt");
   await promptBox.fill(ROBOT_PROMPT);
 
-  const generateButton = page.getByRole("button", { name: /Generate Image/i });
+  const generateButton = page.getByRole("button", { name: "Go", exact: true });
   await generateButton.click();
 
   const processing = page.getByRole("button", { name: /Click to Cancel/i });

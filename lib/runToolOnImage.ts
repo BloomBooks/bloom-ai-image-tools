@@ -28,9 +28,20 @@ import {
 } from "./imageRequestPlan";
 import {
   formatUpscaleDimensions,
+  LETTERBOX_INSTRUCTION_PARAM,
+  letterboxPromptInstruction,
   RESOLVED_TARGET_PIXELS_PARAM,
   type UpscaleHostTarget,
 } from "./upscale";
+import { cropLetterboxedResult } from "./letterboxCrop";
+import {
+  detectImageKind,
+  IMAGE_KIND_FROM_USER_PARAM,
+  IMAGE_KIND_PARAM,
+  pickedImageKind,
+  resolveImageKind,
+  RESOLVED_IMAGE_KIND_PARAM,
+} from "./imageKind";
 import { findSizeParam } from "./slotTarget";
 import {
   createPromptDurationKey,
@@ -60,7 +71,7 @@ export interface RunToolOnImageArgs {
   targetSlotPageLabel?: string | null;
   /**
    * The resolution the host says the target image's container wants, which is
-   * the Upscale tool's Match Container row (see IBloomHostBookImage.suggestedTarget).
+   * what Improve Quality scales up to (see IBloomHostBookImage.suggestedTarget).
    * Per-image, so the batch runner must pass each image's own.
    */
   hostSuggestedTarget?: UpscaleHostTarget | null;
@@ -191,17 +202,42 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
 
   // The template reads params.size for its size sentence, so it gets the tier
   // the container's size settled to rather than the word "container".
-  const paramsForPrompt =
+  const paramsWithSize =
     findSizeParam(tool.parameters) && settledSizeToken && settledSizeToken !== params.size
       ? { ...params, size: settledSizeToken }
       : params;
+  // A tool with an Image Kind parameter gets the kind settled here. The choice
+  // shown on the card covers a whole batch only when the user made it; when it
+  // is the guess, this image's own pixels decide, so a logo among drawings is
+  // not restored as a drawing.
+  const hasImageKindParam = tool.parameters.some((param) => param.name === IMAGE_KIND_PARAM);
+  const imageKindFromUser = params[IMAGE_KIND_FROM_USER_PARAM] === "true";
+  const resolvedImageKind = hasImageKindParam
+    ? resolveImageKind({
+        picked: pickedImageKind(params[IMAGE_KIND_PARAM]),
+        fromUser: imageKindFromUser,
+        detected:
+          !imageKindFromUser && targetImageData ? await detectImageKind(targetImageData) : null,
+      })
+    : null;
+  const paramsForPrompt = resolvedImageKind
+    ? { ...paramsWithSize, [RESOLVED_IMAGE_KIND_PARAM]: resolvedImageKind }
+    : paramsWithSize;
+  // A letterboxed Scale Up asks for the canvas and says how to fill it; the
+  // pixel sentence would contradict that, so it is left out.
+  const letterbox = plan.scaleUp?.letterbox ?? null;
   const basePrompt = tool.promptTemplate(
-    upscaleTarget
+    upscaleTarget && letterbox
       ? {
           ...paramsForPrompt,
-          [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget),
+          [LETTERBOX_INSTRUCTION_PARAM]: letterboxPromptInstruction(upscaleTarget, letterbox),
         }
-      : paramsForPrompt,
+      : upscaleTarget
+        ? {
+            ...paramsForPrompt,
+            [RESOLVED_TARGET_PIXELS_PARAM]: formatUpscaleDimensions(upscaleTarget),
+          }
+        : paramsForPrompt,
   );
 
   const promptWithoutAspectRatio =
@@ -354,8 +390,16 @@ export async function runToolOnImage(args: RunToolOnImageArgs): Promise<RunToolO
   }
 
   const returnedImages = result.images?.length ? result.images : [result.imageData];
+  // A letterboxed Scale Up comes back as the padded canvas; the picture is cut
+  // out of it before anything else sees it.
+  const unpaddedImages =
+    upscaleTarget && letterbox
+      ? await Promise.all(
+          returnedImages.map((image) => cropLetterboxedResult(image, upscaleTarget, letterbox)),
+        )
+      : returnedImages;
   processedImages = await Promise.all(
-    returnedImages.map((image) => applyPostProcessingPipeline(image, tool.postProcessingFunctions)),
+    unpaddedImages.map((image) => applyPostProcessingPipeline(image, tool.postProcessingFunctions)),
   );
   processedImageData = processedImages[0];
   durationMs = result.duration;

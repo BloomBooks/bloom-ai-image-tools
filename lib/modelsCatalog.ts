@@ -14,6 +14,7 @@ import {
   formatPixelSize,
   type ImageSizeTier,
   IMAGE_SIZE_TIERS,
+  OPENAI_IMAGE_SIZE_CONSTRAINTS,
   parseAspectRatio,
   type PixelSize,
   pixelsForTier,
@@ -154,6 +155,20 @@ export const getMaxInputImagesForModel = (modelId: string | null | undefined): n
 /** Whether this model takes its output size as pixels ("1536x1024"). */
 export const modelTakesPixelSize = (modelId: string | null | undefined): boolean =>
   getModelInfoById(modelId)?.sizeParameter === "size";
+
+/**
+ * The edge cap and widest shape a pixel-size model will make, for the Scale
+ * Up planner (lib/upscale.ts); null for a tier-token model, which has neither.
+ */
+export const getPixelSizeLimitsForModel = (
+  modelId: string | null | undefined,
+): { maxEdge: number; maxEdgeRatio: number } | null =>
+  modelTakesPixelSize(modelId)
+    ? {
+        maxEdge: OPENAI_IMAGE_SIZE_CONSTRAINTS.maxEdge,
+        maxEdgeRatio: OPENAI_IMAGE_SIZE_CONSTRAINTS.maxEdgeRatio,
+      }
+    : null;
 
 /**
  * The size a model would actually be sent for the pixels asked of it: snapped

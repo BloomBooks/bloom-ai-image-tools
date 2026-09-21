@@ -36,7 +36,7 @@ describe("ethnicity tool prompt", () => {
       .sort((left, right) => left.title.localeCompare(right.title))
       .map((tool) => tool.id);
 
-    expect(enhanceToolIds).toEqual(["custom", "improve_drawing", "upscale"]);
+    expect(enhanceToolIds).toEqual(["custom", "improve_quality"]);
   });
 
   it("keeps extract cast further instructions subordinate to the reference images", () => {
@@ -85,7 +85,7 @@ describe("ethnicity tool prompt", () => {
     expect(changeStyleTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(removeObjectTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(paletteTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
-    expect(coloringBookTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(true);
+    expect(coloringBookTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
     expect(paletteTool?.hiddenAspectRatioDefault).toBe("21:9");
   });
 
@@ -128,7 +128,12 @@ describe("ethnicity tool prompt", () => {
     expect(
       coloringBookTool?.parameters.find((param) => param.name === "difficulty")?.options,
     ).toEqual(["Simple", "Moderate", "Complex"]);
-    expect(coloringBookTool?.parameters.find((param) => param.name === "size")?.type).toBe("size");
+    // Sized the way Improve Quality is: the slot decides, and the menu only
+    // appears outside Bloom.
+    expect(
+      coloringBookTool?.parameters.find((param) => param.name === "targetResolution")?.type,
+    ).toBe("target-resolution");
+    expect(coloringBookTool?.modelIds).toEqual(["openai/gpt-image-2.5-sunburst"]);
 
     const prompt = coloringBookTool?.promptTemplate?.({ difficulty: "Complex" });
 
@@ -142,44 +147,65 @@ describe("ethnicity tool prompt", () => {
     ).toContain("coloring-book-page");
   });
 
-  it("asks the upscale tool for a faithful reproduction, with no shape picker", () => {
-    const upscaleTool = TOOLS.find((tool) => tool.id === "upscale");
+  it("asks Improve Quality for a faithful reproduction, with no shape picker", () => {
+    const improveQualityTool = TOOLS.find((tool) => tool.id === "improve_quality");
 
-    expect(upscaleTool).toBeDefined();
-    expect(upscaleTool?.group).toBe("enhance");
-    expect(upscaleTool?.editImage).not.toBe(false);
-    expect(upscaleTool?.referenceImages).toBe("0");
-    // Upscaling keeps the picture's own shape, so there is no Shape menu.
-    expect(upscaleTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(false);
-    expect(upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.type).toBe(
-      "target-resolution",
+    expect(improveQualityTool).toBeDefined();
+    expect(improveQualityTool?.group).toBe("enhance");
+    // GPT Image 2.5 only: it letterboxes as told, Gemini paints the scene out.
+    expect(improveQualityTool?.modelIds).toEqual(["openai/gpt-image-2.5-sunburst"]);
+    expect(improveQualityTool?.editImage).not.toBe(false);
+    expect(improveQualityTool?.referenceImages).toBe("0");
+    // Scaling up keeps the picture's own shape, so there is no Shape menu.
+    expect(improveQualityTool?.parameters.some((param) => param.name === "aspectRatio")).toBe(
+      false,
     );
     expect(
-      upscaleTool?.parameters.find((param) => param.name === "targetResolution")?.defaultValue,
+      improveQualityTool?.parameters.find((param) => param.name === "targetResolution")?.type,
+    ).toBe("target-resolution");
+    expect(
+      improveQualityTool?.parameters.find((param) => param.name === "targetResolution")
+        ?.defaultValue,
     ).toBe("container");
-    expect(upscaleTool?.parameters.find((param) => param.name === "removeFuzziness")?.type).toBe(
-      "checkbox",
-    );
+    // The picture's kind and the resolution selector are the tool's parameters.
+    expect(improveQualityTool?.parameters.map((param) => param.name)).toEqual([
+      "imageKind",
+      "targetResolution",
+    ]);
 
-    const basePrompt = upscaleTool?.promptTemplate?.({
+    const basePrompt = improveQualityTool?.promptTemplate?.({
       targetResolution: "hd",
-      removeFuzziness: "false",
+      resolvedImageKind: "other",
     });
     expect(basePrompt).toContain("Reproduce this exact image at a higher resolution");
     expect(basePrompt).toContain("Do not change the composition");
-    expect(basePrompt).not.toContain("JPEG compression artifacts");
     expect(basePrompt).not.toContain("approximately");
 
-    const fuzzinessPrompt = upscaleTool?.promptTemplate?.({
+    // A drawing gets the restoration wording instead.
+    const lineArtPrompt = improveQualityTool?.promptTemplate?.({
       targetResolution: "hd",
-      removeFuzziness: "true",
+      resolvedImageKind: "line-art",
+    });
+    expect(lineArtPrompt).toContain("Restore this drawing to the condition it was in");
+    expect(lineArtPrompt).not.toContain("Reproduce this exact image at a higher resolution");
+
+    const sizedPrompt = improveQualityTool?.promptTemplate?.({
+      targetResolution: "hd",
+      resolvedImageKind: "other",
       resolvedTargetPixels: "1620 x 1080",
     });
-    expect(fuzzinessPrompt).toContain("JPEG compression artifacts");
-    expect(fuzzinessPrompt).toContain("Remove these artifacts");
-    expect(fuzzinessPrompt).toContain(
+    expect(sizedPrompt).toContain(
       "The output should be approximately 1620 x 1080 pixels (same shape as the input).",
     );
+
+    const letterboxedPrompt = improveQualityTool?.promptTemplate?.({
+      targetResolution: "container",
+      resolvedImageKind: "other",
+      resolvedTargetPixels: "3840 x 1280",
+      letterboxInstruction: "The output canvas is 3840 x 1280 pixels, padded.",
+    });
+    expect(letterboxedPrompt).toContain("The output canvas is 3840 x 1280 pixels, padded.");
+    expect(letterboxedPrompt).not.toContain("approximately");
   });
 
   it("flags allowBatch on exactly the single-image-in/single-image-out edit tools", () => {
@@ -195,11 +221,10 @@ describe("ethnicity tool prompt", () => {
         "coloring_book",
         "custom",
         "ethnicity",
-        "improve_drawing",
+        "improve_quality",
         "remove_background",
         "remove_object",
         "stylized_title",
-        "upscale",
       ].sort(),
     );
   });

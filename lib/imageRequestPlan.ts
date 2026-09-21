@@ -16,7 +16,11 @@ import {
   pickSizeTokenForLongEdge,
   sizeTokenToImageSizeTier,
 } from "./imageSizes";
-import { modelTakesPixelSize, resolveImageSizeRequest } from "./modelsCatalog";
+import {
+  getPixelSizeLimitsForModel,
+  modelTakesPixelSize,
+  resolveImageSizeRequest,
+} from "./modelsCatalog";
 import {
   findSizeParam,
   resolveSizeTokenValue,
@@ -25,7 +29,13 @@ import {
   type SlotTarget,
 } from "./slotTarget";
 import { getRequestedAspectRatioValue } from "./toolHelpers";
-import { findTargetResolutionParam, resolveUpscaleTarget, type UpscaleHostTarget } from "./upscale";
+import {
+  findTargetResolutionParam,
+  planScaleUp,
+  resolveUpscaleTarget,
+  type ScaleUpPlan,
+  type UpscaleHostTarget,
+} from "./upscale";
 
 /**
  * What one run of a tool will ask the model for: the size token, the shape,
@@ -48,7 +58,7 @@ export type SizeSource =
   | "tier"
   /** The existing image's own size. */
   | "image"
-  /** A size the tool itself fixes (a sheet, or Upscale's selector). */
+  /** A size the tool itself fixes (a sheet, or Improve Quality's Size menu). */
   | "tool";
 
 export interface ImageRequestPlanInput {
@@ -69,8 +79,18 @@ export interface ImageRequestPlanInput {
 }
 
 export interface ImageRequestPlan {
-  /** Upscale's chosen pixels, for the tools with a resolution selector. */
+  /**
+   * Scale Up's pixels, for the tools with a resolution selector: the canvas
+   * the request asks for. Inside a container this is `scaleUp.request`.
+   */
   upscaleTarget: PixelSize | null;
+  /**
+   * What Scale Up does inside the host's container (lib/upscale.ts), for the
+   * tools with a resolution selector; null for every other tool. Its
+   * `letterbox` tells the run path to add the padding instruction to the
+   * prompt and crop the result.
+   */
+  scaleUp: ScaleUpPlan | null;
   /** The image container the run follows, when it does (lib/slotTarget.ts). */
   slotTarget: SlotTarget | null;
   /** The tier the size picker's value stands for once settled; the prompt's size sentence reads it. */
@@ -123,13 +143,18 @@ export const planImageRequest = (input: ImageRequestPlanInput): ImageRequestPlan
   const requestedRule = requestedShapeRule(tool, params, toolModel);
   const imageResolution = requiresEditImage ? targetImageResolution : null;
 
-  // The Upscale selector persists a tier token ("hd"), so this is the first
-  // point that knows the pixels it stands for.
-
+  // Scale Up inside a container has nothing to choose: the plan says what to
+  // ask for. Without one the selector's persisted tier token ("hd") stands,
+  // and this is the first point that knows the pixels it stands for.
   const targetResolutionParam = findTargetResolutionParam(tool.parameters);
-  const upscaleTarget = targetResolutionParam
-    ? resolveUpscaleTarget(params?.[targetResolutionParam.name], targetImageResolution, hostTarget)
+  const scaleUp = targetResolutionParam
+    ? planScaleUp(targetImageResolution, hostTarget, getPixelSizeLimitsForModel(toolModel?.id))
     : null;
+  const upscaleTarget = !targetResolutionParam
+    ? null
+    : scaleUp?.state !== "no-container"
+      ? scaleUp!.request
+      : resolveUpscaleTarget(params?.[targetResolutionParam.name], targetImageResolution, null);
 
   // Inside Bloom, the host says how many pixels the image container wants, and
   // a result that belongs in the container is asked for at that size, in the
@@ -204,8 +229,9 @@ export const planImageRequest = (input: ImageRequestPlanInput): ImageRequestPlan
 
   // The exact pixels the request should ask for, when the caller knows them.
   // A model that takes pixels (GPT Image 2.5) is asked for these directly; a
-  // tier-token model never sees them. Upscale supplies its selector's target,
-  // and a run that follows the container supplies the container. Any other
+  // tier-token model never sees them. Improve Quality supplies its Size
+  // menu's target, and a run that follows the container supplies the
+  // container. Any other
   // edit whose tool set no size and whose shape follows the source gets the
   // source's own resolution, because on such a model an explicit size
   // overrides the source's shape: without this every edit would come back in
@@ -221,6 +247,7 @@ export const planImageRequest = (input: ImageRequestPlanInput): ImageRequestPlan
 
   return {
     upscaleTarget,
+    scaleUp,
     slotTarget,
     settledSizeToken,
     requestedSize,

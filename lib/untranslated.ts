@@ -16,7 +16,6 @@ export const NOT_TRANSLATED = new Set<string>([
   "AiImageEditor.Tool.break_comic_into_images.Param.furtherInstructions.Placeholder",
   "AiImageEditor.Tool.break_into_pieces.Title",
   "AiImageEditor.Tool.break_into_pieces.Description",
-  "AiImageEditor.Tool.break_into_pieces.ActionButton",
   "AiImageEditor.Tool.break_into_pieces.Param.furtherInstructions.Placeholder",
   "AiImageEditor.Tool.coloring_book.Description",
 

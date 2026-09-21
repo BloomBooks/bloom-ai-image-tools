@@ -11,8 +11,9 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { ImageRecord } from "../types";
-import { getHighContrastScrollbarStyles } from "../themes";
+import { getHighContrastScrollbarStyles, theme } from "../themes";
 import { TRANSPARENCY_BACKGROUND_STYLE } from "./transparencyBackground";
 import { formatMegabytes, getDataUrlByteSize } from "../lib/imageUtils";
 import { getModelNameById } from "../lib/modelsCatalog";
@@ -23,12 +24,18 @@ import { describeImageSource } from "../lib/imageSourceSummary";
 export interface ImagePreviewDialogItem {
   id: string;
   images: ImageRecord[];
+  /**
+   * Set when the item is one page of a book: `images[0]` is the picture in the
+   * book now and `images[1]`, when it is there, is the result chosen to replace
+   * it. Such an item gets a column of its own, headed by the page label, ahead
+   * of the images that belong to no page.
+   */
+  isBookPage?: boolean;
 }
 
 export interface ImagePreviewDialogProps {
   open: boolean;
   items: ImagePreviewDialogItem[];
-  layout?: "row" | "book-pairs";
   /**
    * The image this one was made from, when the caller can find it. Its bytes
    * are the "in" half of the size line; without a resolver that half is simply
@@ -81,11 +88,16 @@ const formatSizes = (image: ImageRecord, sourceImage: ImageRecord | null): strin
   return null;
 };
 
-const PreviewImage: React.FC<{
+/**
+ * One picture, with its resolution pill and nothing else. The gallery's flat
+ * presentation wraps this in a frame and a metadata block; a book page's column
+ * shows two of them bare, under their own captions.
+ */
+const PreviewPicture: React.FC<{
   image: ImageRecord;
   index: number;
-  sourceImage: ImageRecord | null;
-}> = ({ image, index, sourceImage }) => {
+  opacity?: number;
+}> = ({ image, index, opacity }) => {
   const l10n = useL10n();
   // A record can hold a URL whose bytes are no longer there (an object URL from
   // a past session, a history file since removed). That only shows up as a load
@@ -100,6 +112,111 @@ const PreviewImage: React.FC<{
   const resolution = image.resolution
     ? `${image.resolution.width} x ${image.resolution.height}`
     : null;
+
+  // The record's own shape, so a slot keeps its place in the grid before the
+  // image decodes instead of collapsing to nothing and shoving the rest around.
+  // Once the bytes are in, the image's own proportions take over: the record's
+  // resolution is often absent or stale, and the checkerboard is painted on the
+  // <img> box, so a box wider than the image leaves checks beside it.
+  const aspectRatio =
+    image.resolution && image.resolution.width > 0 && image.resolution.height > 0
+      ? `${image.resolution.width} / ${image.resolution.height}`
+      : "4 / 3";
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        p: { xs: 1.5, sm: 2 },
+        minWidth: 0,
+        minHeight: 0,
+        position: "relative",
+        width: "100%",
+        opacity: opacity ?? 1,
+      }}
+    >
+      {image.imageData && !loadFailed ? (
+        <img
+          src={image.imageData}
+          alt={image.imageFileName || `Preview image ${index + 1}`}
+          draggable={false}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setHasLoaded(true)}
+          onError={() => setLoadFailed(true)}
+          style={{
+            display: "block",
+            width: "100%",
+            height: "auto",
+            ...(hasLoaded ? {} : { aspectRatio }),
+            objectFit: "contain",
+            ...TRANSPARENCY_BACKGROUND_STYLE,
+          }}
+        />
+      ) : (
+        // A history record keeps its metadata even when its bytes are not in
+        // hand. Say so, rather than pointing an <img> at an empty src (which
+        // loads the page itself and draws a broken-image box). A record that
+        // names a file still has its bytes on disk and is only waiting for
+        // the hydrator to reach it, so it says so instead of claiming the
+        // image is gone.
+        <Box
+          data-testid="image-preview-dialog-missing-image"
+          sx={{
+            width: "100%",
+            aspectRatio,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 2,
+            border: "1px dashed rgba(148, 163, 184, 0.35)",
+            color: "#94a3b8",
+            fontSize: "12px",
+            textAlign: "center",
+            px: 2,
+          }}
+        >
+          {loadFailed
+            ? l10n("AiImageEditor.Preview.CouldNotLoad", "Image could not be loaded")
+            : image.imageFileName
+              ? l10n("AiImageEditor.Preview.Loading", "Loading…")
+              : l10n("AiImageEditor.Preview.NotInStorage", "Image not in storage")}
+        </Box>
+      )}
+      {resolution && (
+        <Typography
+          variant="caption"
+          sx={{
+            position: "absolute",
+            left: 12,
+            bottom: 12,
+            px: 1,
+            py: 0.5,
+            borderRadius: 999,
+            backgroundColor: "rgba(6, 8, 13, 0.76)",
+            color: "#e2e8f0",
+          }}
+        >
+          {resolution}
+        </Typography>
+      )}
+    </Box>
+  );
+};
+
+/**
+ * The flat presentation: one picture in a frame, with the model, cost, time and
+ * size line and the prompt under it. This is what an image that belongs to no
+ * book page still gets.
+ */
+const PreviewImage: React.FC<{
+  image: ImageRecord;
+  index: number;
+  sourceImage: ImageRecord | null;
+}> = ({ image, index, sourceImage }) => {
+  const l10n = useL10n();
 
   const facts = [
     getModelNameById(image.model) || image.model || null,
@@ -119,95 +236,9 @@ const PreviewImage: React.FC<{
     ""
   ).trim();
 
-  // The record's own shape, so a slot keeps its place in the grid before the
-  // image decodes instead of collapsing to nothing and shoving the rest around.
-  // Once the bytes are in, the image's own proportions take over: the record's
-  // resolution is often absent or stale, and the checkerboard is painted on the
-  // <img> box, so a box wider than the image leaves checks beside it.
-  const aspectRatio =
-    image.resolution && image.resolution.width > 0 && image.resolution.height > 0
-      ? `${image.resolution.width} / ${image.resolution.height}`
-      : "4 / 3";
-
   return (
     <Box sx={{ ...previewFrameStyles, flex: "0 0 auto", width: "100%" }}>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          p: { xs: 1.5, sm: 2 },
-          minWidth: 0,
-          minHeight: 0,
-          position: "relative",
-        }}
-      >
-        {image.imageData && !loadFailed ? (
-          <img
-            src={image.imageData}
-            alt={image.imageFileName || `Preview image ${index + 1}`}
-            draggable={false}
-            loading="lazy"
-            decoding="async"
-            onLoad={() => setHasLoaded(true)}
-            onError={() => setLoadFailed(true)}
-            style={{
-              display: "block",
-              width: "100%",
-              height: "auto",
-              ...(hasLoaded ? {} : { aspectRatio }),
-              objectFit: "contain",
-              ...TRANSPARENCY_BACKGROUND_STYLE,
-            }}
-          />
-        ) : (
-          // A history record keeps its metadata even when its bytes are not in
-          // hand. Say so, rather than pointing an <img> at an empty src (which
-          // loads the page itself and draws a broken-image box). A record that
-          // names a file still has its bytes on disk and is only waiting for
-          // the hydrator to reach it, so it says so instead of claiming the
-          // image is gone.
-          <Box
-            data-testid="image-preview-dialog-missing-image"
-            sx={{
-              width: "100%",
-              aspectRatio,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 2,
-              border: "1px dashed rgba(148, 163, 184, 0.35)",
-              color: "#94a3b8",
-              fontSize: "12px",
-              textAlign: "center",
-              px: 2,
-            }}
-          >
-            {loadFailed
-              ? l10n("AiImageEditor.Preview.CouldNotLoad", "Image could not be loaded")
-              : image.imageFileName
-                ? l10n("AiImageEditor.Preview.Loading", "Loading…")
-                : l10n("AiImageEditor.Preview.NotInStorage", "Image not in storage")}
-          </Box>
-        )}
-        {resolution && (
-          <Typography
-            variant="caption"
-            sx={{
-              position: "absolute",
-              left: 12,
-              bottom: 12,
-              px: 1,
-              py: 0.5,
-              borderRadius: 999,
-              backgroundColor: "rgba(6, 8, 13, 0.76)",
-              color: "#e2e8f0",
-            }}
-          >
-            {resolution}
-          </Typography>
-        )}
-      </Box>
+      <PreviewPicture image={image} index={index} />
 
       <Box
         data-testid="image-preview-dialog-metadata"
@@ -241,15 +272,160 @@ const PreviewImage: React.FC<{
   );
 };
 
+const columnCaptionStyles = {
+  display: "block",
+  color: theme.colors.textSecondary,
+  fontSize: "10px",
+  fontWeight: 700,
+  letterSpacing: "0.09em",
+  textTransform: "uppercase",
+  px: 0.5,
+} as const;
+
+/**
+ * One book page: the page label, the picture that is in the book now, and, when
+ * a result has been chosen for that page, the replacement under it. The two
+ * pictures are the whole story here, so none of the run's numbers or its prompt
+ * appear — the user is looking at what the book will hold.
+ */
+const BookPageColumn: React.FC<{
+  pageImage: ImageRecord;
+  replacement: ImageRecord | null;
+  width: number;
+}> = ({ pageImage, replacement, width }) => {
+  const l10n = useL10n();
+  const isReplacing = Boolean(replacement);
+  const pageLabel = (pageImage.pageLabel || "").trim();
+
+  return (
+    <Box
+      data-testid={`image-preview-dialog-column-${pageImage.id}`}
+      data-replacing={isReplacing ? "true" : "false"}
+      sx={{
+        flex: "0 0 auto",
+        width,
+        maxWidth: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.75,
+        p: 1,
+        borderRadius: 3,
+        backgroundColor: theme.colors.surface,
+        // An outline rather than a border: it is drawn outside the box, so a
+        // column keeps the same inner width whether or not it is replacing and
+        // the row of columns stays aligned.
+        outline: isReplacing ? `2px solid ${theme.colors.accent}` : "none",
+      }}
+    >
+      {/* Standalone book images carry no page label, so there is nothing to head
+          the column with until a replacement puts the tag there. */}
+      {(pageLabel || isReplacing) && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            px: 0.5,
+            minWidth: 0,
+          }}
+        >
+          <Typography
+            variant="subtitle2"
+            data-testid="image-preview-dialog-page-label"
+            sx={{
+              fontWeight: 600,
+              color: "#f8fafc",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {pageLabel}
+          </Typography>
+          {isReplacing && (
+            <Box
+              data-testid="image-preview-dialog-replacing-pill"
+              sx={{
+                flex: "0 0 auto",
+                px: 1,
+                py: 0.25,
+                borderRadius: 999,
+                backgroundColor: theme.colors.accent,
+                color: "#ffffff",
+                fontSize: "10px",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              {l10n("AiImageEditor.Preview.Replacing", "Replacing")}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {replacement ? (
+        <>
+          <Typography
+            variant="caption"
+            data-testid="image-preview-dialog-page-caption"
+            sx={columnCaptionStyles}
+          >
+            {l10n("AiImageEditor.Preview.InTheBookNow", "In the book now")}
+          </Typography>
+          <PreviewPicture image={pageImage} index={0} opacity={0.55} />
+          <Box
+            aria-hidden
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              px: 0.5,
+              color: theme.colors.accent,
+            }}
+          >
+            <Box sx={{ flex: 1, height: "1px", backgroundColor: theme.colors.accent }} />
+            <ArrowDownwardIcon fontSize="small" />
+            <Box sx={{ flex: 1, height: "1px", backgroundColor: theme.colors.accent }} />
+          </Box>
+          <Typography
+            variant="caption"
+            data-testid="image-preview-dialog-page-caption"
+            sx={columnCaptionStyles}
+          >
+            {/* The same word the book-images strip labels its lower row with. */}
+            {l10n("AiImageEditor.BookImages.Replacement", "Replacement")}
+          </Typography>
+          <PreviewPicture image={replacement} index={1} />
+        </>
+      ) : (
+        <PreviewPicture image={pageImage} index={0} />
+      )}
+    </Box>
+  );
+};
+
 export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
   open,
   items,
-  layout = "row",
   resolveSourceImage,
   onClose,
 }) => {
   const l10n = useL10n();
   const visibleItems = React.useMemo(() => items.filter((item) => item.images.length > 0), [items]);
+  // A book page gets a column of its own, in book order. Everything else keeps
+  // the flat presentation, after the columns, so a result from a run with no
+  // slot to go back to is still in the gallery.
+  const pageItems = React.useMemo(
+    () => visibleItems.filter((item) => item.isBookPage),
+    [visibleItems],
+  );
+  const looseItems = React.useMemo(
+    () => visibleItems.filter((item) => !item.isBookPage),
+    [visibleItems],
+  );
   const [zoom, setZoom] = React.useState(1);
   // The scroll container is held in state, set through a callback ref, rather
   // than in a useRef read from an effect keyed on `open`. MUI's Dialog renders
@@ -353,7 +529,15 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
             pb: 2,
           }}
         >
-          {visibleItems.map((item, index) => {
+          {pageItems.map((item) => (
+            <BookPageColumn
+              key={item.id}
+              pageImage={item.images[0]}
+              replacement={item.images[1] ?? null}
+              width={itemWidth}
+            />
+          ))}
+          {looseItems.map((item, index) => {
             return (
               <Box
                 key={item.id}
@@ -363,7 +547,6 @@ export const ImagePreviewDialog: React.FC<ImagePreviewDialogProps> = ({
                   minHeight: 0,
                   display: "flex",
                   flexDirection: "column",
-                  gap: layout === "book-pairs" ? 2 : 0,
                   width: itemWidth,
                   maxWidth: "100%",
                 }}

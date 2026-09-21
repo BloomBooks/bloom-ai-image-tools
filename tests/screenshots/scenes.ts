@@ -35,9 +35,9 @@ export interface Scene {
 const HARNESS = "/?mode=bloom-harness";
 
 const TOOL_IDS = [
+  "improve_quality",
   "custom",
-  "improve_drawing",
-  "upscale",
+  // "improve_drawing" is disabled in the registry, so it has no card.
   "extract_cast_of_characters",
   "ethnicity",
   "apply_localized_characters",
@@ -244,7 +244,7 @@ export const SCENES: Scene[] = [
     ready: (page) => page.getByTestId("input-styleId"),
     setup: async (page) => {
       await page.locator('[data-tool-id="generate_image"] textarea').first().fill("A red hen");
-      await expect(page.getByRole("button", { name: "Generate Image" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
     },
     notes: "Create an Image with a description typed, so the Generate button is live.",
   },
@@ -255,7 +255,7 @@ export const SCENES: Scene[] = [
       await selectTool(page, "custom");
       await useDummyModel(page, "custom", 120_000);
       await page.getByTestId("input-prompt").fill(PROMPT);
-      await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
+      await page.getByRole("button", { name: "Go", exact: true }).click();
       await expect(page.getByRole("button", { name: "Click to Cancel" })).toBeVisible();
     },
     notes: "A Custom Edit running: the cancel button and the busy result pane.",
@@ -267,7 +267,7 @@ export const SCENES: Scene[] = [
       await selectTool(page, "custom");
       await useDummyModel(page, "custom", 100);
       await page.getByTestId("input-prompt").fill(PROMPT);
-      await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
+      await page.getByRole("button", { name: "Go", exact: true }).click();
       await expect(resultImage(page)).toBeVisible({ timeout: 20_000 });
     },
     after: async (page, capture) => {
@@ -289,12 +289,10 @@ export const SCENES: Scene[] = [
       for (const id of ["book-image-1", "book-image-2", "book-image-4"]) {
         await page.getByTestId(`batch-tick-${id}`).click();
       }
-      await expect(
-        page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }),
-      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Go (3 Images)", exact: true })).toBeVisible();
     },
     after: async (page, capture) => {
-      await page.getByRole("button", { name: "Apply Changes to 3 Images", exact: true }).click();
+      await page.getByRole("button", { name: "Go (3 Images)", exact: true }).click();
       await expect(page.getByTestId("batch-progress-label")).toBeVisible();
       await capture("running");
       await expect(page.getByTestId("batch-progress-label")).toBeHidden({ timeout: 60_000 });

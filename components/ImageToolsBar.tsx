@@ -464,6 +464,8 @@ interface ImageToolsPanelBar {
    *  image's slot, or the empty slot the host launched us on when there is
    *  nothing to edit (IBloomHostBookImage.suggestedTarget). */
   slotSuggestedTarget?: UpscaleHostTarget | null;
+  /** True when Bloom launched the editor on a book (see ImageTool). */
+  hostedByBloom?: boolean;
   referenceImages: ImageRecord[];
   rightImage: ImageRecord | null;
   resultImages?: ImageRecord[];
@@ -574,6 +576,7 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
   onToolQualityChange,
   targetImage,
   slotSuggestedTarget = null,
+  hostedByBloom = false,
   referenceImages,
   rightImage,
   resultImages = [],
@@ -867,9 +870,8 @@ export const ImageToolsBar: React.FC<ImageToolsPanelBar> = ({
             referenceImageResolutions={referenceImageResolutions}
             hasTargetImage={hasTargetImage}
             targetImageResolution={targetImage?.resolution ?? null}
-            targetImageId={targetImage?.id ?? null}
-            targetImageMime={targetImage?.sourceMime}
             targetImageSuggestedTarget={slotSuggestedTarget ?? targetImage?.suggestedTarget ?? null}
+            hostedByBloom={hostedByBloom}
             isAuthenticated={appState.isAuthenticated}
             playgroundMode={playgroundMode}
             modelByTool={modelByTool}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TOOLS } from "../../components/tools/tools-registry";
 import type { ToolDefinition } from "../../types";
-import { estimateInputImageTokens } from "../imageCostEstimate";
+import { DETAILED_EDIT_OUTPUT_TOKENS, estimateInputImageTokens } from "../imageCostEstimate";
 import { MAX_REFERENCE_IMAGE_EDGE } from "../imageProcessing";
 import { LOCAL_DUMMY_MODEL } from "../localModels";
 import { getModelInfoById } from "../modelsCatalog";
@@ -38,6 +38,26 @@ const usd = (toolId: string, overrides: Partial<ToolRunCostInput> = {}): number 
 };
 
 describe("estimateToolRunCostUsd", () => {
+  it("prices a redraw of the whole picture by its detail, not the size table", () => {
+    // A 488x544 page image improved to 1466x1700 billed about $0.06 on
+    // 2026-09-20; the size table alone said $0.01.
+    const result = estimate("improve_quality", {
+      target: {
+        resolution: { width: 488, height: 544 },
+        suggestedTarget: { width: 1466, height: 1700 },
+      },
+    });
+    expect(result?.kind).toBe("token");
+    if (result?.kind !== "token") return;
+    expect(result.detail.outputTokens).toBe(DETAILED_EDIT_OUTPUT_TOKENS);
+    expect(result.usd).toBeGreaterThan(0.05);
+    // A tool that draws something new keeps the size table's figure.
+    const created = estimate("generate_image", { target: null });
+    if (created?.kind === "token") {
+      expect(created.detail.outputTokens).toBeLessThan(DETAILED_EDIT_OUTPUT_TOKENS);
+    }
+  });
+
   it("has no price for a run that never reaches a paid model", () => {
     expect(estimate("remove_background")).toBeNull();
     expect(estimate("pdf_to_images")).toBeNull();

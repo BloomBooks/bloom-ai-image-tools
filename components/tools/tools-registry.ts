@@ -1,5 +1,6 @@
 import AddPhotoAlternateOutlinedIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import HdOutlinedIcon from "@mui/icons-material/HdOutlined";
 import BrushOutlinedIcon from "@mui/icons-material/BrushOutlined";
 import CallSplitOutlinedIcon from "@mui/icons-material/CallSplitOutlined";
 import ColorLensOutlinedIcon from "@mui/icons-material/ColorLensOutlined";
@@ -8,7 +9,6 @@ import CropFreeOutlinedIcon from "@mui/icons-material/CropFreeOutlined";
 import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined";
 import GifBoxOutlinedIcon from "@mui/icons-material/GifBoxOutlined";
 import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
-import PhotoSizeSelectLargeOutlinedIcon from "@mui/icons-material/PhotoSizeSelectLargeOutlined";
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import TextFieldsOutlinedIcon from "@mui/icons-material/TextFieldsOutlined";
 import TitleOutlinedIcon from "@mui/icons-material/TitleOutlined";
@@ -28,7 +28,17 @@ import {
 } from "../../lib/aspectRatios";
 import { ETHNICITY_CATEGORIES, getEthnicityByValue } from "../../lib/ethnicities";
 import { BREAK_COMIC_EDIT_PROMPT } from "../../lib/breakComic";
-import { CONTAINER_UPSCALE_TOKEN, RESOLVED_TARGET_PIXELS_PARAM } from "../../lib/upscale";
+import {
+  CONTAINER_UPSCALE_TOKEN,
+  LETTERBOX_INSTRUCTION_PARAM,
+  RESOLVED_TARGET_PIXELS_PARAM,
+} from "../../lib/upscale";
+import {
+  DEFAULT_IMAGE_KIND_OPTION,
+  IMAGE_KIND_OPTIONS,
+  IMAGE_KIND_PARAM,
+  RESOLVED_IMAGE_KIND_PARAM,
+} from "../../lib/imageKind";
 import {
   buildGifAnimationSheetPrompt,
   DEFAULT_GIF_ENDING_OPTION,
@@ -86,6 +96,9 @@ const createAspectRatioParameter = (defaultValue: string): ToolParameter => ({
 
 const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "pdf_to_images",
+  // Keep the picture's own shape.
+  "improve_quality",
+  "coloring_book",
   "make_gif",
   "ethnicity",
   "apply_localized_characters",
@@ -97,7 +110,6 @@ const HIDE_ASPECT_RATIO_TOOL_IDS = new Set([
   "improve_drawing",
   "remove_object",
   "stylized_title",
-  "upscale",
 ]);
 
 const shouldExposeAspectRatio = (tool: ToolDefinition) =>
@@ -256,7 +268,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
           "Additional instructions to follow closely:",
         );
       },
-      actionButtonLabel: "Generate Pieces",
       referenceImages: "1+",
       editImage: false,
       derivedResultMode: "split-images",
@@ -295,7 +306,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
 
         return `${basePrompt}\n\nUse these extra notes only to identify which characters to include or skip, or to call out details to preserve. Do not let these notes override the visual evidence in the supplied reference images: ${extraInstructions}`;
       },
-      actionButtonLabel: "Extract Characters",
       referenceImages: "1+",
       editImage: false,
       derivedResultMode: "split-images",
@@ -328,7 +338,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
           "Additional instructions to follow closely:",
         );
       },
-      actionButtonLabel: "Apply Localized Characters",
       referenceImages: "1+",
       // Batch-eligible: edits the single target image against the shared
       // reference set and produces exactly one image result.
@@ -382,7 +391,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
           "Animate this specific action:",
         );
       },
-      actionButtonLabel: "Make GIF",
       referenceImages: "1",
       editImage: false,
       derivedResultMode: "animated-gif",
@@ -394,6 +402,75 @@ export const ALL_TOOLS: ToolDefinition[] = (
       // same per-image price — so skip the shape picker and always ask big.
       hiddenAspectRatioDefault: "16:9",
       hiddenSizeDefault: "2k",
+    },
+    {
+      // One tool whose prompt follows the kind of picture it is given: a
+      // faithful higher-resolution reproduction, or a line-drawing cleanup.
+      // The detector (lib/imageKind.ts) sets the Image Kind choice when a
+      // target image arrives, and the user can change it.
+      id: "improve_quality",
+      preserveInEdit: "the composition, the subjects, the colors, the style, and the framing.",
+      title: "Improve Quality",
+      description: "Make the image sharp, clean, and large enough for this page.",
+      group: "enhance",
+      icon: HdOutlinedIcon,
+      parameters: [
+        {
+          name: IMAGE_KIND_PARAM,
+          label: "Image Kind",
+          type: "select",
+          options: [...IMAGE_KIND_OPTIONS],
+          defaultValue: DEFAULT_IMAGE_KIND_OPTION,
+        },
+        {
+          name: "targetResolution",
+          // "Size" shares the other size pickers' string; the control only shows
+          // outside Bloom, where it is the HD/2K/4K menu.
+          label: "Size",
+          type: "target-resolution",
+          defaultValue: CONTAINER_UPSCALE_TOKEN,
+        },
+      ],
+      promptTemplate: (params: Record<string, string>) => {
+        // Filled by the run path from the user's choice or the detector.
+        const kind =
+          params[RESOLVED_IMAGE_KIND_PARAM]?.trim() === "line-art" ? "line-art" : "other";
+        const parts = [
+          kind === "line-art"
+            ? // Measured against a clean drawing degraded into an old scan: this
+              // keeps every line in place and clears paper and specks, where
+              // "finish this drawing" wording redraws the strokes.
+              "Restore this drawing to the condition it was in when the artist made it. This is an old printed or scanned copy: the paper has yellowed and picked up dust, stains, and specks, and the ink has faded, thinned, and broken up. None of that is part of the artwork. Bring every line back to the solid black ink it was originally drawn in, on clean white paper, and remove every speck, stain, and mark that the artist did not draw. Keep every deliberate stroke exactly as the artist made it: the same lines in the same places, with the same weight and character, the same composition, the same perspective, and the same framing. It stays a line drawing in the original's colors: a drawing in one color stays in that one color, with no hue introduced, no shapes filled, and no shading into solid volumes. Do not redraw, tidy, simplify, or add anything, and do not smooth away hatching or texture that the artist drew."
+            : // The faithful-reproduction prompt. On its own it clears JPEG blocking
+              // to a clean source's level, and it leaves a painting's texture
+              // and paper alone, which any wording about damage does not.
+              "Reproduce this exact image at a higher resolution. Do not change the composition, subjects, colors, style, framing, or any content. Add only the fine detail, sharpness, and clean edges that a genuinely higher-resolution version of this same image would have.",
+        ];
+        // Both filled by the run path, which is the only place that knows the
+        // resolved pixel target (the selector stores a tier token). A
+        // letterboxed run gets the padding paragraph instead of the size
+        // sentence, since the canvas is not the picture's shape.
+        const letterboxInstruction = params[LETTERBOX_INSTRUCTION_PARAM]?.trim();
+        const resolvedTargetPixels = params[RESOLVED_TARGET_PIXELS_PARAM]?.trim();
+        if (letterboxInstruction) {
+          parts.push(letterboxInstruction);
+        } else if (resolvedTargetPixels) {
+          parts.push(
+            `The output should be approximately ${resolvedTargetPixels} pixels (same shape as the input).`,
+          );
+        }
+        return parts.join("\n\n");
+      },
+      referenceImages: "0",
+      // GPT Image 2.5 only. Asked for a canvas of a different shape from the
+      // picture, it keeps the picture's proportions and letterboxes with solid
+      // bars as told, so an image outside a model's shape limits can still be
+      // scaled up and cropped back. Gemini 3 Pro Image ignores that instruction
+      // and paints the scene out to fill the canvas, and costs ten times as
+      // much for the same job.
+      modelIds: ["openai/gpt-image-2.5-sunburst"],
+      recommendedModelIds: ["openai/gpt-image-2.5-sunburst"],
+      allowBatch: true,
     },
     {
       id: "change_text",
@@ -451,7 +528,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
           params.furtherInstructions,
           "Additional instructions for the illustrations:",
         ),
-      actionButtonLabel: "Break into Images",
       referenceImages: "0",
       editImage: true,
       // GPT Image 2.5 Sunburst is the recommended engine for splitting comics
@@ -473,13 +549,14 @@ export const ALL_TOOLS: ToolDefinition[] = (
     {
       id: "pdf_to_images",
       title: "PDF to Images",
-      description:
-        "Convert a PDF into a series of images. Runs entirely in your browser — no AI, no upload.",
+      description: "Convert a PDF into a series of images. Free.",
       group: "more",
       icon: PictureAsPdfOutlinedIcon,
       parameters: [],
       // No model call: a local tool has no prompt. Kept for the shared interface.
       promptTemplate: () => "",
+      // The one button that is not "Go": it opens a file picker rather than
+      // running anything.
       actionButtonLabel: "Choose PDF…",
       referenceImages: "0",
       editImage: false,
@@ -488,7 +565,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
     {
       id: "coloring_book",
       title: "Coloring Book",
-      description: "Turn the selected image into a black-and-white coloring-book page.",
+      description: "",
       group: "more",
       icon: ColoringBookIcon,
       parameters: [
@@ -500,13 +577,12 @@ export const ALL_TOOLS: ToolDefinition[] = (
           defaultValue: DEFAULT_COLORING_BOOK_DIFFICULTY,
         },
         {
-          name: "size",
+          name: "targetResolution",
+          // "Size" shares the other size pickers' string; the control only shows
+          // outside Bloom, where it is the HD/2K/4K menu.
           label: "Size",
-          type: "size",
-          options: [...SIZE_OPTIONS],
-          // The image container's size inside Bloom; standalone, 1k (see
-          // lib/slotTarget.ts).
-          defaultValue: CONTAINER_SIZE_TOKEN,
+          type: "target-resolution",
+          defaultValue: CONTAINER_UPSCALE_TOKEN,
         },
       ],
       promptTemplate: (params: Record<string, string>) => {
@@ -515,18 +591,35 @@ export const ALL_TOOLS: ToolDefinition[] = (
           COLORING_BOOK_COMPLEXITY_HINTS[selectedDifficulty] ||
           COLORING_BOOK_COMPLEXITY_HINTS[DEFAULT_COLORING_BOOK_DIFFICULTY];
 
-        return [
+        const parts = [
           "Re-render this image as a children's coloring book page. Preserve the exact composition, characters, and major recognizable objects while converting everything to clean black outlines on a white background.",
           `Difficulty: ${selectedDifficulty}. ${complexityHint}`,
           "Keep interior regions open and white for coloring. Do not use large solid black filled areas; use black only for outlines and small necessary detail accents.",
           "Art direction (Coloring Book Outline): Children's coloring book page, clean black outlines, white background, no shading, no greyscale, closed shapes for coloring, crisp vector-like lines.",
-        ].join("\n\n");
+        ];
+        // Both filled by the run path, which is the only place that knows the
+        // resolved pixel target (the selector stores a tier token). A
+        // letterboxed run gets the padding paragraph instead of the size
+        // sentence, since the canvas is not the picture's shape.
+        const letterboxInstruction = params[LETTERBOX_INSTRUCTION_PARAM]?.trim();
+        const resolvedTargetPixels = params[RESOLVED_TARGET_PIXELS_PARAM]?.trim();
+        if (letterboxInstruction) {
+          parts.push(letterboxInstruction);
+        } else if (resolvedTargetPixels) {
+          parts.push(
+            `The output should be approximately ${resolvedTargetPixels} pixels (same shape as the input).`,
+          );
+        }
+        return parts.join("\n\n");
       },
-      actionButtonLabel: "Make Coloring Page",
       referenceImages: "0",
+      // GPT Image 2.5 only, for the same reason Improve Quality pins it: asked
+      // for a canvas of a different shape from the picture, it letterboxes with
+      // solid bars as told, where Gemini 3 Pro Image paints the scene out to
+      // fill the canvas.
+      modelIds: ["openai/gpt-image-2.5-sunburst"],
       allowBatch: true,
     },
-
     {
       id: "stylized_title",
       preserveInEdit:
@@ -646,7 +739,6 @@ export const ALL_TOOLS: ToolDefinition[] = (
         }
         return `${basePrompt}\n\nTheme and palette guidance to follow closely: ${instructions}`;
       },
-      actionButtonLabel: "Generate Pallet",
       // The swatches are numbered, and the numbers are text the tool asks for.
       addsTextToImage: true,
       referenceImages: "0+",
@@ -655,6 +747,9 @@ export const ALL_TOOLS: ToolDefinition[] = (
     },
     {
       id: "improve_drawing",
+      // Switched off while Improve Quality is tried in its place. Everything
+      // below is kept so it can be switched back on by removing this line.
+      disabled: true,
       preserveInEdit:
         "the composition and framing, every character and their identity, faces, clothing and position, the colors and color tone, the art medium, and the level of detail.",
       title: "Improve Drawing",
@@ -679,60 +774,11 @@ export const ALL_TOOLS: ToolDefinition[] = (
           "Additional instructions to follow closely:",
         );
       },
-      actionButtonLabel: "Improve Drawing",
       referenceImages: "0",
       // Only offer these engines: GPT Image 2.5 Sunburst (default) and Gemini 3
       // Pro Preview. Other catalog models are hidden.
       modelIds: ["openai/gpt-image-2.5-sunburst", "google/gemini-3-pro-image"],
       recommendedModelIds: ["openai/gpt-image-2.5-sunburst"],
-      allowBatch: true,
-    },
-    {
-      id: "upscale",
-      preserveInEdit: "the composition, the subjects, the colors, the style, and the framing.",
-      title: "Upscale",
-      description: "Create a higher-resolution version of this image.",
-      group: "enhance",
-      icon: PhotoSizeSelectLargeOutlinedIcon,
-      // Upscaling keeps the picture's own shape, so there is no Shape menu.
-      parameters: [
-        {
-          name: "targetResolution",
-          label: "Target Resolution",
-          type: "target-resolution",
-          // Enough pixels to fill the image container. Standalone there is no
-          // container, the selector has no Container option, and
-          // resolveUpscaleTarget reads this token as HD.
-          defaultValue: CONTAINER_UPSCALE_TOKEN,
-        },
-        {
-          name: "removeFuzziness",
-          label: "Remove fuzziness",
-          type: "checkbox",
-          defaultValue: "false",
-          optional: true,
-        },
-      ],
-      promptTemplate: (params: Record<string, string>) => {
-        const parts = [
-          "Reproduce this exact image at a higher resolution. Do not change the composition, subjects, colors, style, framing, or any content. Add only the fine detail, sharpness, and clean edges that a genuinely higher-resolution version of this same image would have.",
-        ];
-        if (params.removeFuzziness === "true") {
-          parts.push(
-            "The source has JPEG compression artifacts (blockiness, ringing, mosquito noise around edges, banding in gradients). Remove these artifacts and restore smooth gradients and crisp edges without inventing new content.",
-          );
-        }
-        // Filled by the run path, which is the only place that knows the
-        // resolved pixel target (the selector stores a tier token).
-        const resolvedTargetPixels = params[RESOLVED_TARGET_PIXELS_PARAM]?.trim();
-        if (resolvedTargetPixels) {
-          parts.push(
-            `The output should be approximately ${resolvedTargetPixels} pixels (same shape as the input).`,
-          );
-        }
-        return parts.join("\n\n");
-      },
-      referenceImages: "0",
       allowBatch: true,
     },
     {

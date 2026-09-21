@@ -31,7 +31,7 @@ test.describe("local dummy generation text", () => {
 
     const card = page.locator('[data-tool-id="generate_image"]');
     await card.locator("textarea").first().fill("a red hen");
-    await card.getByRole("button", { name: /Generate Image/i }).click();
+    await card.getByRole("button", { name: "Go", exact: true }).click();
 
     const resultImage = page.getByTestId("result-panel").locator("img").first();
     await expect(resultImage).toBeVisible({ timeout: 15_000 });
@@ -50,7 +50,7 @@ test.describe("local dummy generation text", () => {
     await page.keyboard.press("Escape");
 
     await page.getByTestId("input-prompt").fill("brighten it");
-    await page.getByRole("button", { name: "Apply Changes", exact: true }).click();
+    await page.getByRole("button", { name: "Go", exact: true }).click();
 
     const resultImage = page.getByTestId("result-panel").locator("img").first();
     await expect(resultImage).toBeVisible({ timeout: 15_000 });

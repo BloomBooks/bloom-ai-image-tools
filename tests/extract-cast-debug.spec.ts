@@ -56,7 +56,7 @@ test("extract cast of characters with split-into-separate-files (dummy model)", 
   await expect(splitCheckbox).toBeChecked();
 
   // Click Extract Characters.
-  await page.getByRole("button", { name: /Extract Characters/i }).click();
+  await page.getByRole("button", { name: "Go", exact: true }).click();
 
   // Wait for processing to finish (look for non-cancel state) or until our debug logs arrive.
   await expect

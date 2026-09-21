@@ -147,6 +147,17 @@ export const estimateOutputImageTokens = (size: PixelSize): number => {
   return last.tokens;
 };
 
+/**
+ * Output tokens to assume for a run that redraws an existing picture in full
+ * (Improve Quality). OUTPUT_TOKENS_BY_SIZE was measured on
+ * generated palette strips, which are mostly flat; a picture full of detail
+ * bills for its detail, not its pixels. Measured 2026-09-20 on GPT Image 2.5
+ * Sunburst: a 400x400 line drawing restored at 1024x1024 billed 1756 output
+ * tokens ($0.053), a painting scaled to 1600x720 billed 833, and a book page
+ * at 1466x1700 about 1900. The table would have said 196 to 250.
+ */
+export const DETAILED_EDIT_OUTPUT_TOKENS = 1800;
+
 export interface ImageRunCostEstimate {
   inputImageTokens: number;
   promptTextTokens: number;
@@ -164,14 +175,17 @@ export const estimateImageRunCostUsd = (
   pricing: TokenPricing,
   inputImages: readonly PixelSize[],
   outputSize: PixelSize | null | undefined,
-  options?: { promptTextTokens?: number },
+  options?: { promptTextTokens?: number; minOutputTokens?: number },
 ): ImageRunCostEstimate => {
   const inputImageTokens = inputImages.reduce(
     (sum, image) => sum + estimateInputImageTokens(image),
     0,
   );
   const promptTextTokens = options?.promptTextTokens ?? PROMPT_TEXT_TOKEN_ALLOWANCE;
-  const outputTokens = estimateOutputImageTokens(outputSize ?? DEFAULT_OUTPUT_GUESS);
+  const outputTokens = Math.max(
+    estimateOutputImageTokens(outputSize ?? DEFAULT_OUTPUT_GUESS),
+    options?.minOutputTokens ?? 0,
+  );
   const inputUsd =
     (inputImageTokens * pricing.imageInputUsdPerMillion +
       promptTextTokens * pricing.textInputUsdPerMillion) /

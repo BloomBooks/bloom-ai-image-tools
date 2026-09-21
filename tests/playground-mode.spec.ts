@@ -35,7 +35,7 @@ test.describe("playground mode", () => {
     await page.getByText("Custom Edit", { exact: true }).click();
     await page.getByTestId("input-prompt").fill("brighten it");
 
-    const applyButton = page.getByRole("button", { name: "Apply Changes", exact: true });
+    const applyButton = page.getByRole("button", { name: "Go", exact: true });
     await expect(applyButton).toBeDisabled();
     await expect(applyButton).toHaveAttribute("title", "Not available in look-around mode");
   });
@@ -44,7 +44,7 @@ test.describe("playground mode", () => {
     await page.getByRole("button", { name: /Games/i }).click();
     await page.getByText("Remove Background", { exact: true }).click();
 
-    const runButton = page.getByRole("button", { name: /Remove Background|Apply Changes/i }).last();
+    const runButton = page.getByRole("button", { name: "Go", exact: true }).last();
     await expect(runButton).toBeDisabled();
     await expect(runButton).toHaveAttribute("title", "Not available in look-around mode");
   });

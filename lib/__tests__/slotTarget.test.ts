@@ -51,12 +51,11 @@ describe("which tools follow the image container", () => {
   it("includes the edit tools and the generation tools", () => {
     expect(toolCanFollowSlot(getTool("remove_object"))).toBe(true);
     expect(toolCanFollowSlot(getTool("generate_image"))).toBe(true);
-    expect(toolCanFollowSlot(getTool("coloring_book"))).toBe(true);
   });
 
   it("excludes the tools whose result is not the container's picture", () => {
-    // Upscale's Target Resolution has its own Match Container row.
-    expect(toolCanFollowSlot(getTool("upscale"))).toBe(false);
+    // Improve Quality's Size selector has its own Match Container row.
+    expect(toolCanFollowSlot(getTool("improve_quality"))).toBe(false);
     // Break-comic matches the page it cuts up.
     expect(toolCanFollowSlot(getTool("break_comic_into_images"))).toBe(false);
     // Sheets that are split afterwards, and a fixed-shape strip.
@@ -66,22 +65,22 @@ describe("which tools follow the image container", () => {
 });
 
 describe("resolveSlotTarget: shape", () => {
-  it("keeps an edit in its image's shape, covering the container", () => {
+  it("keeps an edit in its image's shape, fitted inside the container", () => {
     // An edit tool defaults to Match Image. The pixels are the image's shape
-    // scaled to cover the container, so Bloom loses nothing fitting it.
+    // scaled up until either edge meets the container's.
     const target = resolveFor(getTool("remove_object"), {}, { image: IMAGE });
     expect(target?.shapeSource).toBe("image");
     expect(target?.aspectRatio).toBe("4:3");
     expect(target?.targetDimensions).toEqual(resolveAutoTarget(IMAGE, CONTAINER));
-    expect(target?.targetDimensions.width).toBe(CONTAINER.width);
-    expect(target?.targetDimensions.height).toBeGreaterThan(CONTAINER.height);
+    expect(target?.targetDimensions.height).toBe(CONTAINER.height);
+    expect(target?.targetDimensions.width).toBeLessThan(CONTAINER.width);
     expect(target?.sizeSource).toBe("container");
     expect(target?.sizeToken).toBe("2k");
   });
 
   it("reshapes an edit to the container only when asked", () => {
     const target = resolveFor(
-      getTool("coloring_book"),
+      getTool("remove_object"),
       { aspectRatio: MATCH_CONTAINER_ASPECT_RATIO },
       { image: IMAGE },
     );
@@ -114,16 +113,16 @@ describe("resolveSlotTarget: shape", () => {
     expect(resolveFor(getTool("remove_object"), {}, { image: null })).toBeNull();
   });
 
-  it("picks the tier from the covering pixels, not the container's own", () => {
-    // A tall image covering a wide container needs far more than the
-    // container's long edge.
+  it("picks the tier from the fitted pixels, not the container's own", () => {
+    // A tall image fitted inside a wide container is bounded by the
+    // container's short edge, so it needs a smaller tier than the container.
     const target = resolveFor(
       getTool("remove_object"),
       {},
       { host: { width: 2048, height: 1024 }, image: { width: 300, height: 900 } },
     );
-    expect(target?.targetDimensions).toEqual({ width: 2048, height: 6144 });
-    expect(target?.sizeToken).toBe("4k");
+    expect(target?.targetDimensions).toEqual({ width: 341, height: 1024 });
+    expect(target?.sizeToken).toBe("1k");
   });
 
   it("keeps a fixed shape the user set, at the container's long edge", () => {
@@ -162,7 +161,11 @@ describe("resolveSlotTarget: size", () => {
   });
 
   it("scales an image's shape to a picked tier too", () => {
-    const target = resolveFor(getTool("coloring_book"), { size: "2k" }, { image: IMAGE });
+    const target = resolveFor(
+      getTool("generate_image"),
+      { size: "2k", aspectRatio: MATCH_IMAGE_ASPECT_RATIO },
+      { image: IMAGE },
+    );
     expect(target?.shapeSource).toBe("image");
     expect(target?.targetDimensions).toEqual({ width: 2048, height: 1536 });
   });

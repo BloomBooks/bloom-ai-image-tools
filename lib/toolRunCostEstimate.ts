@@ -1,12 +1,16 @@
 import type { ModelInfo, ToolDefinition, ToolParams } from "../types";
-import { estimateImageRunCostUsd, type ImageRunCostEstimate } from "./imageCostEstimate";
+import {
+  DETAILED_EDIT_OUTPUT_TOKENS,
+  estimateImageRunCostUsd,
+  type ImageRunCostEstimate,
+} from "./imageCostEstimate";
 import { MAX_REFERENCE_IMAGE_EDGE } from "./imageProcessing";
 import { planImageRequest, predictOutputPixels } from "./imageRequestPlan";
 import type { PixelSize } from "./imageSizes";
 import { canUseLocalDummyModelWithoutApiKey } from "./localModels";
 import { getTokenPricingForModel } from "./modelsCatalog";
 import { toolRequiresEditImage } from "./toolHelpers";
-import type { UpscaleHostTarget } from "./upscale";
+import { findTargetResolutionParam, type UpscaleHostTarget } from "./upscale";
 
 /**
  * What a run of a tool on a model is expected to cost, before it is made. A
@@ -92,6 +96,12 @@ export const estimateToolRunCostUsd = (input: ToolRunCostInput): ToolRunCostEsti
     ...(requiresEditImage ? [targetImageResolution ?? DEFAULT_UNKNOWN_INPUT_RESOLUTION] : []),
     ...referenceResolutions.map(referenceResolutionAsSent),
   ];
-  const detail = estimateImageRunCostUsd(tokenPricing, inputImages, outputPixels);
+  // A tool that redraws the whole picture bills for its detail, which the
+  // size table cannot see (see DETAILED_EDIT_OUTPUT_TOKENS).
+  const detail = estimateImageRunCostUsd(tokenPricing, inputImages, outputPixels, {
+    minOutputTokens: findTargetResolutionParam(tool.parameters)
+      ? DETAILED_EDIT_OUTPUT_TOKENS
+      : undefined,
+  });
   return { kind: "token", usd: detail.totalUsd, detail, outputPixels };
 };

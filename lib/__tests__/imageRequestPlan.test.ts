@@ -180,8 +180,8 @@ describe("planImageRequest", () => {
     expect(describeShapeRequest(unknown.plan, unknown.input)).toBeNull();
   });
 
-  it("takes Upscale's selector as the exact pixels and the smallest tier that covers them", () => {
-    const hd = planFor("upscale", {
+  it("takes Improve Quality's selector as the exact pixels and the smallest tier that covers them", () => {
+    const hd = planFor("improve_quality", {
       params: { targetResolution: "hd" },
       targetImageResolution: { width: 1000, height: 1500 },
     });
@@ -189,13 +189,18 @@ describe("planImageRequest", () => {
     expect(hd.plan.targetDimensions).toEqual({ width: 1080, height: 1620 });
     expect(hd.plan.requestedSize).toBe("2k");
 
-    const auto = planFor("upscale", {
-      params: { targetResolution: "auto" },
+    // Inside a container the selector's token is ignored: the plan asks for
+    // the container's pixels in the picture's shape.
+    const auto = planFor("improve_quality", {
+      params: { targetResolution: "hd" },
       targetImageResolution: { width: 1000, height: 1500 },
-      hostTarget: { width: 1200, height: 1800 },
+      hostTarget: { width: 1216, height: 1824 },
     });
-    expect(auto.plan.upscaleTarget).toEqual({ width: 1200, height: 1800 });
+    expect(auto.plan.scaleUp?.state).toBe("to-page");
+    expect(auto.plan.upscaleTarget).toEqual({ width: 1216, height: 1824 });
+    expect(auto.plan.targetDimensions).toEqual({ width: 1216, height: 1824 });
     expect(auto.plan.requestedSize).toBe("2k");
+    expect(hd.plan.scaleUp?.state).toBe("no-container");
   });
 
   it("sizes break-comic's output from its input so a page is not downscaled", () => {

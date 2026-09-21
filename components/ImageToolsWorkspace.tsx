@@ -87,6 +87,14 @@ import {
   prepareImageBlob,
 } from "../lib/imageUtils";
 import {
+  detectImageKind,
+  IMAGE_KIND_FROM_USER_PARAM,
+  IMAGE_KIND_PARAM,
+  imageKindOption,
+  majorityImageKind,
+  type ImageKind,
+} from "../lib/imageKind";
+import {
   getReferenceConstraints,
   getToolReferenceMode,
   toolSupportsBatch,
@@ -320,8 +328,6 @@ const replaceBookImageStripItem = (
   return nextIds;
 };
 
-type PreviewDialogLayout = "row" | "book-pairs";
-
 const buildRecoveredHistoryEntry = (entry: {
   id: string;
   fileName: string;
@@ -495,6 +501,7 @@ function ImageToolsWorkspaceInner({
 
   const [paramsByTool, setParamsByTool] = useState<ToolParamsById>(() => createToolParamDefaults());
   const [selectedArtStyleId, setSelectedArtStyleId] = useState<string | null>(null);
+
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [authMethod, setAuthMethod] = useState<"oauth" | "manual" | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -541,7 +548,12 @@ function ImageToolsWorkspaceInner({
   // target, so clearing all ticks needs no "restore" logic — the previously
   // loaded target image is simply still there, unmodified.
   const [batchTickedIds, setBatchTickedIds] = useState<Set<string>>(() => new Set());
-  const [previewDialogLayout, setPreviewDialogLayout] = useState<PreviewDialogLayout>("row");
+  // The gallery on the book-images strip shows a column per page, headed by the
+  // page label, with the chosen replacement under the picture that is in the
+  // book now. Every other strip shows its images flat.
+  const [previewDialogShowsBookPages, setPreviewDialogShowsBookPages] = useState(false);
+  // Each group is one gallery entry: for a book page, the page's current image
+  // followed by the replacement chosen for it, if any.
   const [previewDialogImageIdGroups, setPreviewDialogImageIdGroups] = useState<string[][]>([]);
   const [visibleStripItemIdsByStrip, setVisibleStripItemIdsByStrip] = useState<
     Record<ThumbnailStripId, string[]>
@@ -704,9 +716,9 @@ function ImageToolsWorkspaceInner({
 
   // A book image arrives as a host-served URL, so neither its pixel size nor
   // its file format is known until the bytes are fetched. Both are needed
-  // before any run — the Upscale selector labels its HD/2K/4K options from the
-  // pixel size, and "Remove fuzziness" defaults on for a JPEG source — so
-  // back-fill them onto the record as soon as an image lands in the panel.
+  // before any run — Improve Quality plans its request from the pixel size,
+  // and the info panel's Format row reads the format — so back-fill them onto
+  // the record as soon as an image lands in the panel.
   const targetImageNeedingMetadata = (() => {
     if (!state.targetImageId) return null;
     const target = state.history.find((item) => item.id === state.targetImageId);
@@ -742,6 +754,94 @@ function ImageToolsWorkspaceInner({
       cancelled = true;
     };
   }, [targetImageIdForMetadata]);
+
+  // The kind detector (lib/imageKind.ts) sets the Image Kind choice on every
+  // tool that has one, once per target image: the user's own choice then
+  // stands until they switch images.
+  const targetForKind = (() => {
+    if (!state.targetImageId) return null;
+    const target = state.history.find((item) => item.id === state.targetImageId);
+    if (!target || target.isEmptyBookSlot || !target.imageData) return null;
+    return target;
+  })();
+  const targetImageIdForKind = targetForKind?.id ?? null;
+  const targetImageDataForKind = targetForKind?.imageData ?? null;
+  const kindAppliedForImageIdRef = useRef<string | null>(null);
+  // True once the user has picked the Image Kind themselves. The run path
+  // treats their pick as covering every image of a batch, where a guess is
+  // re-checked per image (see resolveImageKind in lib/imageKind.ts).
+  const imageKindChosenByUserRef = useRef(false);
+  // Put a guessed kind on every tool that has the parameter. A guess replaces
+  // an earlier guess; the user's pick takes over from it until the next guess.
+  const applyImageKindGuess = useCallback((option: string) => {
+    imageKindChosenByUserRef.current = false;
+    setParamsByTool((prev) => {
+      let next = prev;
+      TOOLS.forEach((tool) => {
+        if (!tool.parameters.some((param) => param.name === IMAGE_KIND_PARAM)) return;
+        if (next[tool.id]?.[IMAGE_KIND_PARAM] === option) return;
+        next = { ...next, [tool.id]: { ...next[tool.id], [IMAGE_KIND_PARAM]: option } };
+      });
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!targetImageIdForKind || !targetImageDataForKind) return;
+    if (kindAppliedForImageIdRef.current === targetImageIdForKind) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const kind = await detectImageKind(await ensureDataUrl(targetImageDataForKind));
+        if (cancelled || !kind) return;
+        kindAppliedForImageIdRef.current = targetImageIdForKind;
+        applyImageKindGuess(imageKindOption(kind));
+      } catch {
+        // A source we cannot read keeps the choice as it is.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetImageIdForKind, targetImageDataForKind, applyImageKindGuess]);
+
+  // A batch runs over the ticked images rather than the one in the panel, so
+  // the choice shown for it is what most of the ticked images are.
+  const tickedIdsForKind = useMemo(
+    () => bookImageSlotIds.filter((id) => batchTickedIds.has(id)),
+    [bookImageSlotIds, batchTickedIds],
+  );
+  const kindAppliedForTicksRef = useRef<string | null>(null);
+  useEffect(() => {
+    const ticksKey = tickedIdsForKind.join(",");
+    if (!tickedIdsForKind.length) {
+      kindAppliedForTicksRef.current = null;
+      imageKindChosenByUserRef.current = false;
+      return;
+    }
+    if (kindAppliedForTicksRef.current === ticksKey) return;
+    kindAppliedForTicksRef.current = ticksKey;
+    if (imageKindChosenByUserRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const kinds: ImageKind[] = [];
+      for (const id of tickedIdsForKind) {
+        const record = stateRef.current.history.find((item) => item.id === id);
+        if (!record || record.isEmptyBookSlot || !record.imageData) continue;
+        try {
+          const kind = await detectImageKind(await ensureDataUrl(record.imageData));
+          if (cancelled) return;
+          if (kind) kinds.push(kind);
+        } catch {
+          // An image we cannot read does not get a vote.
+        }
+      }
+      if (cancelled || !kinds.length) return;
+      applyImageKindGuess(imageKindOption(majorityImageKind(kinds)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tickedIdsForKind, applyImageKindGuess]);
 
   const handleToggleBatchTick = useCallback(
     (incomingId: string) => {
@@ -844,9 +944,13 @@ function ImageToolsWorkspaceInner({
           images: group
             .map((id) => historyItemsById[id])
             .filter((item): item is ImageRecord => Boolean(item)),
+          // A group that starts at a book slot is that page's column. Anything
+          // else in the same gallery (a result with no slot to go back to) keeps
+          // the flat presentation.
+          isBookPage: previewDialogShowsBookPages && bookImageSlotIds.includes(group[0]),
         }))
         .filter((item) => item.images.length > 0),
-    [historyItemsById, previewDialogImageIdGroups],
+    [bookImageSlotIds, historyItemsById, previewDialogImageIdGroups, previewDialogShowsBookPages],
   );
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
@@ -2509,7 +2613,17 @@ function ImageToolsWorkspaceInner({
       }
     };
     try {
-      const result = await runToolOnImage(args);
+      // Whether the Image Kind choice is the user's own decides whether the run
+      // re-checks each image's pixels (see resolveImageKind in lib/imageKind.ts).
+      // It travels beside the declared parameters, which are what the stored
+      // record keeps.
+      const result = await runToolOnImage({
+        ...args,
+        params: {
+          ...args.params,
+          [IMAGE_KIND_FROM_USER_PARAM]: imageKindChosenByUserRef.current ? "true" : "false",
+        },
+      });
       report({
         result: "success",
         attemptNumber: ++generationAttemptCountRef.current,
@@ -3528,6 +3642,11 @@ function ImageToolsWorkspaceInner({
   };
 
   const handleParamChange = useCallback((toolId: string, paramName: string, value: string) => {
+    // The Image Kind choice stops being a guess the moment the user sets it,
+    // and from then on it covers every image a batch runs over.
+    if (paramName === IMAGE_KIND_PARAM) {
+      imageKindChosenByUserRef.current = true;
+    }
     setParamsByTool((prev) => ({
       ...prev,
       [toolId]: {
@@ -3994,7 +4113,7 @@ function ImageToolsWorkspaceInner({
       }
 
       if (stripId === "bookImages") {
-        setPreviewDialogLayout("book-pairs");
+        setPreviewDialogShowsBookPages(true);
         setPreviewDialogImageIdGroups(
           itemIds.map((incomingId) => {
             const replacementId = replacementImageIdByIncomingId[incomingId];
@@ -4004,7 +4123,7 @@ function ImageToolsWorkspaceInner({
         return;
       }
 
-      setPreviewDialogLayout("row");
+      setPreviewDialogShowsBookPages(false);
       setPreviewDialogImageIdGroups(itemIds.map((id) => [id]));
     },
     [replacementImageIdByIncomingId],
@@ -4661,6 +4780,7 @@ function ImageToolsWorkspaceInner({
             onToolQualityChange={handleToolQualityChange}
             targetImage={batchTickedIds.size > 0 ? null : targetImage}
             slotSuggestedTarget={batchTickedIds.size > 0 ? null : slotSuggestedTarget}
+            hostedByBloom={bookImagesStripMode === "host"}
             batchSelectionMessage={batchSelectionMessage}
             batchSelection={batchSelection}
             launchedBookImageId={selectedBookImageId ?? null}
@@ -4749,7 +4869,6 @@ function ImageToolsWorkspaceInner({
         <ImagePreviewDialog
           open={previewDialogItems.length > 0}
           items={previewDialogItems}
-          layout={previewDialogLayout}
           resolveSourceImage={(image) =>
             image.parentId ? (historyItemsById[image.parentId] ?? null) : null
           }

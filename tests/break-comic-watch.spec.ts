@@ -42,7 +42,7 @@ test("watch break-comic end to end (browser stays open)", async ({ page }) => {
   await page.getByTestId("target-upload-input").setInputFiles(POSTER);
   await expect(page.getByTestId("target-panel").locator('img[alt="Original Comic"]')).toBeVisible();
 
-  await page.getByRole("button", { name: /Break into Images/i }).click();
+  await page.getByRole("button", { name: "Go", exact: true }).click();
 
   await expect
     .poll(

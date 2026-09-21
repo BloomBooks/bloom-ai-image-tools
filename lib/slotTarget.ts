@@ -78,7 +78,7 @@ export const pickedSizeTier = (value: string | null | undefined): string | null 
 
 /**
  * Whether a tool's result is the kind of picture that belongs in the container.
- * The exceptions each make something else: Upscale's Target Resolution has
+ * The exceptions each make something else: a target-resolution parameter has
  * its own Match Container row built on the same host target; break-comic
  * matches the page it is cutting
  * up; the sheet tools (cast, game pieces, GIF frames) make a sheet that is
@@ -119,8 +119,8 @@ const fitShapeToLongEdge = (shape: PixelSize, longEdge: number): PixelSize => {
  * something other than the container's picture.
  *
  * Shape: MATCH_CONTAINER is the container's own pixels. MATCH_IMAGE is the
- * existing image's shape, covering the container so nothing is lost when Bloom
- * fits it. For a picture made from nothing (a tool with no image to edit) it
+ * existing image's shape, scaled up until either edge meets the container's,
+ * so the shape is kept exactly. For a picture made from nothing (a tool with no image to edit) it
  * is the container's. For an edit whose image size is not known yet there is
  * no shape to keep, so the run does not follow the container at all (null)
  * rather than reframe the picture to it; the caller falls back to the image's
@@ -188,8 +188,8 @@ export const resolveSlotTarget = (args: {
     };
   }
   if (shapeSource === "image") {
-    // The image's shape scaled to cover the container can have a longer edge
-    // than the container's own, so the tier is picked from those pixels.
+    // The image's shape fitted inside the container can have a shorter long
+    // edge than the container's own, so the tier is picked from those pixels.
     const targetDimensions = resolveAutoTarget(image, container) ?? container;
     return {
       sizeToken: pickSizeTokenForLongEdge(

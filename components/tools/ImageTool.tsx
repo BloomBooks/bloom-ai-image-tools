@@ -14,6 +14,7 @@ import {
   Skeleton,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
@@ -45,6 +46,7 @@ import {
 } from "../../lib/toolHelpers";
 import {
   getModelInfoById,
+  getPixelSizeLimitsForModel,
   getSizeOptionsForModel,
   getSizeTokenOptionsForModel,
   resolveToolModelId,
@@ -68,12 +70,7 @@ import {
   pickedSizeTier,
   toolCanFollowSlot,
 } from "../../lib/slotTarget";
-import {
-  buildUpscaleOptions,
-  CONTAINER_UPSCALE_TOKEN,
-  findTargetResolutionParam,
-  type UpscaleHostTarget,
-} from "../../lib/upscale";
+import { buildUpscaleOptions, planScaleUp, type UpscaleHostTarget } from "../../lib/upscale";
 import { ToolModelPicker } from "./ToolModelPicker";
 import { formatCost } from "../../lib/formatters";
 import { getHighContrastScrollbarStyles, theme } from "../../themes";
@@ -153,17 +150,15 @@ interface ToolPanelProps {
   referenceImageResolutions: (PixelSize | null)[];
   hasTargetImage: boolean;
   targetImageResolution?: { width: number; height: number } | null;
-  /** Identity of the image in the "Image to Edit" panel. The JPEG default for
-   *  "Remove fuzziness" is re-derived once per image, keyed on this. */
-  targetImageId?: string | null;
-  /** MIME type the target image arrived as, when known. */
-  targetImageMime?: string | null;
   /** The resolution the host says the image container wants: the target
    *  image's container, or the empty one the editor was launched on when there
    *  is no image to edit. It is the Match Container row of the Size and Target
    *  Resolution menus and the size a container-following run asks for
    *  (lib/slotTarget.ts). */
   targetImageSuggestedTarget?: UpscaleHostTarget | null;
+  /** True when Bloom launched the editor on a book: every image then has a
+   *  page container that decides its size, so the Size menu never shows. */
+  hostedByBloom?: boolean;
   isAuthenticated: boolean;
   /** Look-around mode: the tools are all on show, but none of them can be run. */
   playgroundMode?: boolean;
@@ -477,8 +472,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   referenceImageResolutions,
   hasTargetImage,
   targetImageResolution,
-  targetImageId,
-  targetImageMime,
   targetImageSuggestedTarget,
   isAuthenticated,
   playgroundMode = false,
@@ -495,6 +488,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
   selectedArtStyleId,
   onArtStyleChange,
   batchTickedCount = 0,
+  hostedByBloom = false,
   batchTargets,
   batchRun = null,
 }) => {
@@ -605,25 +599,6 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
     },
     [onParamChange],
   );
-
-  // "Remove fuzziness" defaults on for a JPEG source (JPEG is where the
-  // artifacts come from) and off for anything else. Derived once per target
-  // image, so a user's own toggle stands until they switch images. An undefined
-  // mime means "not determined yet" (a book image's bytes are still being
-  // fetched), which must not be read as "not a JPEG".
-  const fuzzinessDefaultAppliedForImageIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!targetImageId || targetImageMime === undefined) return;
-    if (fuzzinessDefaultAppliedForImageIdRef.current === targetImageId) return;
-    fuzzinessDefaultAppliedForImageIdRef.current = targetImageId;
-
-    const nextValue = String(targetImageMime === "image/jpeg");
-    TOOLS.forEach((tool) => {
-      if (!findTargetResolutionParam(tool.parameters)) return;
-      if (!tool.parameters.some((param) => param.name === "removeFuzziness")) return;
-      onParamChange(tool.id, "removeFuzziness", nextValue);
-    });
-  }, [targetImageId, targetImageMime, onParamChange]);
 
   const defaultTools = useMemo(
     () => TOOLS.filter((tool) => (tool.group ?? "default") === "default"),
@@ -798,7 +773,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
         // named ratio a ratio-only model will get, planned the same way the
         // run is. A tool may limit the fixed ratios
         // it offers through the parameter's options; an empty list means the
-        // two rules only (Upscale).
+        // two rules only.
         const supportedAspectRatios = toolModel?.supportedAspectRatios;
         const toolParams = paramsByTool[tool.id] ?? {};
         const requiresEditImage = toolRequiresEditImage(tool);
@@ -998,43 +973,88 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       }
 
       if (param.type === "target-resolution") {
-        // Each row is labeled with the pixels the selected model will be sent
-        // for it, in the image's own shape: a pixel-size model has an edge cap
-        // and a pixel budget, so its "4K" reads the size inside them, not
-        // 4096. Nothing is printed under the control; the host's memo about
-        // the container rides on the Container row as a tooltip.
-        const options = buildUpscaleOptions(
+        // Inside a container there is nothing to choose: the picture keeps its
+        // shape and gets the container's pixels, so no control shows. The one
+        // exception gets a line: the model cannot reach the page's size. The
+        // pixels and the host's memo about the container ride on it as a
+        // tooltip. Every sentence here is one more for translators, so the
+        // ordinary case says nothing.
+        const scaleUp = planScaleUp(
           targetImageResolution,
           targetImageSuggestedTarget,
-          (dimensions) => snapPixelsForModel(toolModel?.id, dimensions),
+          getPixelSizeLimitsForModel(toolModel?.id),
         );
-        // The stored token can name an option this image doesn't offer (a slot
-        // with no host target, after one that had it), so fall back to the
+        if (scaleUp.state === "already-enough" || scaleUp.state === "to-page") {
+          return null;
+        }
+        // A batch run plans each image against its own container, so the
+        // card has nothing to show or choose.
+        if (batchTickedCount > 0) {
+          return null;
+        }
+        if (scaleUp.state === "model-limit") {
+          const container = targetImageSuggestedTarget!;
+          const text = l10n(
+            "AiImageEditor.ScaleUp.ModelLimit",
+            "Scale up as far as this model can, about {0}% of the size this page needs.",
+            String(scaleUp.percent),
+          );
+          const tooltip = [
+            l10n(
+              "AiImageEditor.Shape.MatchContainerTooltip",
+              "Image container on the page is {0} x {1}",
+              String(container.width),
+              String(container.height),
+            ),
+            container.memo?.trim(),
+          ]
+            .filter(Boolean)
+            .join(". ");
+          return (
+            <Tooltip key={param.name} title={tooltip} placement="top" enterDelay={400}>
+              <Typography
+                variant="body2"
+                data-testid="scale-up-status"
+                data-state={scaleUp.state}
+                sx={{ color: theme.colors.textSecondary }}
+              >
+                {text}
+              </Typography>
+            </Tooltip>
+          );
+        }
+
+        // Inside Bloom a page container decides the size, so the menu never
+        // shows, even for a book image that arrived without one. Standalone,
+        // with nothing to scale up yet, the rows would carry no pixels, so
+        // there is nothing to choose between until an image is loaded.
+        if (hostedByBloom || !hasTargetImage) {
+          return null;
+        }
+        // Standalone, the tiers are the only way to say how big. Each row is
+        // labeled with the pixels the selected model will be sent for it, in
+        // the image's own shape: a pixel-size model has an edge cap and a pixel
+        // budget, so its "4K" reads the size inside them, not 4096.
+        const options = buildUpscaleOptions(targetImageResolution, null, (dimensions) =>
+          snapPixelsForModel(toolModel?.id, dimensions),
+        );
+        // The stored token can name an option this image doesn't offer (the
+        // container token, after a slot that had one), so fall back to the
         // first option rather than showing an empty select.
         const selectedToken = options.some((option) => option.token === value)
           ? value
           : options[0]?.token || "hd";
-        const memo = targetImageSuggestedTarget?.memo?.trim();
         return (
           <OptionSelect
             key={param.name}
             label={toolParameterLabel(l10n, tool, param)}
             value={selectedToken}
             onChange={(newValue) => handleParamChange(tool.id, param.name, newValue)}
-            // With nothing to upscale the labels carry no dimensions, so there
-            // is nothing to choose between yet. Batch ticks stand in for a
-            // target image, same as the run button's own gate.
-            disabled={isProcessing || (!hasTargetImage && batchTickedCount === 0)}
+            disabled={isProcessing}
             options={options.map((option) => ({
               value: option.token,
-              // buildUpscaleOptions works in plain English so it stays testable without
-              // a React context; the one row with a word in it is translated here.
-              label:
-                option.token === CONTAINER_UPSCALE_TOKEN
-                  ? l10n("AiImageEditor.Shape.MatchContainer", "Match Container")
-                  : option.label,
+              label: option.label,
               caption: option.caption,
-              tooltip: option.token === CONTAINER_UPSCALE_TOKEN && memo ? memo : undefined,
             }))}
             inputTestId={inputTestId}
           />
@@ -1190,21 +1210,11 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
       requiresDescriptionOrReference ||
       missingRequired;
 
-    // "Make Coloring Page for 7 Images" when the tool has its own verb, else
-    // the generic "Apply Changes to N Images" (see Agreed UX / WP3 notes).
-    const batchActionLabel = toolActionButtonLabel(l10n, tool);
-    const batchButtonLabel = batchActionLabel
-      ? l10n(
-          "AiImageEditor.Run.BatchToolButton",
-          "{0} for {1} Images",
-          batchActionLabel,
-          String(batchTickedCount),
-        )
-      : l10n(
-          "AiImageEditor.Run.BatchApplyChanges",
-          "Apply Changes to {0} Images",
-          String(batchTickedCount),
-        );
+    // One verb for every tool, with the count when it is a batch.
+    const batchButtonLabel =
+      batchTickedCount === 1
+        ? l10n("AiImageEditor.Run.BatchGoOne", "Go (1 Image)")
+        : l10n("AiImageEditor.Run.BatchGo", "Go ({0} Images)", String(batchTickedCount));
     // Batch: each ticked image priced at its own size, then summed. A tick with
     // no target details yet (the array is shorter than the count) is priced as
     // an image of unknown size. Single run: the one image to edit, if any.
@@ -1545,9 +1555,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
                         <>
                           <span>
                             {toolActionButtonLabel(l10n, tool) ||
-                              (tool.id === "generate_image"
-                                ? l10n("AiImageEditor.Run.GenerateImage", "Generate Image")
-                                : l10n("AiImageEditor.Run.ApplyChanges", "Apply Changes"))}
+                              l10n("AiImageEditor.Run.Go", "Go")}
                           </span>
                           <Icon path={Icons.ArrowRight} style={{ width: 18, height: 18 }} />
                         </>

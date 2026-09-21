@@ -169,7 +169,7 @@ test.describe("Bloom host harness", () => {
     // The Create an Image tool is the active one: its card only shows its action button
     // while it is selected, and the "More" group opens to reveal it.
     const createTool = page.locator('[data-tool-id="generate_image"]');
-    await expect(createTool.getByRole("button", { name: "Generate Image" })).toBeVisible();
+    await expect(createTool.getByRole("button", { name: "Go", exact: true })).toBeVisible();
 
     // A "create" tool has no target panel at all, so the empty slot went nowhere near
     // "Image to Edit". The preceding test proves the panel does appear on a normal
@@ -227,7 +227,7 @@ test.describe("Bloom host harness", () => {
     await page.keyboard.press("Escape");
 
     await page.getByTestId("input-prompt").fill("Add a dummy banner");
-    await page.getByRole("button", { name: /Apply Changes/i }).click();
+    await page.getByRole("button", { name: "Go", exact: true }).click();
 
     // The result lands assigned to the launched-on slot; commit just it.
     const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
@@ -257,7 +257,7 @@ test.describe("Bloom host harness", () => {
     await page.keyboard.press("Escape");
 
     await page.getByTestId("input-prompt").fill("Add a dummy banner");
-    await page.getByRole("button", { name: /Apply Changes/i }).click();
+    await page.getByRole("button", { name: "Go", exact: true }).click();
 
     // The save runs within a second of the result landing, so the base64 phase is too
     // brief to assert on; the URL it settles at is the point.
@@ -290,7 +290,7 @@ test.describe("Bloom host harness", () => {
     await page.keyboard.press("Escape");
 
     await page.getByTestId("input-prompt").fill("A dummy picture for the empty slot");
-    await page.getByRole("button", { name: /Generate Image/i }).click();
+    await page.getByRole("button", { name: "Go", exact: true }).click();
 
     const commitCurrentButton = page.getByTestId("bloom-host-commit-current-result");
     await expect(commitCurrentButton).toBeVisible({ timeout: 30_000 });

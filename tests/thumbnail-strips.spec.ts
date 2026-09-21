@@ -501,11 +501,15 @@ test.describe("thumbnail strips", () => {
     await page.getByTestId("thumbnail-strip-expand-bookImages").click();
 
     const previewDialog = page.getByTestId("image-preview-dialog");
-    const firstPreviewItem = page.getByTestId("image-preview-dialog-item-0");
+    // The gallery gives each book page a column, in book order, so the first
+    // column is the pair that was just made: the picture in the book now above
+    // the replacement dropped onto it.
+    const firstPageColumn = page.locator('[data-testid^="image-preview-dialog-column-"]').first();
     await expect(previewDialog).toBeVisible();
-    await expect(firstPreviewItem.locator("img")).toHaveCount(2);
-    await expect(firstPreviewItem.locator("img").nth(0)).toHaveAttribute("src", currentSrc ?? "");
-    await expect(firstPreviewItem.locator("img").nth(1)).toHaveAttribute(
+    await expect(firstPageColumn).toHaveAttribute("data-replacing", "true");
+    await expect(firstPageColumn.locator("img")).toHaveCount(2);
+    await expect(firstPageColumn.locator("img").nth(0)).toHaveAttribute("src", currentSrc ?? "");
+    await expect(firstPageColumn.locator("img").nth(1)).toHaveAttribute(
       "src",
       replacementSrc ?? "",
     );

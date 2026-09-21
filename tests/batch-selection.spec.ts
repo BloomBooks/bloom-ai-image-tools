@@ -52,7 +52,7 @@ test.describe("batch selection UI", () => {
 
     // Before any ticks: the normal single-image button and the launched-on
     // target image (book-image-3 / paper-cut) are showing.
-    await expect(page.getByRole("button", { name: "Apply Changes", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
     const targetImg = page.getByTestId("target-panel").locator("img").first();
     await expect(targetImg).toHaveAttribute("src", /paper-cut/);
 
@@ -62,7 +62,7 @@ test.describe("batch selection UI", () => {
     // Custom Edit has no custom actionButtonLabel, so the generic wording applies.
     await expect(
       page.getByRole("button", {
-        name: "Apply Changes to 2 Images",
+        name: "Go (2 Images)",
         exact: true,
       }),
     ).toBeVisible();
@@ -76,7 +76,7 @@ test.describe("batch selection UI", () => {
     await batchTickCheckbox(page, "book-image-1").click();
     await batchTickCheckbox(page, "book-image-2").click();
 
-    await expect(page.getByRole("button", { name: "Apply Changes", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
     await expect(page.getByTestId("target-panel").locator("img").first()).toHaveAttribute(
       "src",
       /paper-cut/,
@@ -100,7 +100,7 @@ test.describe("batch selection UI", () => {
     await expect(selectAll).toBeChecked();
     await expect(
       page.getByRole("button", {
-        name: "Apply Changes to 4 Images",
+        name: "Go (4 Images)",
         exact: true,
       }),
     ).toBeVisible();
@@ -109,7 +109,7 @@ test.describe("batch selection UI", () => {
     await selectAll.click();
     await expect(selectAll).not.toBeChecked();
     await expect(batchTickCheckbox(page, "book-image-1")).not.toBeChecked();
-    await expect(page.getByRole("button", { name: "Apply Changes", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Go", exact: true })).toBeVisible();
   });
 
   test("unticking one image unchecks the select-all control", async ({ page }) => {

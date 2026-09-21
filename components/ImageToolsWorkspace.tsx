@@ -87,7 +87,6 @@ import {
   buildAcceptEventProperties,
   buildBatchRunEventProperties,
   buildGenerateEventProperties,
-  CLOSE_EVENT,
   GENERATE_EVENT,
   OPEN_EVENT,
 } from "../lib/analyticsEvents";
@@ -451,11 +450,6 @@ export interface ImageToolsWorkspaceProps {
    *  on to Segment). Optional: with no host to tell, nothing is recorded and nothing breaks.
    *  Never pass prompt text or anything else the user typed -- see IBloomHostControl. */
   onTrackEvent?: (event: string, properties?: Record<string, string | number | boolean>) => void;
-  /** Hands the host adapter the function that reports the end of this editing session,
-   *  for it to call when the session ends. The adapter owns every exit (the host asking
-   *  us to close, Cancel, a commit) while the editor owns the numbers that go in the
-   *  event, so the two meet here. Calling it more than once reports nothing extra. */
-  onSessionCloseReporter?: (report: (outcome: "committed" | "cancelled") => void) => void;
   /** Called once at mount with all editor string IDs and their English defaults.
    *  Should return a dictionary of translated strings for the current UI language.
    *  Missing keys fall back to the English defaults. */
@@ -495,7 +489,6 @@ function ImageToolsWorkspaceInner({
   thumbnailStripConfigOverrides,
   onModalOpenChange,
   onTrackEvent,
-  onSessionCloseReporter,
 }: ImageToolsWorkspaceProps) {
   // Rebuilds the MUI theme from the current brand override (set by the dev Theme
   // Tuner) so primary-colored UI and brand-tinted text re-skin from one color.
@@ -2624,13 +2617,6 @@ function ImageToolsWorkspaceInner({
   // telling us something about output quality that a plain total never would. Attempts stopped
   // before anything was sent (no API key) deliberately do not consume a number.
   const generationAttemptCountRef = useRef(0);
-  // How many images the user put into the book this session, and when the session began:
-  // both are reported once, by the close event.
-  const imagesCommittedCountRef = useRef(0);
-  const sessionStartedAtMsRef = useRef(Date.now());
-  // Close is one per session however the session ends (the host asking us to close, the
-  // Cancel button, or a commit, which closes the editor in Bloom).
-  const closeEventSentRef = useRef(false);
   // Which tool the editor opened on, captured as it is decided rather than read back from
   // state: the auto-select effect below sets it during the same commit the open event is
   // reported in, so the rendered value is still the previous one at that point.
@@ -4550,11 +4536,14 @@ function ImageToolsWorkspaceInner({
    * middle of an edit chain and not just its last step.
    */
   const reportAcceptedImages = useCallback(
-    (entries: Array<{ slotId: string; item: ImageRecord }>, batch: boolean) => {
+    (entries: Array<{ slotId: string; item: ImageRecord }>) => {
       if (!entries.length) {
         return;
       }
       const nowMs = Date.now();
+      // The same number on every event of this commit, so one commit of three pictures is
+      // distinguishable from three commits of one.
+      const acceptedCount = entries.length;
       entries.forEach(({ slotId, item }) => {
         buildAcceptEventProperties({
           committed: item,
@@ -4562,43 +4551,14 @@ function ImageToolsWorkspaceInner({
           slotId,
           launchedBookImageId: selectedBookImageId ?? null,
           bookImageSlotIds,
-          batch,
+          acceptedCount,
           targetSlotEmpty: isEmptyTargetSlot(slotId),
           nowMs,
         }).forEach((properties) => trackEvent(ACCEPT_EVENT, properties));
       });
-      imagesCommittedCountRef.current += entries.length;
     },
     [bookImageSlotIds, historyItemsById, isEmptyTargetSlot, selectedBookImageId, trackEvent],
   );
-
-  /**
-   * The end of one editing session, reported once however it ended. The host adapter
-   * calls this, because it is the only side that sees every way out: the host asking us
-   * to close, the Cancel button, and a commit (which closes the editor in Bloom).
-   */
-  const reportSessionClose = useCallback(
-    (outcome: "committed" | "cancelled") => {
-      if (closeEventSentRef.current) {
-        return;
-      }
-      closeEventSentRef.current = true;
-      trackEvent(CLOSE_EVENT, {
-        outcome,
-        imagesCommitted: imagesCommittedCountRef.current,
-        generateAttempts: generationAttemptCountRef.current,
-        durationSeconds: Math.max(
-          0,
-          Math.round((Date.now() - sessionStartedAtMsRef.current) / 1000),
-        ),
-      });
-    },
-    [trackEvent],
-  );
-
-  useEffect(() => {
-    onSessionCloseReporter?.(reportSessionClose);
-  }, [onSessionCloseReporter, reportSessionClose]);
 
   // The editor has finished starting up once its state is hydrated and the launch slot
   // has been honored, which is also when the tool it opens on is settled.
@@ -4638,7 +4598,7 @@ function ImageToolsWorkspaceInner({
     const entries = Object.entries(replacementItemsByIncomingId)
       .filter(([, item]) => Boolean(item?.imageData))
       .map(([slotId, item]) => ({ slotId, item: item as ImageRecord }));
-    reportAcceptedImages(entries, true);
+    reportAcceptedImages(entries);
     onCommitBookImages();
   }, [onCommitBookImages, replacementItemsByIncomingId, reportAcceptedImages]);
 
@@ -4648,10 +4608,7 @@ function ImageToolsWorkspaceInner({
         return;
       }
 
-      reportAcceptedImages(
-        [{ slotId: currentResultItem.incomingSlotId, item: currentResultItem }],
-        false,
-      );
+      reportAcceptedImages([{ slotId: currentResultItem.incomingSlotId, item: currentResultItem }]);
       onCommitCurrentResult(currentResultItem);
       return;
     }

@@ -65,13 +65,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   // double-invocations of the effect, which would cause Bloom to send multiple
   // init messages.
   const readySentRef = React.useRef(false);
-  // The editor's own "this session has ended" reporter, handed to us on mount. It holds
-  // the session's numbers (images committed, generation attempts, how long it lasted);
-  // we hold every way the session can end, so we are the side that calls it. It reports
-  // only the first call, so calling it on a path that also commits is safe.
-  const reportSessionCloseRef = React.useRef<((outcome: "committed" | "cancelled") => void) | null>(
-    null,
-  );
 
   const buildInitSignature = React.useCallback((payload: IBloomHostInitPayload) => {
     const imageSignature = payload.bookImages.map((image) => `${image.id}:${image.src}`).join("|");
@@ -94,7 +87,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
       //setStatus(`Connected to ${payload.book.title}`);
     });
     const unsubscribeRequestClose = bridge.onRequestClose(() => {
-      reportSessionCloseRef.current?.("cancelled");
       bridge.cancel();
       onCancelComplete?.();
       setStatus("Host requested close. Sent cancel.");
@@ -211,9 +203,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
           return;
         }
         await bridge.commit([replacement]);
-        // Bloom closes the editor once a commit lands (App.tsx cancels the overlay from
-        // onCommitComplete), so a successful commit is also the end of the session.
-        reportSessionCloseRef.current?.("committed");
         onCommitComplete?.([replacement]);
         setStatus(l10n("AiImageEditor.Host.CommittedOne", "Committed 1 replacement."));
       } catch (error) {
@@ -244,7 +233,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
     );
     try {
       await handleCommit();
-      reportSessionCloseRef.current?.("committed");
       setStatus(l10n("AiImageEditor.Host.Committed", "Committed {0} replacements.", String(count)));
     } catch (error) {
       setStatus(
@@ -256,7 +244,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   }, [collectAssignedEntries, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
-    reportSessionCloseRef.current?.("cancelled");
     bridge.cancel();
     onCancelComplete?.();
     setStatus(l10n("AiImageEditor.Host.Cancelled", "Cancelled."));
@@ -314,9 +301,6 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
         onCredentialsChange={(creds) => bridge.saveCredentials(creds)}
         onTrackEvent={(event, properties) => bridge.trackEvent(event, properties)}
         onModalOpenChange={(open) => bridge.setModalOpen(open)}
-        onSessionCloseReporter={(report) => {
-          reportSessionCloseRef.current = report;
-        }}
         bookImages={hostBookImages}
         bookImageUrls={hostBookImageUrls}
         bookImagesStripMode="host"

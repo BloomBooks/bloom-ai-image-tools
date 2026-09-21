@@ -65,20 +65,19 @@ test.describe("analytics events", () => {
     });
   });
 
-  test("reports the editor opening, and closing again with nothing committed", async ({ page }) => {
+  test("reports the editor opening, and reports no session end of its own", async ({ page }) => {
     await expectEventCount(page, "AI Editor Open", 1);
     const [opened] = await eventsNamed(page, "AI Editor Open");
     expect(opened.properties.bookImageCount).toBe(6);
     expect(opened.properties.launchedOnEmptySlot).toBe(false);
     expect(typeof opened.properties.initialTool).toBe("string");
 
+    // The host reports the end of the session, because only it knows whether anything
+    // reached the book. Cancelling must not make the editor report one too.
     await page.getByTestId("bloom-host-cancel").click();
-    await expectEventCount(page, "AI Editor Close", 1);
-    const [closed] = await eventsNamed(page, "AI Editor Close");
-    expect(closed.properties.outcome).toBe("cancelled");
-    expect(closed.properties.imagesCommitted).toBe(0);
-    expect(closed.properties.generateAttempts).toBe(0);
-    expect(typeof closed.properties.durationSeconds).toBe("number");
+    await expect(async () => {
+      expect((await analyticsEvents(page)).map((entry) => entry.event)).toEqual(["AI Editor Open"]);
+    }).toPass({ timeout: 5_000 });
   });
 
   test("credits every tool in the chain when a chained result is used", async ({ page }) => {
@@ -126,18 +125,14 @@ test.describe("analytics events", () => {
     expect(accepts.every((entry) => entry.properties.chainLength === 2)).toBe(true);
     expect(accepts.map((entry) => entry.properties.isFinalTool)).toEqual([false, true]);
     expect(accepts.every((entry) => entry.properties.tool === "custom")).toBe(true);
-    expect(accepts.every((entry) => entry.properties.batch === false)).toBe(true);
+    expect(accepts.every((entry) => entry.properties.acceptedCount === 1)).toBe(true);
     expect(accepts.every((entry) => entry.properties.targetPage === "current")).toBe(true);
     accepts.forEach((entry) => {
       expect(Object.values(entry.properties).join(" ")).not.toContain("dummy banner");
     });
 
-    // Committing ends the session in Bloom, so the close event goes with it.
-    await expectEventCount(page, "AI Editor Close", 1);
-    const [closed] = await eventsNamed(page, "AI Editor Close");
-    expect(closed.properties.outcome).toBe("committed");
-    expect(closed.properties.imagesCommitted).toBe(1);
-    expect(closed.properties.generateAttempts).toBe(2);
+    // Committing ends the session, but Bloom is what reports that, not us.
+    expect(await eventsNamed(page, "AI Editor Close")).toEqual([]);
   });
 
   test("reports a batch run once, its images individually, and each replacement accepted", async ({
@@ -179,15 +174,11 @@ test.describe("analytics events", () => {
 
     await expectEventCount(page, "AI Editor Accept", 2);
     const accepts = await eventsNamed(page, "AI Editor Accept");
-    expect(accepts.every((entry) => entry.properties.batch === true)).toBe(true);
+    // Both pictures went in on the one Replace click, so both events say so.
+    expect(accepts.every((entry) => entry.properties.acceptedCount === 2)).toBe(true);
     expect(accepts.every((entry) => entry.properties.isFinalTool === true)).toBe(true);
     expect(accepts.every((entry) => entry.properties.chainLength === 1)).toBe(true);
     expect(accepts.every((entry) => entry.properties.targetPage === "other")).toBe(true);
-
-    await expectEventCount(page, "AI Editor Close", 1);
-    const [closed] = await eventsNamed(page, "AI Editor Close");
-    expect(closed.properties.outcome).toBe("committed");
-    expect(closed.properties.imagesCommitted).toBe(2);
   });
 });
 

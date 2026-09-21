@@ -144,7 +144,7 @@ describe("buildAcceptEventProperties", () => {
     slotId: "book-image-2",
     launchedBookImageId: "book-image-1",
     bookImageSlotIds: ["book-image-1", "book-image-2"],
-    batch: true,
+    acceptedCount: 2,
     targetSlotEmpty: false,
     nowMs: 1_060_000,
   });
@@ -168,9 +168,9 @@ describe("buildAcceptEventProperties", () => {
     expect(built[1].secondsSinceGenerated).toBe(30);
   });
 
-  it("says which page the image went to and how it was committed", () => {
+  it("says which page the image went to and how many went in with it", () => {
     expect(built.every((properties) => properties.targetPage === "other")).toBe(true);
-    expect(built.every((properties) => properties.batch === true)).toBe(true);
+    expect(built.every((properties) => properties.acceptedCount === 2)).toBe(true);
     expect(built.every((properties) => properties.targetSlotEmpty === false)).toBe(true);
   });
 
@@ -182,7 +182,7 @@ describe("buildAcceptEventProperties", () => {
         slotId: "book-image-1",
         launchedBookImageId: "book-image-1",
         bookImageSlotIds: ["book-image-1"],
-        batch: false,
+        acceptedCount: 1,
         targetSlotEmpty: false,
         nowMs: 1_060_000,
       }),

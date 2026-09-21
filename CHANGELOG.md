@@ -1,5 +1,28 @@
 # bloom-ai-image-tools
 
+## 0.2.10
+
+- Leave the end of a session for the host to report
+
+  The editor was sending an `AI Editor Close` event, and Bloom already sends its own
+  `AI Image Editor Closed` for the same moment. Every number ours carried was either already
+  in Bloom's or better answered there: `imagesCommitted` counted the button presses where
+  Bloom's `appliedCount` counts the pictures that actually reached the book, and
+  `generateAttempts` is Bloom's `generationsThisSession`. Two events disagreeing about how many
+  pictures were kept is worse than one, so ours is gone. `durationSeconds` had no counterpart,
+  and belongs on Bloom's event, which is held by the side that owns the overlay's lifetime.
+
+  Removing it also removes the `onSessionCloseReporter` prop and the host adapter's ref, which
+  existed only because the editor cannot see its own exits and had to be told about them.
+
+  `AI Editor Accept` now carries `acceptedCount`, the number of pictures that went into the book
+  on that one commit, in place of `batch`. On `AI Editor Generate`, `batch` means the picture was
+  produced by a batch run; on `AI Editor Accept` it meant the commit came from the "Replace"
+  button rather than "Use this Image". One word cannot mean both, and the count answers the same
+  question and more.
+
+  `AI Editor Open`, `AI Editor Generate` and `AI Editor Batch Run` are unchanged.
+
 ## 0.2.9
 
 - Report which tools people actually use, and which of their pictures reach the book
@@ -18,14 +41,14 @@
   were stopped.
 
   `AI Editor Accept` is new and fires when a picture goes into the book, whether by "Use this
-  Image" or the all-slots Replace button. Every tool in the accepted picture's ancestry gets its
-  own event, with its position in the chain, its cost, how long ago it ran, and whether it was
-  the last step -- so "this tool contributed to a kept picture" and "this tool made the kept
-  picture" are both countable.
+  Image" or the "Replace" button that commits every filled slot at once. Every tool in the
+  accepted picture's ancestry gets its own event, with its position in the chain, its cost, how
+  long ago it ran, and whether it was the last step -- so "this tool contributed to a kept
+  picture" and "this tool made the kept picture" are both countable. `acceptedCount` says how
+  many pictures went in on that one commit.
 
-  `AI Editor Open` and `AI Editor Close` are new and bracket a session: how many book images
-  there were and which tool the editor opened on, then how the session ended, how many pictures
-  were committed, how many generations were attempted, and how long it lasted.
+  `AI Editor Open` is new and reports the start of a session: how many book images there were,
+  whether the editor was launched on an empty slot, and which tool it opened on.
 
   No property is ever free text. Prompts, parameter text and image names stay out, as they
   always have; every event also sends every one of its properties on every fire, empty rather

@@ -42,8 +42,10 @@ export const BATCH_RUN_EVENT = "AI Editor Batch Run";
 export const ACCEPT_EVENT = "AI Editor Accept";
 /** The editor finished starting up inside a host. */
 export const OPEN_EVENT = "AI Editor Open";
-/** The editor's session ended, whichever way it ended. */
-export const CLOSE_EVENT = "AI Editor Close";
+// There is deliberately no session-end event here. The host reports that one: it owns the
+// overlay's lifetime, and it is the only side that knows whether a commit actually reached
+// the book, where we would only know that the button was pressed. See Bloom's
+// "AI Image Editor Closed".
 
 /** Where a run's result is headed, relative to the book image the user launched on. */
 export type TargetPage = "current" | "other" | "none";
@@ -162,8 +164,11 @@ export interface AcceptEventContext {
   /** The slot the editor was launched on, for targetPage. */
   launchedBookImageId: string | null | undefined;
   bookImageSlotIds: readonly string[];
-  /** True when this came from the all-slots Replace button rather than "Use this Image". */
-  batch: boolean;
+  /** How many images this one commit put into the book: 1 from "Use this Image", and the
+   *  number of filled slots from the "Replace" button that commits them all. A count rather
+   *  than a flag, because `batch` already means something else on the generate event (the
+   *  image was produced by a batch run), and one word cannot mean both. */
+  acceptedCount: number;
   /** True when the slot held no image before this. */
   targetSlotEmpty: boolean;
   /** Date.now() at commit time, passed in so the builder stays pure. */
@@ -191,7 +196,7 @@ export const buildAcceptEventProperties = (context: AcceptEventContext): Analyti
     isFinalTool: ancestor.id === context.committed.id,
     chainLength: chain.length,
     chainPosition: index + 1,
-    batch: context.batch,
+    acceptedCount: context.acceptedCount,
     targetPage,
     targetSlotEmpty: context.targetSlotEmpty,
     secondsSinceGenerated:

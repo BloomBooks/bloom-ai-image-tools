@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS, TOOLS } from "../../components/tools/tools-registry";
 import { MATCH_CONTAINER_ASPECT_RATIO, MATCH_IMAGE_ASPECT_RATIO } from "../aspectRatios";
 import { LOCAL_DUMMY_MODEL_ID } from "../localModels";
 import {
@@ -87,7 +87,8 @@ describe("tool aspect ratio defaults", () => {
 });
 
 describe("which runs would spend money", () => {
-  const getTool = (id: string) => TOOLS.find((tool) => tool.id === id) ?? null;
+  // ALL_TOOLS, not TOOLS: pdf_to_images is switched off.
+  const getTool = (id: string) => ALL_TOOLS.find((tool) => tool.id === id) ?? null;
 
   it("counts a normal tool on a catalog model", () => {
     expect(

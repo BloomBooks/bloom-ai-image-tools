@@ -781,6 +781,10 @@ export const ALL_TOOLS: ToolDefinition[] = (
     },
     {
       id: "pdf_to_images",
+      // Switched off for Bloom 6.5: it renders whole pages, and taking the
+      // pictures out of the PDF instead waits for 6.6 (BL-16899). Everything
+      // below is kept so it can be switched back on by removing this line.
+      disabled: true,
       title: "PDF to Images",
       description: "Convert a PDF into a series of images. Free.",
       group: "more",

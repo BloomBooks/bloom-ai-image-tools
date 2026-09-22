@@ -536,35 +536,22 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
       });
     },
     async getLocalizations(strings) {
-      // Two endpoints, newest first.
-      //
-      // `aiImageEditor/localizations` (Bloom 6.5+) answers the whole table with the
-      // translations it has and stays quiet about the rest. Bloom's general-purpose
-      // `i18n/loadStrings` reports every id it cannot find -- a toast and a line in the
-      // developer's local xlf, per string, on every launch -- which for a table this size is
-      // unusable, so it is only the fallback for a Bloom that predates the other.
+      // Bloom's general-purpose `i18n/loadStrings`, the endpoint its own front end uses. It
+      // answers every id we send: a translation where it has one, and otherwise the English
+      // we sent, which is what we would have shown anyway. On its Developer and Alpha
+      // channels it also reports the ids it does not have, which is how Bloom learns that
+      // this build's table has outrun its xlf files.
       //
       // httpBase is Bloom's API root plus this feature's segment, so i18n is its sibling.
       // Anything short of an answer leaves the editor in English, which is a working editor,
       // so nothing here is worth failing over.
+      //
       // The editor asks for these the moment it mounts, which is before Bloom has told
       // us where to ask. Without this wait the whole table comes back in English and is
       // cached that way for the session.
       await Promise.race([initialized, new Promise((resolve) => setTimeout(resolve, kInitWaitMs))]);
       if (!httpBase) {
         return strings;
-      }
-      try {
-        const response = await fetch(`${httpBase}/localizations`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(strings),
-        });
-        if (response.ok) {
-          return (await response.json()) as Record<string, string>;
-        }
-      } catch {
-        // Fall through to the older endpoint.
       }
       try {
         const body = new URLSearchParams();

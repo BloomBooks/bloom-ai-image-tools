@@ -316,7 +316,7 @@ describe("no-unrequested-text instruction", () => {
   });
 
   it("adds nothing to a tool that makes no model call", () => {
-    const pdf = TOOLS.find((tool) => tool.id === "pdf_to_images");
+    const pdf = ALL_TOOLS.find((tool) => tool.id === "pdf_to_images");
     expect(pdf?.promptTemplate({})).toBe("");
   });
 });

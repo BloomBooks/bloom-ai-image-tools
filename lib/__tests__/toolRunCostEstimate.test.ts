@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOOLS } from "../../components/tools/tools-registry";
+import { ALL_TOOLS } from "../../components/tools/tools-registry";
 import type { ToolDefinition } from "../../types";
 import { DETAILED_EDIT_OUTPUT_TOKENS, estimateInputImageTokens } from "../imageCostEstimate";
 import { MAX_REFERENCE_IMAGE_EDGE } from "../imageProcessing";
@@ -16,7 +16,8 @@ const SUNBURST = getModelInfoById("openai/gpt-image-2.5-sunburst");
 const GEMINI_PRO = getModelInfoById("google/gemini-3-pro-image");
 
 const getTool = (id: string): ToolDefinition => {
-  const tool = TOOLS.find((t) => t.id === id);
+  // ALL_TOOLS, not TOOLS: pdf_to_images is switched off.
+  const tool = ALL_TOOLS.find((t) => t.id === id);
   if (!tool) throw new Error(`missing tool ${id}`);
   return tool;
 };

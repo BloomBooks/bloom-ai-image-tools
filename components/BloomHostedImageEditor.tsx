@@ -57,9 +57,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   const [replacementMap, setReplacementMap] = React.useState<Record<string, ImageRecord | null>>(
     {},
   );
-  const [status, setStatus] = React.useState<string>(() =>
-    l10n("AiImageEditor.Host.WaitingForInit", "Waiting for host init..."),
-  );
+  const [status, setStatus] = React.useState<string>(() => "Waiting for host init...");
   const lastInitSignatureRef = React.useRef<string | null>(null);
   // Prevent bridge.ready() from firing more than once across React StrictMode
   // double-invocations of the effect, which would cause Bloom to send multiple
@@ -204,13 +202,9 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
         }
         await bridge.commit([replacement]);
         onCommitComplete?.([replacement]);
-        setStatus(l10n("AiImageEditor.Host.CommittedOne", "Committed 1 replacement."));
+        setStatus("Committed 1 replacement.");
       } catch (error) {
-        setStatus(
-          error instanceof Error
-            ? error.message
-            : l10n("AiImageEditor.Host.CommitFailed", "Commit failed."),
-        );
+        setStatus(error instanceof Error ? error.message : "Commit failed.");
       }
     },
     [bridge, buildReplacement, onCommitComplete],
@@ -219,34 +213,23 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   const handleCommitAll = React.useCallback(async () => {
     const count = collectAssignedEntries().length;
     if (!count) {
-      setStatus(
-        l10n(
-          "AiImageEditor.Host.NoReplacementsAssigned",
-          "No book image replacements are assigned yet.",
-        ),
-      );
+      setStatus("No book image replacements are assigned yet.");
       return;
     }
 
-    setStatus(
-      l10n("AiImageEditor.Host.Committing", "Committing {0} replacements...", String(count)),
-    );
+    setStatus(`Committing ${count} replacements...`);
     try {
       await handleCommit();
-      setStatus(l10n("AiImageEditor.Host.Committed", "Committed {0} replacements.", String(count)));
+      setStatus(`Committed ${count} replacements.`);
     } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : l10n("AiImageEditor.Host.CommitFailed", "Commit failed."),
-      );
+      setStatus(error instanceof Error ? error.message : "Commit failed.");
     }
   }, [collectAssignedEntries, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
     bridge.cancel();
     onCancelComplete?.();
-    setStatus(l10n("AiImageEditor.Host.Cancelled", "Cancelled."));
+    setStatus("Cancelled.");
   }, [bridge, onCancelComplete]);
 
   if (!initPayload || !persistence) {

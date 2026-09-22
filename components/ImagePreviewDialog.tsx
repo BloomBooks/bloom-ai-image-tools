@@ -204,10 +204,10 @@ const PreviewPicture: React.FC<{
           }}
         >
           {loadFailed
-            ? l10n("AiImageEditor.Preview.CouldNotLoad", "Image could not be loaded")
+            ? "Image could not be loaded"
             : image.imageFileName
               ? l10n("AiImageEditor.Preview.Loading", "Loading…")
-              : l10n("AiImageEditor.Preview.NotInStorage", "Image not in storage")}
+              : "Image not in storage"}
         </Box>
       )}
       {resolution && (

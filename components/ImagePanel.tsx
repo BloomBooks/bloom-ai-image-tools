@@ -196,14 +196,12 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
                       controls={slotControls}
                       variant="tile"
                       rolePill={slot.rolePill}
-                      dropLabel={
-                        slot.dropLabel ?? l10n("AiImageEditor.Slot.DropToAdd", "Drop to add")
-                      }
+                      dropLabel={slot.dropLabel ?? "Drop to add"}
                       dataTestId={slot.dataTestId}
                       uploadInputTestId={slot.uploadInputTestId}
                       actionLabels={
                         slot.actionLabels ?? {
-                          remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
+                          remove: "Remove reference",
                         }
                       }
                       // dnd-kit handles internal drags; keep native drag only when explicit.
@@ -350,10 +348,10 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
             sx={{ width: 48, height: 48, mb: 1.5, mx: "auto", opacity: 0.3 }}
           />
           <Box component="p" sx={{ fontSize: "0.9rem", fontWeight: 600 }}>
-            {l10n("AiImageEditor.Slot.PanelDisabled", "Panel Disabled")}
+            Panel Disabled
           </Box>
           <Box component="p" sx={{ fontSize: "0.75rem", opacity: 0.7, mt: 0.5 }}>
-            {l10n("AiImageEditor.Slot.CreatingFromScratch", "Creating new image from scratch")}
+            Creating new image from scratch
           </Box>
         </Box>
       );
@@ -390,9 +388,7 @@ export const ImagePanel: React.FC<ImagePanelProps> = (props) => {
         isLoading={isLoading}
         loadingProgress={loadingProgress}
         uploadInputTestId={uploadInputTestId}
-        dropLabel={
-          isDropZone ? l10n("AiImageEditor.Slot.DropToSetAsSource", "Drop to set as Source") : ""
-        }
+        dropLabel={isDropZone ? "Drop to set as Source" : ""}
         controls={{
           upload: showUploadControls,
           paste: showUploadControls,

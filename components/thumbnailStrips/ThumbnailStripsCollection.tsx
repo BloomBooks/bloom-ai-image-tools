@@ -116,27 +116,16 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
     const historyItemIds = snapshot.itemIdsByStrip.history || [];
 
     const formatStripNames = (stripIds: ThumbnailStripId[]) => {
-      const labels = stripIds.map((stripId) =>
-        l10n(
-          "AiImageEditor.Strip.NamedStrip",
-          "{0} strip",
-          stripLabel(l10n, resolvedStripConfigs[stripId]),
-        ),
+      const labels = stripIds.map(
+        (stripId) => `${stripLabel(l10n, resolvedStripConfigs[stripId])} strip`,
       );
       if (labels.length <= 1) {
-        return labels[0] || l10n("AiImageEditor.Strip.AnotherStrip", "another strip");
+        return labels[0] || "another strip";
       }
       if (labels.length === 2) {
-        return l10n("AiImageEditor.Strip.TwoStrips", "{0} and {1}", labels[0], labels[1]);
+        return `${labels[0]} and ${labels[1]}`;
       }
-      return l10n(
-        "AiImageEditor.Strip.ManyStrips",
-        "{0}, and {1}",
-        // What goes between the first items of a list is the translator's, not
-        // a comma and a space the code assumes.
-        labels.slice(0, -1).join(l10n("AiImageEditor.Strip.ListSeparator", ", ")),
-        labels[labels.length - 1],
-      );
+      return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
     };
 
     historyItemIds.forEach((itemId) => {
@@ -145,11 +134,8 @@ export const ThumbnailStripsCollection: React.FC<ThumbnailStripsCollectionProps>
         return;
       }
 
-      reasons[itemId] = l10n(
-        "AiImageEditor.History.CannotDeleteInOtherStrips",
-        "Cannot delete this image because it also exists in the {0}.",
-        formatStripNames(otherStripIds),
-      );
+      reasons[itemId] =
+        `Cannot delete this image because it also exists in the ${formatStripNames(otherStripIds)}.`;
     });
 
     return reasons;

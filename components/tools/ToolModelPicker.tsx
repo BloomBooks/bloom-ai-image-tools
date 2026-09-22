@@ -163,8 +163,7 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
 
   const selectedId = resolveToolModelId(tool, modelByTool);
   const selectedModel = getModelInfoById(selectedId);
-  const selectedName =
-    selectedModel?.name || selectedId || l10n("AiImageEditor.Model.NoModel", "No model");
+  const selectedName = selectedModel?.name || selectedId || "No model";
   const showNotRecommended = hasRecommendation && !recommendedSet.has(selectedId);
 
   const reasoningLevel = resolveToolReasoningLevel(tool, selectedModel, reasoningByTool);
@@ -308,12 +307,10 @@ export const ToolModelPicker: React.FC<ToolModelPickerProps> = ({
             <Divider />
             <Box sx={{ px: 2, py: 1 }} onClick={(event) => event.stopPropagation()}>
               <FormControl fullWidth size="small">
-                <InputLabel id={`reasoning-label-${tool.id}`}>
-                  {l10n("AiImageEditor.Info.Reasoning", "Reasoning")}
-                </InputLabel>
+                <InputLabel id={`reasoning-label-${tool.id}`}>Reasoning</InputLabel>
                 <Select
                   labelId={`reasoning-label-${tool.id}`}
-                  label={l10n("AiImageEditor.Info.Reasoning", "Reasoning")}
+                  label="Reasoning"
                   value={reasoningLevel}
                   data-testid={`tool-reasoning-${tool.id}`}
                   onChange={(event) => onReasoningChange(event.target.value as ModelReasoningLevel)}

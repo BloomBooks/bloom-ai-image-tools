@@ -898,10 +898,7 @@ export const ImageSlot: React.FC<ImageSlotProps> = ({
                 // placeholder rather than a broken-image icon.
                 <div
                   data-testid="image-slot-unavailable"
-                  title={l10n(
-                    "AiImageEditor.Slot.ImageNotLoaded",
-                    "Image not loaded — reconnect history folder to view",
-                  )}
+                  title="Image not loaded — reconnect history folder to view"
                   style={{
                     display: "flex",
                     alignItems: "center",

@@ -49,7 +49,8 @@ test.describe("playground mode", () => {
     await expect(runButton).toHaveAttribute("title", "Not available in look-around mode");
   });
 
-  test("PDF to Images, which needs no AI at all, cannot be run either", async ({ page }) => {
+  // PDF to Images is switched off in tools-registry.ts (`disabled: true`), so it has no card.
+  test.skip("PDF to Images, which needs no AI at all, cannot be run either", async ({ page }) => {
     await page.getByRole("button", { name: "More", exact: true }).click();
     await page.getByText("PDF to Images", { exact: true }).click();
 

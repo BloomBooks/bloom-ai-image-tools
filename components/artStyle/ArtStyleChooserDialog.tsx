@@ -264,9 +264,7 @@ export const ArtStyleChooserDialog: React.FC<ArtStyleChooserDialogProps> = ({
                             color: theme.colors.textSecondary,
                           }}
                         >
-                          {hasPreviewSource
-                            ? l10n("AiImageEditor.ArtStyle.LoadingPreview", "Loading preview")
-                            : l10n("AiImageEditor.ArtStyle.NoPreview", "No preview")}
+                          {hasPreviewSource ? "Loading preview" : "No preview"}
                         </Box>
                       )}
                     </Box>

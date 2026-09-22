@@ -212,13 +212,10 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                     <Icon path={Icons.History} width={20} height={20} />
                     <Box>
                       <Typography id="history-section-title" variant="subtitle1" fontWeight={600}>
-                        {l10n("AiImageEditor.Settings.HistoryStorage", "History storage")}
+                        History storage
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {l10n(
-                          "AiImageEditor.Settings.HistoryStorageDescription",
-                          "Link a folder on your computer to save your full history.",
-                        )}
+                        Link a folder on your computer to save your full history.
                       </Typography>
                     </Box>
                   </Stack>
@@ -233,16 +230,11 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                       }
                     >
                       <Typography variant="body2" fontWeight={600}>
-                        {l10n(
-                          "AiImageEditor.Settings.ChromiumNeeded",
-                          "Local folders need Chromium-based browsers",
-                        )}
+                        Local folders need Chromium-based browsers
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {l10n(
-                          "AiImageEditor.Settings.ChromiumNeededDetails",
-                          "Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed history.",
-                        )}
+                        Try Chrome, Edge, Arc, or another Chromium browser to unlock folder-backed
+                        history.
                       </Typography>
                     </Alert>
                   )}
@@ -250,22 +242,15 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                   {history.isFolderPersistenceActive ? (
                     <Box sx={nestedCardStyles}>
                       <Typography variant="body2" color="text.secondary">
-                        {interpolateJsx(
-                          l10n(
-                            "AiImageEditor.Settings.ImagesAreWrittenTo",
-                            "Images are written to {0}.",
-                          ),
-                          [
-                            <Box
-                              key="folder"
-                              component="span"
-                              sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}
-                            >
-                              {folderPath ||
-                                l10n("AiImageEditor.Settings.YourFolder", "your folder")}
-                            </Box>,
-                          ],
-                        )}
+                        {interpolateJsx("Images are written to {0}.", [
+                          <Box
+                            key="folder"
+                            component="span"
+                            sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                          >
+                            {folderPath || "your folder"}
+                          </Box>,
+                        ])}
                       </Typography>
                       <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
                         <Button
@@ -284,11 +269,7 @@ export const AIImageToolsSettingsDialog: React.FC<AIImageToolsSettingsDialogProp
                             },
                           }}
                         >
-                          {historyLoadingLabel ||
-                            l10n(
-                              "AiImageEditor.Settings.StopStoringHistoryInFolder",
-                              "Stop storing history in folder",
-                            )}
+                          {historyLoadingLabel || "Stop storing history in folder"}
                         </Button>
                       </Stack>
                     </Box>

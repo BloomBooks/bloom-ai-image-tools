@@ -81,15 +81,9 @@ export const ImageSlotInfoDialog: React.FC<ImageSlotInfoDialogProps> = ({
       }}
     >
       <DialogTitle sx={{ pr: 12 }}>
-        {label
-          ? l10n("AiImageEditor.InfoDialog.TitleForSlot", "{0} info", label)
-          : l10n("AiImageEditor.InfoDialog.Title", "Image info")}
+        {label ? `${label} info` : "Image info"}
         <Tooltip
-          title={
-            promptCopied
-              ? l10n("EditTab.SourceBubbleCopied", "Copied")
-              : l10n("AiImageEditor.InfoDialog.CopyPrompt", "Copy prompt")
-          }
+          title={promptCopied ? l10n("EditTab.SourceBubbleCopied", "Copied") : "Copy prompt"}
         >
           <IconButton
             aria-label="Copy full prompt"

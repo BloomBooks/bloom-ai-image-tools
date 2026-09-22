@@ -43,11 +43,11 @@ export const ImageSlotThumbnailStatusBadge: React.FC<ImageSlotThumbnailStatusBad
       }}
     >
       {status === "saving" && l10n("EditTab.SavingNotification", "Saving...")}
-      {status === "copying" && l10n("AiImageEditor.Status.Copying", "Copying...")}
-      {status === "success" && l10n("AiImageEditor.Status.ThumbnailSaved", "Thumbnail saved!")}
-      {status === "error" && l10n("AiImageEditor.Status.FailedToSave", "Failed to save")}
-      {status === "copied" && l10n("AiImageEditor.Status.Copied", "Copied!")}
-      {status === "copyError" && l10n("AiImageEditor.Status.CopyFailed", "Copy failed")}
+      {status === "copying" && "Copying..."}
+      {status === "success" && "Thumbnail saved!"}
+      {status === "error" && "Failed to save"}
+      {status === "copied" && "Copied!"}
+      {status === "copyError" && "Copy failed"}
     </div>
   );
 };

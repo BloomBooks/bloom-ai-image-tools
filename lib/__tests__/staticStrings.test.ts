@@ -90,13 +90,8 @@ describe("the editor's string table", () => {
   });
 
   it("asks for nothing empty, and nothing that is only digits or symbols", () => {
-    // Punctuation is worth a translator's time only where the punctuation itself is
-    // what differs between languages: the separator between the items of a list is
-    // "، " in Arabic and "、" in Chinese.
-    const punctuationThatDiffers = new Set(["AiImageEditor.Strip.ListSeparator"]);
     const notWorthTranslating = Object.entries(ALL_IMAGE_EDITOR_STRINGS).filter(
-      ([id, english]) =>
-        !punctuationThatDiffers.has(id) && (!english.trim() || !/\p{Letter}/u.test(english)),
+      ([, english]) => !english.trim() || !/\p{Letter}/u.test(english),
     );
     expect(notWorthTranslating).toEqual([]);
   });

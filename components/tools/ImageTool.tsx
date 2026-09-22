@@ -826,10 +826,7 @@ const ImageToolComponent: React.FC<ToolPanelProps> = ({
             label: l10n("AiImageEditor.Shape.MatchContainer", "Match Container"),
             // Reshaping an existing picture to its container changes the
             // composition, so the row says so.
-            caption: [
-              planned.caption,
-              imageUsable ? l10n("AiImageEditor.Shape.WillReframe", "will reframe") : null,
-            ]
+            caption: [planned.caption, imageUsable ? "will reframe" : null]
               .filter(Boolean)
               .join(", "),
             swatchRatio: planned.swatchRatio,

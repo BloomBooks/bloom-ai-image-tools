@@ -995,18 +995,14 @@ function ImageToolsWorkspaceInner({
   }, [isGalleryOpen]);
   const openRouterStatusLabel = state.isAuthenticated
     ? usingEnvKey
-      ? l10n("AiImageEditor.Status.KeyFromEnvironment", "OpenRouter key supplied by environment")
+      ? "OpenRouter key supplied by environment"
       : authMethod === "oauth"
-        ? l10n("AiImageEditor.Status.ConnectedViaOAuth", "OpenRouter connected via OAuth")
-        : l10n("AiImageEditor.Status.ApiKeyLinked", "OpenRouter API key linked")
+        ? "OpenRouter connected via OAuth"
+        : "OpenRouter API key linked"
     : l10n("AiImageEditor.Status.NotConnected", "OpenRouter not connected");
   const historyStatusLabel = isFolderPersistenceActive
-    ? l10n(
-        "AiImageEditor.Status.HistorySyncingTo",
-        "History syncing to {0}",
-        fsBinding?.directoryName || l10n("AiImageEditor.Status.LinkedFolder", "linked folder"),
-      )
-    : l10n("AiImageEditor.Status.HistoryInBrowserOnly", "History stored in browser only");
+    ? `History syncing to ${fsBinding?.directoryName || "linked folder"}`
+    : "History stored in browser only";
   // When the host (Bloom) manages history, the editor's folder-linking status is
   // meaningless, so it's left out of the settings button's tooltip/label.
   const settingsButtonTitle = hostManagesHistory
@@ -1058,9 +1054,7 @@ function ImageToolsWorkspaceInner({
           debugInfo,
           error: errorDetails,
         });
-        setFsError(
-          l10n("AiImageEditor.Error.CouldNotSaveImageToFolder", "Could not save image to folder."),
-        );
+        setFsError("Could not save image to folder.");
         return item;
       }
     },
@@ -1478,7 +1472,7 @@ function ImageToolsWorkspaceInner({
         return;
       }
       console.error("Failed to fetch OpenRouter key status", error);
-      setCreditsError(l10n("AiImageEditor.Credits.StatusUnavailable", "Key status unavailable"));
+      setCreditsError("Key status unavailable");
     } finally {
       if (creditsRequestAbortControllerRef.current === controller) {
         creditsRequestAbortControllerRef.current = null;
@@ -2192,12 +2186,7 @@ function ImageToolsWorkspaceInner({
             await writeFolderAppState(currentBinding, buildFolderAppState());
           } catch (error) {
             console.error("Failed to persist history metadata", error);
-            setFsError(
-              l10n(
-                "AiImageEditor.Error.CouldNotSaveMetadata",
-                "Could not save history metadata to folder.",
-              ),
-            );
+            setFsError("Could not save history metadata to folder.");
           }
         }
       } finally {
@@ -2284,12 +2273,7 @@ function ImageToolsWorkspaceInner({
       setFsBinding(binding);
     } catch (error) {
       console.error("Failed to reconnect history folder", error);
-      setFsError(
-        l10n(
-          "AiImageEditor.Error.CouldNotReconnectFolder",
-          "Could not reconnect to the history folder.",
-        ),
-      );
+      setFsError("Could not reconnect to the history folder.");
     } finally {
       setFsLoading(false);
     }
@@ -2345,9 +2329,7 @@ function ImageToolsWorkspaceInner({
       setThumbnailStrips(nextThumbnailStrips);
     } catch (error) {
       console.error("Failed to enable folder storage", error);
-      setFsError(
-        l10n("AiImageEditor.Error.CouldNotEnableFolder", "Could not enable folder storage."),
-      );
+      setFsError("Could not enable folder storage.");
     } finally {
       setFsLoading(false);
     }
@@ -2381,9 +2363,7 @@ function ImageToolsWorkspaceInner({
       }));
     } catch (error) {
       console.error("Failed to disable folder storage", error);
-      setFsError(
-        l10n("AiImageEditor.Error.CouldNotDisableFolder", "Could not disable folder storage."),
-      );
+      setFsError("Could not disable folder storage.");
     } finally {
       setFsLoading(false);
     }
@@ -2458,9 +2438,7 @@ function ImageToolsWorkspaceInner({
       });
 
       if (!pages.length) {
-        throw new Error(
-          l10n("AiImageEditor.Error.PdfHasNoPages", "That PDF has no pages to render."),
-        );
+        throw new Error("That PDF has no pages to render.");
       }
 
       const baseName = file.name.replace(/\.pdf$/i, "") || "page";
@@ -2533,10 +2511,7 @@ function ImageToolsWorkspaceInner({
         setState((prev) => ({
           ...prev,
           isProcessing: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : l10n("AiImageEditor.Error.CouldNotReadPdf", "Could not read that PDF."),
+          error: error instanceof Error ? error.message : "Could not read that PDF.",
         }));
       }
     } finally {
@@ -2854,16 +2829,9 @@ function ImageToolsWorkspaceInner({
         tool.derivedResultMode === "split-images" &&
         (tool.id !== "extract_cast_of_characters" || params.splitIntoSeparateFiles === "true");
       const phaseLabels: string[] = isBreakComic
-        ? [
-            l10n("AiImageEditor.Phase.RemovingBackground", "Editing to remove background"),
-            l10n("AiImageEditor.Phase.TranscribingCaptions", "Transcribing captions"),
-            l10n("AiImageEditor.Phase.SplittingIntoImages", "Splitting into images"),
-          ]
+        ? ["Editing to remove background", "Transcribing captions", "Splitting into images"]
         : willSplitDerived
-          ? [
-              l10n("AiImageEditor.Phase.GeneratingSheet", "Generating sheet"),
-              l10n("AiImageEditor.Phase.SplittingIntoImages", "Splitting into images"),
-            ]
+          ? ["Generating sheet", "Splitting into images"]
           : [];
       const setPhase = (index: number) => {
         if (phaseLabels.length <= 1 || index < 0 || index >= phaseLabels.length) return;
@@ -3976,10 +3944,7 @@ function ImageToolsWorkspaceInner({
         console.error("Failed to load reference image", error);
         setState((prev) => ({
           ...prev,
-          error: l10n(
-            "AiImageEditor.Error.CouldNotLoadReferenceImage",
-            "Could not load reference image. Please try again.",
-          ),
+          error: "Could not load reference image. Please try again.",
         }));
       }
     },
@@ -4671,10 +4636,10 @@ function ImageToolsWorkspaceInner({
 
   const creditsPrimaryLabel = (() => {
     if (!effectiveApiKey) {
-      return l10n("AiImageEditor.Credits.ConnectToView", "Connect to view");
+      return "Connect to view";
     }
     if (creditsLoading) {
-      return l10n("AiImageEditor.Credits.Updating", "Updating...");
+      return "Updating...";
     }
     if (creditsError) {
       return creditsError;
@@ -4703,17 +4668,13 @@ function ImageToolsWorkspaceInner({
         ? (() => {
             const periodUsage = Math.max(0, creditsGauge.total - creditsGauge.remaining);
             const periodSuffix = credits.limitReset ? ` ${credits.limitReset}` : "";
-            return l10n(
-              "AiImageEditor.Credits.UsedOfLimit",
-              "{0} used{1}",
-              l10n(
-                "AiImageEditor.Credits.AmountOfAmount",
-                "{0} of {1}",
-                formatCreditsValue(periodUsage),
-                formatCreditsValue(creditsGauge.total),
-              ),
-              periodSuffix,
+            const amounts = l10n(
+              "AiImageEditor.Credits.AmountOfAmount",
+              "{0} of {1}",
+              formatCreditsValue(periodUsage),
+              formatCreditsValue(creditsGauge.total),
             );
+            return `${amounts} used${periodSuffix}`;
           })()
         : creditsGauge?.source === "account"
           ? // "used" sits at the end in English and nowhere else; it goes beside the amount
@@ -4724,11 +4685,7 @@ function ImageToolsWorkspaceInner({
               formatCreditsValue(creditsGauge.total - creditsGauge.remaining),
               formatCreditsValue(creditsGauge.total),
             )
-          : l10n(
-              "AiImageEditor.Credits.UsedNoLimit",
-              "{0} used (no limit set)",
-              formatCreditsValue(credits.usage),
-            )
+          : `${formatCreditsValue(credits.usage)} used (no limit set)`
       : null;
 
   const creditsTotalLabel =
@@ -4888,17 +4845,10 @@ function ImageToolsWorkspaceInner({
                 }}
               >
                 {!pendingFsReconnect
-                  ? l10n("AiImageEditor.History.ConnectHistoryFolder", "Connect history folder")
+                  ? "Connect history folder"
                   : pendingFsReconnect.directoryName
-                    ? l10n(
-                        "AiImageEditor.History.ReconnectNamedHistoryFolder",
-                        "Reconnect history folder ({0})",
-                        pendingFsReconnect.directoryName,
-                      )
-                    : l10n(
-                        "AiImageEditor.History.ReconnectHistoryFolder",
-                        "Reconnect history folder",
-                      )}
+                    ? `Reconnect history folder (${pendingFsReconnect.directoryName})`
+                    : "Reconnect history folder"}
               </Button>
             )}
           </Stack>

@@ -116,11 +116,7 @@ export function OpenRouterConnect({
       setTestMessage(
         balance === null
           ? l10n("AiImageEditor.OpenRouter.KeyVerified", "Key verified")
-          : l10n(
-              "AiImageEditor.OpenRouter.KeyVerifiedWithBalance",
-              "Key verified, {0} available",
-              balance,
-            ),
+          : `Key verified, ${balance} available`,
       );
       // A null limit means there's no per-key spending cap; warn so the user can set one.
       setKeyHasNoLimit(status.limit === null);

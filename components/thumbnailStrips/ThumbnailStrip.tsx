@@ -6,7 +6,7 @@ import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS, type Transform } from "@dnd-kit/utilities";
 import { theme } from "../../themes";
-import { L10nFunc, useL10n } from "../../lib/localization";
+import { useL10n } from "../../lib/localization";
 import { kWarningColor } from "../materialUITheme";
 import { STRIP_ACTIVE_BORDER_COLOR, STRIP_BORDER, STRIP_BORDER_COLOR } from "./stripStyleConstants";
 import { ImageRecord, ThumbnailStripId } from "../../types";
@@ -217,7 +217,6 @@ const CompatibilityBadgeGlyph: React.FC<{
 };
 
 const getReplacementCompatibilityIndicators = (
-  l10n: L10nFunc,
   current: ImageRecord,
   replacement: ImageRecord | null,
 ): CompatibilityIndicator[] => {
@@ -238,11 +237,7 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "aspect",
       level: "warning",
-      message: l10n(
-        "AiImageEditor.Replacement.AspectRatioChanged",
-        "Aspect ratio changed from {0}.",
-        formatRatioComparison(current.resolution, replacement.resolution),
-      ),
+      message: `Aspect ratio changed from ${formatRatioComparison(current.resolution, replacement.resolution)}.`,
     });
   }
 
@@ -250,12 +245,7 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "resolution",
       level: "warning",
-      message: l10n(
-        "AiImageEditor.Replacement.ResolutionDecreased",
-        "Resolution decreased from {0} to {1}.",
-        formatResolution(current.resolution),
-        formatResolution(replacement.resolution),
-      ),
+      message: `Resolution decreased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)}.`,
     });
   }
 
@@ -263,12 +253,7 @@ const getReplacementCompatibilityIndicators = (
     indicators.push({
       kind: "resolution",
       level: "info",
-      message: l10n(
-        "AiImageEditor.Replacement.ResolutionIncreased",
-        "Resolution increased from {0} while keeping the same aspect ratio ({1}).",
-        `${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)}`,
-        formatAspectRatio(current.resolution),
-      ),
+      message: `Resolution increased from ${formatResolution(current.resolution)} to ${formatResolution(replacement.resolution)} while keeping the same aspect ratio (${formatAspectRatio(current.resolution)}).`,
     });
   }
 
@@ -302,7 +287,7 @@ const BatchTickToggle: React.FC<{
       checkedIcon={<CheckCircleIcon sx={{ fontSize: 20 }} />}
       title={
         disabled
-          ? l10n("AiImageEditor.Batch.CannotAdd", "This image can't be added to the batch")
+          ? "This image can't be added to the batch"
           : l10n("AiImageEditor.Batch.AddToBatch", "Add to batch")
       }
       inputProps={
@@ -487,14 +472,10 @@ const BatchActiveSpinnerOverlay: React.FC = () => (
 // Shown over the "Current" slot of a book image whose batch run failed, for
 // the duration of the run (the end-of-run summary message covers it after).
 const BatchFailedBadge: React.FC = () => {
-  const l10n = useL10n();
   return (
     <div
       data-testid="batch-failed-badge"
-      title={l10n(
-        "AiImageEditor.Batch.FailedBadge",
-        "This image failed to process; it stays ticked so you can retry",
-      )}
+      title="This image failed to process; it stays ticked so you can retry"
       style={{
         position: "absolute",
         top: 2,
@@ -1011,7 +992,6 @@ const BookImagePairThumb: React.FC<{
   onClearReplacement,
   batchSelection,
 }) => {
-  const l10n = useL10n();
   const currentDroppable = useDroppable({
     id: buildBookImageCurrentSlotId(item.id),
     data: {
@@ -1191,7 +1171,7 @@ const BookImagePairThumb: React.FC<{
           }}
         >
           {(() => {
-            const indicators = getReplacementCompatibilityIndicators(l10n, item, replacement);
+            const indicators = getReplacementCompatibilityIndicators(item, replacement);
             if (!indicators.length) {
               return null;
             }
@@ -1286,7 +1266,6 @@ const CharacterStackThumb: React.FC<{
   frontImage: ImageRecord | null;
   onSelect: () => void;
 }> = ({ stripId, imageIds, frontImage, onSelect }) => {
-  const l10n = useL10n();
   const draggable = useDraggable({
     id: buildStripStackId(stripId),
     data: {
@@ -1719,18 +1698,13 @@ export const ThumbnailStrip: React.FC<ThumbnailStripProps> = ({
               transition: "opacity 150ms ease",
             }}
           >
-            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-              {l10n("AiImageEditor.History.MoreHistoryAvailable", "More history available")}
-            </span>
+            <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>More history available</span>
             <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-              {l10n(
-                "AiImageEditor.History.ConnectFolderForMore",
-                "Connect to a folder on your computer for more history.",
-              )}
+              Connect to a folder on your computer for more history.
             </span>
             <span style={{ color: theme.colors.accent }}>
               <Icon path={Icons.Refresh} width={14} height={14} />
-              {l10n("AiImageEditor.History.ReconnectFolder", "Reconnect folder")}
+              Reconnect folder
             </span>
           </ButtonBase>
         )}

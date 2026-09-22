@@ -45,6 +45,7 @@ const TOOL_IDS = [
   "stylized_title",
   "make_gif",
   "remove_object",
+  "break_into_pieces",
   "remove_background",
   "generate_image",
   // "break_comic_into_images" is disabled in the registry, so it has no card.

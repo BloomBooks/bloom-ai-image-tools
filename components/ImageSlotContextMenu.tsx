@@ -110,7 +110,7 @@ export const ImageSlotContextMenu: React.FC<ImageSlotContextMenuProps> = ({
             <Icon path={Icons.Save} width={MENU_ICON_SIZE} height={MENU_ICON_SIZE} />
           </ListItemIcon>
           <ListItemText primaryTypographyProps={{ fontSize: "0.85rem" }}>
-            {l10n("AiImageEditor.ContextMenu.SetThumbnail", "Set thumbnail")}
+            Set thumbnail
           </ListItemText>
         </MenuItem>
       ) : null}

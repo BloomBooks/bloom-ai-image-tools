@@ -236,7 +236,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
         ? {
             key: "info",
             icon: Icons.Info,
-            title: l10n("AiImageEditor.InfoDialog.Title", "Image info"),
+            title: "Image info",
             onClick: onOpenInfo,
             testId: "image-info-button",
           }
@@ -254,9 +254,7 @@ export const ImageSlotActions: React.FC<ImageSlotActionsProps> = (props) => {
       ? insertBeforeRemove(orderedActions, {
           key: "magnifier",
           icon: Icons.Magnifier,
-          title: isMagnifierPinned
-            ? l10n("AiImageEditor.SlotAction.DisableMagnifier", "Disable magnifier")
-            : l10n("AiImageEditor.SlotAction.EnableMagnifier", "Enable magnifier"),
+          title: isMagnifierPinned ? "Disable magnifier" : "Enable magnifier",
           onClick: onToggleMagnifier,
           ariaPressed: isMagnifierPinned,
           isActive: isMagnifierPinned,

@@ -3,7 +3,6 @@ import IconButton from "@mui/material/IconButton";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import { theme } from "../themes";
-import { useL10n } from "../lib/localization";
 
 export interface ImageSlotOverlayStarProps {
   isVisible: boolean;
@@ -24,7 +23,6 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
   cornerOffset,
   buttonPadding,
 }) => {
-  const l10n = useL10n();
   if (!isVisible) return null;
 
   return (
@@ -34,11 +32,7 @@ export const ImageSlotOverlayStar: React.FC<ImageSlotOverlayStarProps> = ({
         onToggle();
       }}
       aria-pressed={isStarred}
-      title={
-        isStarred
-          ? l10n("AiImageEditor.Slot.UnstarImage", "Unstar image")
-          : l10n("AiImageEditor.Slot.StarImage", "Star image")
-      }
+      title={isStarred ? "Unstar image" : "Star image"}
       sx={{
         position: "absolute",
         top: cornerOffset,

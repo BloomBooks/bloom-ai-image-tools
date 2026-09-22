@@ -203,7 +203,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
     tool?.id === "ethnicity"
       ? l10n("AiImageEditor.Panel.CharacterGridOrScene", "Character grid or scene to change")
       : tool?.id === "break_comic_into_images"
-        ? l10n("AiImageEditor.Panel.OriginalComic", "Original Comic")
+        ? "Original Comic"
         : l10n("AiImageEditor.Panel.ImageToEdit", "Image to Edit");
   const needsEditImage =
     activeToolId !== null && showTargetPanel && !targetImage && !batchSelectionMessage;
@@ -228,9 +228,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
             dndDragId: `panelItem:reference:${i}:${image.id}`,
             dataTestId: `reference-slot-${i}`,
             uploadInputTestId: `reference-upload-input-${i}`,
-            dropLabel: l10n("AiImageEditor.Slot.DropToAdd", "Drop to add"),
+            dropLabel: "Drop to add",
             actionLabels: {
-              remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
+              remove: "Remove reference",
             },
           };
         }),
@@ -243,9 +243,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({
                 dndDropId: `panel:reference:${referenceImages.length}`,
                 dataTestId: `reference-slot-${referenceImages.length}`,
                 uploadInputTestId: `reference-upload-input-${referenceImages.length}`,
-                dropLabel: l10n("AiImageEditor.Slot.DropToAdd", "Drop to add"),
+                dropLabel: "Drop to add",
                 actionLabels: {
-                  remove: l10n("AiImageEditor.Slot.RemoveReference", "Remove reference"),
+                  remove: "Remove reference",
                 },
               },
             ]
@@ -356,7 +356,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   const followLatestChip =
     isBatchRunning && isInspectorPinned ? (
       <Chip
-        label={l10n("AiImageEditor.Result.FollowLatest", "Follow latest")}
+        label="Follow latest"
         data-testid="batch-follow-latest-chip"
         onClick={onUnpinInspector}
         size="small"

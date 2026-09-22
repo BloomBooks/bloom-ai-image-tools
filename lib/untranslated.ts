@@ -75,7 +75,7 @@ export const NOT_TRANSLATED = new Set<string>([
   "AiImageEditor.Error.CouldNotReconnectFolder",
   "AiImageEditor.Error.CouldNotSaveImageToFolder",
   "AiImageEditor.Error.CouldNotSaveMetadata",
-  "AiImageEditor.Error.PdfHasNoPages",
+  "AiImageEditor.Error.PdfHasNoPictures",
   "AiImageEditor.Preview.CouldNotLoad",
   "AiImageEditor.Preview.NotInStorage",
   "AiImageEditor.Settings.ChromiumNeeded",

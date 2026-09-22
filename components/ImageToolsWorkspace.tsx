@@ -2452,28 +2452,28 @@ function ImageToolsWorkspaceInner({
     });
 
     try {
-      const { renderPdfToImages } = await import("../lib/pdfToImages");
-      const pages = await renderPdfToImages(file, {
+      const { extractPdfImages } = await import("../lib/pdfToImages");
+      const { images, pageCount } = await extractPdfImages(file, {
         signal: abortController.signal,
       });
 
-      if (!pages.length) {
+      if (!images.length) {
         throw new Error(
-          l10n("AiImageEditor.Error.PdfHasNoPages", "That PDF has no pages to render."),
+          l10n("AiImageEditor.Error.PdfHasNoPictures", "No pictures were found in that PDF."),
         );
       }
 
-      const baseName = file.name.replace(/\.pdf$/i, "") || "page";
-      const padWidth = String(pages.length).length;
+      const baseName = file.name.replace(/\.pdf$/i, "") || "image";
+      const padWidth = String(pageCount).length;
 
       const createdItems: ImageRecord[] = [];
-      for (const page of pages) {
-        const pageLabel = String(page.pageNumber).padStart(padWidth, "0");
+      for (const image of images) {
+        const pageLabel = String(image.pageNumber).padStart(padWidth, "0");
         let item: ImageRecord = {
           id: uuid(),
           parentId: null,
-          imageData: page.dataUrl,
-          imageFileName: `${baseName}-p${pageLabel}.png`,
+          imageData: image.dataUrl,
+          imageFileName: `${baseName}-p${pageLabel}-${image.indexOnPage}.png`,
           toolId: "pdf_to_images",
           parameters: params,
           sourceStyleId: null,
@@ -2485,12 +2485,12 @@ function ImageToolsWorkspaceInner({
           sourceSummary: {
             kind: "pdfPage",
             fileName: file.name,
-            pageNumber: page.pageNumber,
-            pageCount: pages.length,
+            pageNumber: image.pageNumber,
+            pageCount,
           },
-          resolution: page.dimensions,
+          resolution: image.dimensions,
           isStarred: false,
-          sourceMime: getMimeTypeFromUrl(page.dataUrl),
+          sourceMime: getMimeTypeFromUrl(image.dataUrl),
           origin: "uploaded",
         };
         if (fsBinding) {
@@ -2500,8 +2500,8 @@ function ImageToolsWorkspaceInner({
       }
 
       // Insert the whole batch in one synchronous block so the orphan-cleanup
-      // effect can't prune a page that's in history but not yet referenced by a
-      // strip (see the split-images path for the same reasoning). Pages go into
+      // effect can't prune an image that's in history but not yet referenced by a
+      // strip (see the split-images path for the same reasoning). Images go into
       // the history strip in reading order (page 1 leftmost): addItemToStrip
       // prepends at index 0, so insert back-to-front.
       createdItems.forEach((item) => appendHistoryEntry(item, { skipHistoryStrip: true }));

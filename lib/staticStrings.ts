@@ -49,7 +49,7 @@ export const STATIC_IMAGE_EDITOR_STRINGS: Record<string, string> = {
   "AiImageEditor.Error.FailedToProcess": "Failed to process image.",
   "AiImageEditor.Error.NeedsMoreCredits": "This request requires more credits.",
   "AiImageEditor.Error.OpenRouterSaid": 'OpenRouter said "{0}"',
-  "AiImageEditor.Error.PdfHasNoPages": "That PDF has no pages to render.",
+  "AiImageEditor.Error.PdfHasNoPictures": "No pictures were found in that PDF.",
   "AiImageEditor.Error.SelectImageFirst": "Select an image to edit before applying this tool.",
   "AiImageEditor.History.CannotDeleteInOtherStrips":
     "Cannot delete this image because it also exists in the {0}.",

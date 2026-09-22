@@ -240,8 +240,8 @@ export interface ToolDefinition {
   disallowedModelIds?: string[];
   editImage?: boolean; // Defaults to true; false means tool generates without editing a base image
   /**
-   * Tool runs entirely in the browser with no OpenRouter call (e.g. PDF page
-   * rasterization). Local tools don't require authentication and bypass the
+   * Tool runs entirely in the browser with no OpenRouter call (e.g. taking the
+   * pictures out of a PDF). Local tools don't require authentication and bypass the
    * normal generation pipeline in ImageToolsWorkspace.handleApplyTool.
    */
   localOnly?: boolean;

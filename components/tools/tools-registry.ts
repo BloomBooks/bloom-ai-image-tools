@@ -782,7 +782,7 @@ export const ALL_TOOLS: ToolDefinition[] = (
     {
       id: "pdf_to_images",
       title: "PDF to Images",
-      description: "Convert a PDF into a series of images. Free.",
+      description: "Extract images from a PDF. Free.",
       group: "more",
       icon: PictureAsPdfOutlinedIcon,
       parameters: [],

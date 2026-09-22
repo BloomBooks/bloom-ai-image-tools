@@ -17,7 +17,7 @@ export type ImageSourceSummary =
   | { kind: "originalBookImage" }
   /** A file found in the history folder with no sidecar to say what made it. */
   | { kind: "recoveredFromFolder" }
-  /** One page of a PDF the user imported. `pageNumber` is 1-based. */
+  /** A picture taken from a PDF the user imported. `pageNumber` is 1-based. */
   | { kind: "pdfPage"; fileName: string; pageNumber: number; pageCount: number }
   /** The result of running a tool, counting the images that went into it. */
   | { kind: "toolRun"; editImageCount: number; referenceImageCount: number }

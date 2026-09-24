@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/abstract-illustration-BQFUOxCl.png`;export{e as default};

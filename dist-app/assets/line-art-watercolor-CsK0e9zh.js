@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/line-art-watercolor-N_GxERql.png`;export{e as default};

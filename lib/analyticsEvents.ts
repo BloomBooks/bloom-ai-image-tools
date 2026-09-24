@@ -53,9 +53,6 @@ export const OPEN_EVENT = "AI Image Editor Open";
  * nothing.
  */
 export const CLOSE_EVENT = "AI Image Editor Close";
-/** The host answered a commit with a failure: the user chose pictures that did not all
- *  reach the book. The host keeps the editor open when this happens. */
-export const COMMIT_FAILED_EVENT = "AI Image Editor Commit Failed";
 // Every event also carries `aiImageEditorSessionId` and `sessionSeconds`, added by the
 // Bloom host bridge (createIframeBloomHostBridge), so a session's events can be grouped and
 // its length read off its last event.

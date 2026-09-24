@@ -34,7 +34,7 @@ import { ImageToolsWorkspace } from "./ImageToolsWorkspace";
 import { setHostDeveloperToolsEnabled } from "../lib/localModels";
 import { theme } from "../themes";
 import { LocalizationProvider, useL10n } from "../lib/localization";
-import { CLOSE_EVENT, COMMIT_FAILED_EVENT } from "../lib/analyticsEvents";
+import { CLOSE_EVENT } from "../lib/analyticsEvents";
 
 interface BloomHostedImageEditorProps {
   bridge: IBloomHostBridge;
@@ -68,16 +68,12 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   // Close event (see CLOSE_EVENT).
   const picturesCommittedRef = React.useRef(0);
 
-  // Send one commit to the host, and report it if the host says it failed. A success needs
-  // no event of its own: the Accept events already say what went in.
+  // Send one commit to the host, counting its pictures for the Close event once the host says
+  // it succeeded. A success needs no event of its own: the Accept events already say what
+  // went in.
   const commitToHost = React.useCallback(
     async (replacements: IBloomCommitReplacement[]) => {
-      try {
-        await bridge.commit(replacements);
-      } catch (error) {
-        bridge.trackEvent(COMMIT_FAILED_EVENT, { pictureCount: replacements.length });
-        throw error;
-      }
+      await bridge.commit(replacements);
       picturesCommittedRef.current += replacements.length;
     },
     [bridge],

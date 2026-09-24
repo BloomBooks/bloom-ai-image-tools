@@ -1,5 +1,11 @@
 # bloom-ai-image-tools
 
+## Unreleased
+
+- Stop sending `AI Image Editor Commit Failed`
+
+  Analytics are for how people use the editor, not for error cases.
+
 ## 0.2.13
 
 - Name the analytics events as they should appear in Segment, and report the end of a session

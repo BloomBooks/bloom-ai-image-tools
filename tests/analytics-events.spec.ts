@@ -65,19 +65,22 @@ test.describe("analytics events", () => {
     });
   });
 
-  test("reports the editor opening, and reports no session end of its own", async ({ page }) => {
-    await expectEventCount(page, "AI Editor Open", 1);
-    const [opened] = await eventsNamed(page, "AI Editor Open");
+  test("reports the editor opening, and a cancel that kept nothing", async ({ page }) => {
+    await expectEventCount(page, "AI Image Editor Open", 1);
+    const [opened] = await eventsNamed(page, "AI Image Editor Open");
     expect(opened.properties.bookImageCount).toBe(6);
     expect(opened.properties.launchedOnEmptySlot).toBe(false);
     expect(typeof opened.properties.initialTool).toBe("string");
+    expect(typeof opened.properties.historyItemCount).toBe("number");
+    expect(typeof opened.properties.aiImageEditorSessionId).toBe("string");
+    expect(typeof opened.properties.sessionSeconds).toBe("number");
 
-    // The host reports the end of the session, because only it knows whether anything
-    // reached the book. Cancelling must not make the editor report one too.
     await page.getByTestId("bloom-host-cancel").click();
-    await expect(async () => {
-      expect((await analyticsEvents(page)).map((entry) => entry.event)).toEqual(["AI Editor Open"]);
-    }).toPass({ timeout: 5_000 });
+    await expectEventCount(page, "AI Image Editor Close", 1);
+    const [closed] = await eventsNamed(page, "AI Image Editor Close");
+    expect(closed.properties.picturesCommitted).toBe(0);
+    // One session: every event carries the same id.
+    expect(closed.properties.aiImageEditorSessionId).toBe(opened.properties.aiImageEditorSessionId);
   });
 
   test("credits every tool in the chain when a chained result is used", async ({ page }) => {
@@ -86,8 +89,8 @@ test.describe("analytics events", () => {
     await page.getByRole("button", { name: "Go", exact: true }).click();
     await expect(resultPanelImage(page)).toBeVisible({ timeout: 15_000 });
 
-    await expectEventCount(page, "AI Editor Generate", 1);
-    const [firstRun] = await eventsNamed(page, "AI Editor Generate");
+    await expectEventCount(page, "AI Image Editor Generate", 1);
+    const [firstRun] = await eventsNamed(page, "AI Image Editor Generate");
     expect(firstRun.properties.tool).toBe("custom");
     expect(firstRun.properties.result).toBe("success");
     expect(firstRun.properties.batch).toBe(false);
@@ -113,14 +116,14 @@ test.describe("analytics events", () => {
     await page.mouse.up();
 
     await page.getByRole("button", { name: "Go", exact: true }).click();
-    await expectEventCount(page, "AI Editor Generate", 2);
+    await expectEventCount(page, "AI Image Editor Generate", 2);
 
     await page.getByTestId("bloom-host-commit-current-result").click();
 
     // Two tool steps contributed to the committed image, so two accept events, and only
     // the last is the final tool.
-    await expectEventCount(page, "AI Editor Accept", 2);
-    const accepts = await eventsNamed(page, "AI Editor Accept");
+    await expectEventCount(page, "AI Image Editor Accept", 2);
+    const accepts = await eventsNamed(page, "AI Image Editor Accept");
     expect(accepts.map((entry) => entry.properties.chainPosition)).toEqual([1, 2]);
     expect(accepts.every((entry) => entry.properties.chainLength === 2)).toBe(true);
     expect(accepts.map((entry) => entry.properties.isFinalTool)).toEqual([false, true]);
@@ -131,8 +134,9 @@ test.describe("analytics events", () => {
       expect(Object.values(entry.properties).join(" ")).not.toContain("dummy banner");
     });
 
-    // Committing ends the session, but Bloom is what reports that, not us.
-    expect(await eventsNamed(page, "AI Editor Close")).toEqual([]);
+    // A successful commit ends the session without a Close: the host removes the editor
+    // before there is a chance to send one (see CLOSE_EVENT).
+    expect(await eventsNamed(page, "AI Image Editor Close")).toEqual([]);
   });
 
   test("reports a batch run once, its images individually, and each replacement accepted", async ({
@@ -151,8 +155,8 @@ test.describe("analytics events", () => {
     }
 
     // One event as the run starts and one as it ends, both with the same property set.
-    await expectEventCount(page, "AI Editor Batch Run", 2);
-    const [started, finished] = await eventsNamed(page, "AI Editor Batch Run");
+    await expectEventCount(page, "AI Image Editor Batch Run", 2);
+    const [started, finished] = await eventsNamed(page, "AI Image Editor Batch Run");
     expect(started.properties.phase).toBe("started");
     expect(started.properties.imageCount).toBe(2);
     expect(started.properties.tool).toBe("custom");
@@ -163,8 +167,8 @@ test.describe("analytics events", () => {
     expect(Object.keys(started.properties).sort()).toEqual(Object.keys(finished.properties).sort());
 
     // Still one generate event per image, now saying which batch they belonged to.
-    await expectEventCount(page, "AI Editor Generate", 2);
-    const generates = await eventsNamed(page, "AI Editor Generate");
+    await expectEventCount(page, "AI Image Editor Generate", 2);
+    const generates = await eventsNamed(page, "AI Image Editor Generate");
     expect(generates.every((entry) => entry.properties.batch === true)).toBe(true);
     expect(generates.every((entry) => entry.properties.batchSize === 2)).toBe(true);
     // Neither ticked slot is the one the editor was launched on (book-image-3).
@@ -172,8 +176,8 @@ test.describe("analytics events", () => {
 
     await page.getByTestId("bloom-host-commit-book-images").click();
 
-    await expectEventCount(page, "AI Editor Accept", 2);
-    const accepts = await eventsNamed(page, "AI Editor Accept");
+    await expectEventCount(page, "AI Image Editor Accept", 2);
+    const accepts = await eventsNamed(page, "AI Image Editor Accept");
     // Both pictures went in on the one Replace click, so both events say so.
     expect(accepts.every((entry) => entry.properties.acceptedCount === 2)).toBe(true);
     expect(accepts.every((entry) => entry.properties.isFinalTool === true)).toBe(true);
@@ -189,8 +193,8 @@ test.describe("analytics events, launched on an empty slot", () => {
     await page.goto(EMPTY_SLOT_LAUNCH_ROUTE);
     await expect(page.getByTestId("thumbnail-strip-bookImages")).toBeVisible();
 
-    await expectEventCount(page, "AI Editor Open", 1);
-    const [opened] = await eventsNamed(page, "AI Editor Open");
+    await expectEventCount(page, "AI Image Editor Open", 1);
+    const [opened] = await eventsNamed(page, "AI Image Editor Open");
     expect(opened.properties.launchedOnEmptySlot).toBe(true);
     expect(opened.properties.initialTool).toBe("generate_image");
   });

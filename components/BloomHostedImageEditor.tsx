@@ -34,6 +34,7 @@ import { ImageToolsWorkspace } from "./ImageToolsWorkspace";
 import { setHostDeveloperToolsEnabled } from "../lib/localModels";
 import { theme } from "../themes";
 import { LocalizationProvider, useL10n } from "../lib/localization";
+import { CLOSE_EVENT, COMMIT_FAILED_EVENT } from "../lib/analyticsEvents";
 
 interface BloomHostedImageEditorProps {
   bridge: IBloomHostBridge;
@@ -63,6 +64,30 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   // double-invocations of the effect, which would cause Bloom to send multiple
   // init messages.
   const readySentRef = React.useRef(false);
+  // How many pictures this session's successful commits have put into the book, for the
+  // Close event (see CLOSE_EVENT).
+  const picturesCommittedRef = React.useRef(0);
+
+  // Send one commit to the host, and report it if the host says it failed. A success needs
+  // no event of its own: the Accept events already say what went in.
+  const commitToHost = React.useCallback(
+    async (replacements: IBloomCommitReplacement[]) => {
+      try {
+        await bridge.commit(replacements);
+      } catch (error) {
+        bridge.trackEvent(COMMIT_FAILED_EVENT, { pictureCount: replacements.length });
+        throw error;
+      }
+      picturesCommittedRef.current += replacements.length;
+    },
+    [bridge],
+  );
+
+  // The user is leaving without committing (see CLOSE_EVENT).
+  const cancelAndReport = React.useCallback(() => {
+    bridge.trackEvent(CLOSE_EVENT, { picturesCommitted: picturesCommittedRef.current });
+    bridge.cancel();
+  }, [bridge]);
 
   const buildInitSignature = React.useCallback((payload: IBloomHostInitPayload) => {
     const imageSignature = payload.bookImages.map((image) => `${image.id}:${image.src}`).join("|");
@@ -85,7 +110,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
       //setStatus(`Connected to ${payload.book.title}`);
     });
     const unsubscribeRequestClose = bridge.onRequestClose(() => {
-      bridge.cancel();
+      cancelAndReport();
       onCancelComplete?.();
       setStatus("Host requested close. Sent cancel.");
     });
@@ -99,7 +124,7 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
       unsubscribeInit();
       unsubscribeRequestClose();
     };
-  }, [bridge, buildInitSignature, onCancelComplete]);
+  }, [bridge, buildInitSignature, cancelAndReport, onCancelComplete]);
 
   const persistence = React.useMemo(() => {
     if (!initPayload) {
@@ -183,10 +208,10 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
         await Promise.all(entries.map(({ incomingId, item }) => buildReplacement(incomingId, item)))
       ).filter((replacement): replacement is IBloomCommitReplacement => replacement !== null);
 
-      await bridge.commit(replacements);
+      await commitToHost(replacements);
       onCommitComplete?.(replacements);
     },
-    [bridge, buildReplacement, collectAssignedEntries, initPayload, onCommitComplete],
+    [buildReplacement, collectAssignedEntries, commitToHost, initPayload, onCommitComplete],
   );
 
   const handleCommitCurrentResult = React.useCallback(
@@ -200,14 +225,14 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
         if (!replacement) {
           return;
         }
-        await bridge.commit([replacement]);
+        await commitToHost([replacement]);
         onCommitComplete?.([replacement]);
         setStatus("Committed 1 replacement.");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "Commit failed.");
       }
     },
-    [bridge, buildReplacement, onCommitComplete],
+    [buildReplacement, commitToHost, onCommitComplete],
   );
 
   const handleCommitAll = React.useCallback(async () => {
@@ -227,10 +252,10 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   }, [collectAssignedEntries, handleCommit]);
 
   const handleCancel = React.useCallback(() => {
-    bridge.cancel();
+    cancelAndReport();
     onCancelComplete?.();
     setStatus("Cancelled.");
-  }, [bridge, onCancelComplete]);
+  }, [cancelAndReport, onCancelComplete]);
 
   if (!initPayload || !persistence) {
     return (

@@ -4543,6 +4543,9 @@ function ImageToolsWorkspaceInner({
       bookImageCount: bookImages.length,
       launchedOnEmptySlot: launchedEmptyBookSlotId != null,
       initialTool: initialToolIdRef.current ?? activeToolId ?? "",
+      // Pictures from earlier sessions, not counting the records that stand for empty book
+      // slots. Read from the live ref: this effect does not re-run when history changes.
+      historyItemCount: stateRef.current.history.filter((item) => !item.isEmptyBookSlot).length,
     });
   }, [
     activeToolId,

@@ -1,5 +1,22 @@
 # bloom-ai-image-tools
 
+## 0.2.13
+
+- Name the analytics events as they should appear in Segment, and report the end of a session
+
+  Bloom now forwards every event unchanged, so the names are ours to choose: every
+  `AI Editor ...` event is now `AI Image Editor ...`, which was the rename Bloom used to do.
+
+  Every event carries `aiImageEditorSessionId`, new for each launch, and `sessionSeconds`, the
+  time since the editor started, so a session's events can be grouped and its length read off
+  the last one. `AI Image Editor Open` adds `historyItemCount`.
+
+  `AI Image Editor Close` is back, sent when the user cancels or closes Bloom's overlay, with
+  `picturesCommitted` from any earlier commits in the session. A successful commit still sends
+  nothing at the end, because Bloom removes the editor as soon as it answers; the Accept events
+  say what went in. `AI Image Editor Commit Failed` is new, sent when Bloom answers a commit
+  with a failure.
+
 ## 0.2.10
 
 - Leave the end of a session for the host to report

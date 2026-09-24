@@ -211,8 +211,8 @@ export interface IBloomHostControl {
    *  durations, costs and model ids only.
    *
    *  The events the editor sends, and the properties each one carries, are defined in
-   *  lib/analyticsEvents.ts. The host accepts only event names and properties it knows, so
-   *  anything added there needs a matching change on the host side. */
+   *  lib/analyticsEvents.ts. The host forwards them unchanged and knows nothing about them,
+   *  so an event can be added or changed here without a change on the host side. */
   trackEvent: (event: string, properties?: Record<string, string | number | boolean>) => void;
   /** Translate the editor's whole string table in one round-trip: takes every localization
    *  ID with its English default and returns what the host has for the current UI language.
@@ -308,6 +308,26 @@ type IframeMessage =
     };
 
 const uuid = () => Math.random().toString(36).slice(2, 10);
+
+type AnalyticsEventProperties = Record<string, string | number | boolean>;
+
+/**
+ * Returns a function that adds this session's id and age to an analytics event's
+ * properties. A bridge lives exactly as long as one visit to the editor (the host makes a
+ * new iframe for each launch), so it is where a session starts. The id lets a session's
+ * events be grouped; the host's `sessionToken` must not be used for that, because it is a
+ * capability for the host's endpoints and must not go to an analytics service.
+ * performance.now, not Date.now, so a change to the computer's clock cannot skew the age.
+ */
+const createAnalyticsSessionStamp = () => {
+  const sessionId = crypto.randomUUID();
+  const startedAtMs = performance.now();
+  return (properties?: AnalyticsEventProperties): AnalyticsEventProperties => ({
+    ...properties,
+    aiImageEditorSessionId: sessionId,
+    sessionSeconds: Math.round((performance.now() - startedAtMs) / 1000),
+  });
+};
 const iframeChannel = "bloom-ai-image-tools" as const;
 
 /** How long getLocalizations waits for Bloom's init message before settling for English. */
@@ -392,6 +412,7 @@ const bytesToDataUrl = (bytes: ArrayBuffer, mimeType = "image/png"): string => {
  * App.tsx when the URL carries `?mode=bloom-iframe`.
  */
 export const createIframeBloomHostBridge = (): IBloomHostBridge => {
+  const stampAnalyticsSession = createAnalyticsSessionStamp();
   const initListeners = new Set<(payload: IBloomHostInitPayload) => void>();
   const requestCloseListeners = new Set<() => void>();
   const pendingRequests = new Map<
@@ -532,7 +553,7 @@ export const createIframeBloomHostBridge = (): IBloomHostBridge => {
       postToParent({
         channel: iframeChannel,
         type: "analytics",
-        payload: { event, properties },
+        payload: { event, properties: stampAnalyticsSession(properties) },
       });
     },
     async getLocalizations(strings) {
@@ -646,6 +667,7 @@ type HarnessOptions = {
  * (App.tsx `?mode=bloom-harness`).
  */
 export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHostBridge => {
+  const stampAnalyticsSession = createAnalyticsSessionStamp();
   const initListeners = new Set<(payload: IBloomHostInitPayload) => void>();
   const requestCloseListeners = new Set<() => void>();
   const fileStore = new Map<string, string>(Object.entries(options.initialFiles ?? {}));
@@ -704,7 +726,7 @@ export const createHarnessBloomHostBridge = (options: HarnessOptions): IBloomHos
     trackEvent(event, properties) {
       // No analytics service in standalone/harness mode; log it so a developer can see
       // exactly what a real host would have been sent.
-      console.info(`[BloomHarness] analytics: ${event}`, properties);
+      console.info(`[BloomHarness] analytics: ${event}`, stampAnalyticsSession(properties));
     },
     async getLocalizations(strings) {
       // No Bloom to ask in standalone/harness mode: the English defaults stand.

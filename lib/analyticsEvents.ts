@@ -3,12 +3,13 @@
  * their properties.
  * ============================================================================
  *
- * The host (Bloom) forwards these to Segment and accepts only KNOWN event names carrying
- * KNOWN properties, so two rules hold everywhere in this file:
+ * The host (Bloom) forwards these to Segment exactly as sent: it does not know their names
+ * or their properties, so the names here are the names in Segment. Two rules hold
+ * everywhere in this file:
  *
  *   1. Every property an event declares is always present, even when it has no value:
- *      an empty string, 0 or false, never an omitted key. A varying shape is an event
- *      Bloom drops.
+ *      an empty string, 0 or false, never an omitted key, so each event has one shape to
+ *      query.
  *   2. No value is ever free text. Prompts, parameter text, image names, page text and
  *      anything else lifted from the user's book stay out; counts, enum ids, durations,
  *      costs and model ids are what goes in. See IBloomHostControl.trackEvent.
@@ -35,17 +36,29 @@ import {
 export type AnalyticsProperties = Record<string, string | number | boolean>;
 
 /** One generation attempt (one image, so a batch of five fires five of these). */
-export const GENERATE_EVENT = "AI Editor Generate";
+// "AI Image Editor", not "AI Editor": Bloom may one day have AI tools for text or video.
+export const GENERATE_EVENT = "AI Image Editor Generate";
 /** One batch invocation: `phase` says whether this is its start or its end. */
-export const BATCH_RUN_EVENT = "AI Editor Batch Run";
+export const BATCH_RUN_EVENT = "AI Image Editor Batch Run";
 /** One tool in the ancestry of an image the user put into the book. */
-export const ACCEPT_EVENT = "AI Editor Accept";
+export const ACCEPT_EVENT = "AI Image Editor Accept";
 /** The editor finished starting up inside a host. */
-export const OPEN_EVENT = "AI Editor Open";
-// There is deliberately no session-end event here. The host reports that one: it owns the
-// overlay's lifetime, and it is the only side that knows whether a commit actually reached
-// the book, where we would only know that the button was pressed. See Bloom's
-// "AI Image Editor Closed".
+export const OPEN_EVENT = "AI Image Editor Open";
+/**
+ * The user left without committing: the Cancel button, or the host's own close button.
+ * A successful commit also ends the session, but the host removes the editor as soon as
+ * it answers, so there is no chance to send anything then; that session's last events are
+ * its `AI Image Editor Accept` events. `picturesCommitted` is how many pictures earlier
+ * commits in this session put into the book, so a Close with 0 is a session that kept
+ * nothing.
+ */
+export const CLOSE_EVENT = "AI Image Editor Close";
+/** The host answered a commit with a failure: the user chose pictures that did not all
+ *  reach the book. The host keeps the editor open when this happens. */
+export const COMMIT_FAILED_EVENT = "AI Image Editor Commit Failed";
+// Every event also carries `aiImageEditorSessionId` and `sessionSeconds`, added by the
+// Bloom host bridge (createIframeBloomHostBridge), so a session's events can be grouped and
+// its length read off its last event.
 
 /** Where a run's result is headed, relative to the book image the user launched on. */
 export type TargetPage = "current" | "other" | "none";

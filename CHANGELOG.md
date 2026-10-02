@@ -6,6 +6,13 @@
 
   Analytics are for how people use the editor, not for error cases.
 
+- Send `AI Image Editor Close` at the end of every session, including one that ends in a commit
+
+  A commit sends Close just before the commit itself, with `picturesCommitted` set to the
+  number of pictures it puts into the book. Cancel and Bloom's close button send 0. A commit
+  that Bloom answers with a failure leaves the editor open, so that session sends a second
+  Close when it ends.
+
 ## 0.2.13
 
 - Name the analytics events as they should appear in Segment, and report the end of a session

@@ -64,24 +64,20 @@ const BloomHostedImageEditorInner: React.FC<BloomHostedImageEditorProps> = ({
   // double-invocations of the effect, which would cause Bloom to send multiple
   // init messages.
   const readySentRef = React.useRef(false);
-  // How many pictures this session's successful commits have put into the book, for the
-  // Close event (see CLOSE_EVENT).
-  const picturesCommittedRef = React.useRef(0);
 
-  // Send one commit to the host, counting its pictures for the Close event once the host says
-  // it succeeded. A success needs no event of its own: the Accept events already say what
-  // went in.
+  // Send one commit to the host. The Close event goes first because a successful commit ends
+  // the session and the host removes the editor as soon as it answers (see CLOSE_EVENT).
   const commitToHost = React.useCallback(
     async (replacements: IBloomCommitReplacement[]) => {
+      bridge.trackEvent(CLOSE_EVENT, { picturesCommitted: replacements.length });
       await bridge.commit(replacements);
-      picturesCommittedRef.current += replacements.length;
     },
     [bridge],
   );
 
   // The user is leaving without committing (see CLOSE_EVENT).
   const cancelAndReport = React.useCallback(() => {
-    bridge.trackEvent(CLOSE_EVENT, { picturesCommitted: picturesCommittedRef.current });
+    bridge.trackEvent(CLOSE_EVENT, { picturesCommitted: 0 });
     bridge.cancel();
   }, [bridge]);
 

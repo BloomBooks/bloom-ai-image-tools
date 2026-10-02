@@ -45,12 +45,14 @@ export const ACCEPT_EVENT = "AI Image Editor Accept";
 /** The editor finished starting up inside a host. */
 export const OPEN_EVENT = "AI Image Editor Open";
 /**
- * The user left without committing: the Cancel button, or the host's own close button.
- * A successful commit also ends the session, but the host removes the editor as soon as
- * it answers, so there is no chance to send anything then; that session's last events are
- * its `AI Image Editor Accept` events. `picturesCommitted` is how many pictures earlier
- * commits in this session put into the book, so a Close with 0 is a session that kept
- * nothing.
+ * The session is ending: the user committed, pressed Cancel, or used the host's own close
+ * button. `picturesCommitted` is how many pictures the commit is putting into the book, and
+ * 0 when the user left without committing.
+ *
+ * A commit's Close is sent just before the commit itself, after its Accept events, because
+ * the host removes the editor as soon as it answers a successful commit. If the host answers
+ * with a failure the editor stays open, and that session will have a second Close when it
+ * does end.
  */
 export const CLOSE_EVENT = "AI Image Editor Close";
 // Every event also carries `aiImageEditorSessionId` and `sessionSeconds`, added by the

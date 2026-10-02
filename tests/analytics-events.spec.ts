@@ -134,9 +134,14 @@ test.describe("analytics events", () => {
       expect(Object.values(entry.properties).join(" ")).not.toContain("dummy banner");
     });
 
-    // A successful commit ends the session without a Close: the host removes the editor
-    // before there is a chance to send one (see CLOSE_EVENT).
-    expect(await eventsNamed(page, "AI Image Editor Close")).toEqual([]);
+    // The commit ends the session, so its Close follows the Accept events.
+    await expectEventCount(page, "AI Image Editor Close", 1);
+    const events = (await analyticsEvents(page)).map((entry) => entry.event);
+    expect(events.indexOf("AI Image Editor Close")).toBeGreaterThan(
+      events.lastIndexOf("AI Image Editor Accept"),
+    );
+    const [closed] = await eventsNamed(page, "AI Image Editor Close");
+    expect(closed.properties.picturesCommitted).toBe(1);
   });
 
   test("reports a batch run once, its images individually, and each replacement accepted", async ({
@@ -183,6 +188,10 @@ test.describe("analytics events", () => {
     expect(accepts.every((entry) => entry.properties.isFinalTool === true)).toBe(true);
     expect(accepts.every((entry) => entry.properties.chainLength === 1)).toBe(true);
     expect(accepts.every((entry) => entry.properties.targetPage === "other")).toBe(true);
+
+    await expectEventCount(page, "AI Image Editor Close", 1);
+    const [closed] = await eventsNamed(page, "AI Image Editor Close");
+    expect(closed.properties.picturesCommitted).toBe(2);
   });
 });
 

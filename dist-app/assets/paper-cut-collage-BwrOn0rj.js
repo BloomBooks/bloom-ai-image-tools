@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/paper-cut-collage-CbRA4ndu.png`;export{e as t};

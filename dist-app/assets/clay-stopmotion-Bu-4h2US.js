@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/clay-stopmotion-Bsg2L7zy.png`;export{e as default};

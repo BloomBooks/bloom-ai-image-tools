@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/vintage-engraving-B4WIrHUp.png`;export{e as default};

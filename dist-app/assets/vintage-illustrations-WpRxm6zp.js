@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/vintage-illustrations-CTuiaPif.png`;export{e as default};

@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/moody-illustrations-DKbHoWCE.png`;export{e as default};

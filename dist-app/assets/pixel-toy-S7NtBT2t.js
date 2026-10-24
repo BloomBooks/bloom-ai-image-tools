@@ -1,0 +1,1 @@
+var e=`/bloom/aiImageEditor/assets/pixel-toy-BNFoywHc.png`;export{e as default};

@@ -22,7 +22,7 @@ is worth.
 
 ## An input image costs far more than an output image
 
-One run of Generate Pallet at 1232x544, with and without a single 1024px reference:
+One run of Generate Palette at 1232x544, with and without a single 1024px reference:
 
 |               | no reference  | one 1024px reference |
 | ------------- | ------------- | -------------------- |

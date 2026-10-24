@@ -37,7 +37,7 @@ if (!KEY) {
 
 const MODEL = process.env.EXPERIMENT_MODEL || "openai/gpt-image-2.5-sunburst";
 
-// The Generate Pallet tool's real prompt, 5 colors, no extra instructions.
+// The Generate Palette tool's real prompt, 5 colors, no extra instructions.
 const PROMPT =
   "Create a numbered row of exactly 5 square color swatches on a plain white background. " +
   "Fill each square with one distinct solid color. Choose colors that form a cohesive, " +

@@ -675,9 +675,12 @@ export const ALL_TOOLS: ToolDefinition[] = (
       allowBatch: true,
     },
     {
+      // Misspelled, but it stays: saved history and model choices store it, analytics
+      // events report it, and Bloom's localization ids are built from it.
       id: "generate_pallet",
-      title: "Generate Pallet",
-      description: "Create a simple reference color pallet, optionally based on a reference image.",
+      title: "Generate Palette",
+      description:
+        "Create a simple reference color palette, optionally based on a reference image.",
       group: "more",
       icon: ColorLensOutlinedIcon,
       parameters: [

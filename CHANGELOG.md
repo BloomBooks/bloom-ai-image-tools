@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Spell "palette" correctly in the Generate Palette tool's title and description
+
 - Stop sending `AI Image Editor Commit Failed`
 
   Analytics are for how people use the editor, not for error cases.
